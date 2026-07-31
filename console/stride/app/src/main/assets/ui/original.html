@@ -412,6 +412,8 @@ button.pulse{animation:pulse .9s ease-out 2}
 #sleep{background:#000;z-index:80}
 #sleep .t{font-size:112px;font-weight:100;color:#1d2a4d;font-variant-numeric:tabular-nums}
 #sleep .w{margin-top:26px;font-size:17px;color:#16203c;letter-spacing:.3em;text-transform:uppercase}
+/* The coach's closing line on the summary. */
+.sumcoach{margin-top:14px;max-width:820px;font-size:21px;font-weight:300;line-height:1.45;color:var(--accent);opacity:.92}
 </style>
 </head>
 <body>
@@ -584,6 +586,7 @@ button.pulse{animation:pulse .9s ease-out 2}
 <div class="screen" id="screenSummary">
   <div class="summary">
     <div class="head" id="sumHead">Nice work</div>
+    <div class="sumcoach" id="sumCoach"></div>
     <div class="sub" id="sumSub">walk complete</div>
     <div class="cards">
       <div class="card"><div class="k">Time</div><div class="v" id="sumTime">0:00</div></div>
@@ -1563,6 +1566,7 @@ function renderSummary(s){
   /* The walker's own name, or none at all for a guest — better than
    congratulating somebody by the wrong name. */
   $('sumHead').textContent = walker ? ('Nice work, ' + walker) : 'Nice work';
+  $('sumCoach').textContent = s.summaryLine || '';
   $('sumSub').textContent  = kind + ' complete';
   $('sumTime').textContent = mmss(s.elapsed ?? 0);
   $('sumDist').textContent = nf(s.distance ?? 0);

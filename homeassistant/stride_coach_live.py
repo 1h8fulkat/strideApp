@@ -86,6 +86,22 @@ KINDS = {
     "steady": "He has held a steady pace for several minutes. Notice the rhythm.",
     "checkin": "Nothing in particular has happened. He is still going. Say "
                "something small, or something about the session so far.",
+    "segment": "The ground is about to change. Say what is coming and what to do "
+               "with it — this is heard a few seconds BEFORE it arrives, so speak "
+               "in the future, not the past. Never announce a hill he is already "
+               "climbing.",
+    "summary": "The walk is ending. This one line sits on the summary screen, "
+               "beside the distance, time, calories and climb, which are all "
+               "already printed there in large numbers. "
+               "DO NOT REPEAT ANY OF THEM. "
+               "\"Good work, 3 km in 5 minutes\" is worthless — he is looking at "
+               "the 3 km. "
+               "Say the thing the screen cannot: what the walk was like, what he "
+               "did well in it, what held up or did not, what it means next to "
+               "the walks before it. If nothing stands out, one plain sentence "
+               "is better than a manufactured observation. This is read on a "
+               "screen, not aloud, so it can be a touch longer than a spoken "
+               "line — but two sentences at most.",
 }
 
 # The rules that only apply mid-workout. The persona covers the rest.

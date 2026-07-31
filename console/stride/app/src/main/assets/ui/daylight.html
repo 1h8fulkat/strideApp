@@ -287,6 +287,8 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
           font-size:112px;font-weight:200;color:#2b2822;font-variant-numeric:tabular-nums}
 .sleep .w{position:absolute;left:0;top:452px;width:1280px;text-align:center;
           font-size:17px;letter-spacing:.3em;text-transform:uppercase;color:#201d19}
+/* The coach's closing line on the summary. */
+.sumcoach{margin-top:12px;max-width:780px;font-size:20px;line-height:1.45;color:#3f6b52}
 </style>
 </head>
 <body>
@@ -422,6 +424,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 <div class="screen sum" id="scSummary">
   <div class="k" id="sumKind">&mdash;</div>
   <div class="h" id="sumHead">Nice work.</div>
+  <div class="sumcoach" id="sumCoach"></div>
   <svg viewBox="0 0 1192 150" preserveAspectRatio="none">
     <path id="sumFill" fill="#dcd7c9"/>
     <path id="sumLine" fill="none" stroke="#3d6b4a" stroke-width="4"/>
@@ -792,6 +795,7 @@ function renderWarm(s){
 
 function renderSummary(s){
   $('sumHead').textContent = 'Nice work, ' + (s.profile || 'you') + '.';
+  $('sumCoach').textContent = s.summaryLine || '';
   const d = new Date();
   $('sumKind').textContent = [
     (s.plan.name || (s.mode === 'run' ? 'A run' : 'A walk')).toUpperCase(),

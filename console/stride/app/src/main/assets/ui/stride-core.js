@@ -456,7 +456,13 @@ function adapt(raw) {
 
     segment:  { index: raw.segment || 0, count: segments,
                 name: raw.segmentLabel || '',
-                secondsLeft: raw.segmentLeft || 0 },
+                secondsLeft: raw.segmentLeft || 0,
+                nextName: raw.nextLabel || '',
+                nextIncline: raw.nextIncline || 0 },
+
+    /* The coach's closing line, asked for before the walk ends so it is here
+       when the summary appears rather than arriving after it. */
+    summaryLine: raw.summaryLine || '',
 
     session:  { elapsed: raw.elapsed || 0,
                 distance: distance,

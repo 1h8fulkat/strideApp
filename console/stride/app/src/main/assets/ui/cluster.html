@@ -311,6 +311,8 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
           font-size:112px;font-weight:200;color:#1c2225}
 .sleep .w{position:absolute;left:0;top:452px;width:1280px;text-align:center;
           font-size:17px;letter-spacing:.3em;text-transform:uppercase;color:#161b1d}
+/* The coach's closing line on the summary. */
+.sumcoach{margin-top:12px;max-width:760px;font-size:19px;line-height:1.45;color:#8fd6c8}
 </style>
 </head>
 <body>
@@ -469,6 +471,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 <div class="screen sum" id="scSummary">
   <div class="k" id="sumKind">SESSION COMPLETE</div>
   <div class="h" id="sumHead">Nice work</div>
+  <div class="sumcoach" id="sumCoach"></div>
   <div class="grid">
     <div class="cell"><div class="kk">TIME</div><div class="vv mono" id="sumTime">0:00</div></div>
     <div class="cell"><div class="kk">DISTANCE</div><div class="vv mono"><span id="sumDist">0.00</span><span class="u"> KM</span></div></div>
@@ -869,6 +872,7 @@ function renderSummary(s){
     (s.plan.name || (s.mode === 'run' ? 'MANUAL RUN' : 'MANUAL WALK')) +
     ' ' + Math.round(s.session.elapsed / 60)).toUpperCase();
   $('sumHead').textContent  = 'Nice work, ' + (s.profile || 'you');
+  $('sumCoach').textContent = s.summaryLine || '';
   $('sumTime').textContent  = mmss(s.session.elapsed);
   $('sumDist').textContent  = STRIDE.km(s.session.distance);
   $('sumCals').textContent  = nf(s.session.calories);

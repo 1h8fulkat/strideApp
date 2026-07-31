@@ -67,6 +67,10 @@ data class Snapshot(
     /** The segment after this one, so the coach can warn before it arrives. */
     val nextLabel: String = "",
     val nextIncline: Double = 0.0,
+    /** Total plan length in seconds — one lap on a circuit. */
+    val planTotalSec: Double = 0.0,
+    /** The coach's closing line, ready before the summary appears. */
+    val summaryLine: String = "",
     /** Plan time wrapped into the current lap. Equals elapsed unless looping. */
     val planElapsed: Double = 0.0,
     /** Which lap of an open-ended circuit; 1 for an ordinary walk. */
@@ -108,6 +112,8 @@ data class Snapshot(
         append("\"segmentLeft\":${"%.0f".format(segmentLeft)},")
         append("\"nextLabel\":\"$nextLabel\",")
         append("\"nextIncline\":${"%.1f".format(nextIncline)},")
+        append("\"planTotalSec\":${"%.0f".format(planTotalSec)},")
+        append("\"summaryLine\":\"$summaryLine\",")
         append("\"planElapsed\":${"%.0f".format(planElapsed)},")
         append("\"planLap\":$planLap,")
         append("\"planLoops\":$planLoops,")

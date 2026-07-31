@@ -211,6 +211,9 @@ class MainActivity : Activity() {
     @Volatile private var inclineAuto = false
     private var lastInclineMoveAt = 0L
 
+    /** The coach's closing line, asked for near the end and shown on the summary. */
+    @Volatile private var summaryLine = ""
+
     /** Last speed the *board* reported, as opposed to what we asked for. */
     @Volatile private var lastActualKph = 0.0
 
@@ -451,6 +454,7 @@ class MainActivity : Activity() {
         @JavascriptInterface fun home() {
             session = Session.WELCOME
             workout = "none"
+            summaryLine = ""
             clearPlan()
             resetSession()
             pendingWrite = mapOf(
@@ -1228,6 +1232,14 @@ class MainActivity : Activity() {
             .toString()
         Log.i(TAG, "coach: \"$line\"")
         coach.heard(line)
+        if (obj.optString("kind") == "summary") {
+            // Held rather than shown. It was asked for before the walk ended;
+            // flashing it over the last few seconds of walking would be the
+            // opposite of the point.
+            summaryLine = line
+            Log.i(TAG, "coach: closing line ready")
+            return
+        }
         showCoach(safe)
         obj.optString("url").takeIf { it.isNotEmpty() }?.let { voice.play(it) }
     }
@@ -1494,6 +1506,8 @@ class MainActivity : Activity() {
             // one again, because the ground comes round rather than running out.
             nextLabel = nextStep(stepIndex)?.label ?: "",
             nextIncline = nextStep(stepIndex)?.incline ?: 0.0,
+            planTotalSec = planSteps.lastOrNull()?.endSec ?: 0.0,
+            summaryLine = summaryLine,
             planElapsed = planElapsed,
             planLap = planLap,
             planLoops = planLoops,

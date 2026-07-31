@@ -46,6 +46,18 @@ class Coach {
          */
         const val LOOKAHEAD_S = 15.0
 
+        /**
+         * How far through a plan to ask for the closing line.
+         *
+         * Not at the end. Home Assistant takes a few seconds to answer and the
+         * summary appears the instant the belt stops, so asking then would put
+         * a blank space where the sentence goes and fill it after somebody has
+         * already turned away. At 98% everything worth saying is known — the
+         * distance, the pace held, the climb — and the answer is waiting before
+         * the screen needs it.
+         */
+        const val SUMMARY_AT = 0.98
+
         /** Say something if nothing else has come up for this long. */
         const val CHECKIN_MS = 5 * 60_000L
 
@@ -82,6 +94,8 @@ class Coach {
     private var lastSegment = 0
     /** Which segment we have already warned *from*, so it happens once. */
     private var warnedFor = 0
+    /** The closing line is asked for once per walk. */
+    private var summarySent = false
     private var dropSince = 0L
     private var steadySince = 0L
     private var steadyRef = 0.0
@@ -194,6 +208,16 @@ class Coach {
 
         if (s.session != Session.ACTIVE) return null
 
+        // The closing line, asked for early so it is there when the summary is.
+        if (!summarySent && s.segments > 0 && s.planTotalSec > 0 &&
+            s.planElapsed >= s.planTotalSec * SUMMARY_AT) {
+            summarySent = true
+            return Moment("summary",
+                "the walk is about to finish. This is the closing line, shown on " +
+                "the summary screen next to the numbers — so do not read the " +
+                "numbers back")
+        }
+
         // A guided walk changing segment is the strongest moment there is — the
         // ground is about to change under him and he should hear why. Said
         // *before* it happens, not after: see LOOKAHEAD_S.
@@ -295,6 +319,7 @@ class Coach {
         "resumed" -> "Back on it."
         "pace_drop" -> "Pace has eased off a little."
         "steady" -> "Nice rhythm — that pace is holding well."
+        "summary" -> "That is another one done."
         else -> "Still going. That is the whole job."
     }
 
