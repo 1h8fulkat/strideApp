@@ -1,20 +1,19 @@
 # Installing STRIDE
 
-> 🚧 **DRAFT — being rewritten. Do not follow this yet.**
+> 🚧 **DRAFT.** Part 1 now follows the route the author actually took, but
+> nobody has yet walked this page end to end on a factory-reset machine. Part 2
+> onwards is still unverified by anyone. Expect gaps and please
+> [report them](https://github.com/keranm/strideApp/issues).
+
+> # ⛔ Before you touch anything: never accept the Gen 7 / iFit 2.0 update
 >
-> Part 1 in particular is being replaced by someone who has actually done it on
-> a treadmill from scratch. An earlier version of this page described the
-> privilege-mode sequence incorrectly — plausibly, and wrongly, which is worse
-> than saying nothing. Treat every step here as unverified until this banner
-> comes down.
+> If your console offers an update to Gen 7 or iFit 2.0, **decline it, and keep
+> declining it.** That update is understood to close the privileged-mode route
+> this entire process depends on. Take it and you are locked out permanently —
+> there is no known way back, and a factory reset will not help you.
 >
-> Roughly, what is what:
->
-> | | |
-> |---|---|
-> | **Mechanically true** | the commands, paths and file names — those are read from the repository |
-> | **Verified once** | the checkpoints, on one machine that was already set up |
-> | **Not verified by anybody** | the console procedure in 1.1, and the Home Assistant package in 2.2 |
+> **Modify first. Update never.** If your machine is already on Gen 7, nothing
+> in this guide will work for you.
 
 **Read [SAFETY.md](../SAFETY.md) first.** This software drives a motorised
 treadmill.
@@ -44,11 +43,20 @@ of the point.
 
 ## Step 0. Is my treadmill supported?
 
-Honestly: nobody knows except for one machine. What is known is:
+Honestly: nobody knows except for one machine. That machine is:
 
-- **Proven:** a NordicTrack whose board reports device id `0x04`, incline
-  −3 to +12 %, speed 1.6 to 20 km/h.
-- **Likely:** other NordicTrack and ProForm consoles on the same FitPro board.
+| | |
+|---|---|
+| Generation | **Gen 6** (the "CLASSIC" embedded console) |
+| GlassOS | 8.51.7.1070 |
+| System version | EKA2_20221110 |
+| Firmware | 84.121 |
+| Motor board | FitPro, device id `0x04` |
+| Ranges reported | incline −3 to +12 %, speed 1.6 to 20 km/h |
+
+- **Likely to work:** other Gen 6 NordicTrack and ProForm consoles on the same
+  FitPro board. The protocol is a family, not a model.
+- **Will not work:** Gen 7 / iFit 2.0. See the warning above.
 - **Required regardless:** a console running Android that you can reach with
   `adb`.
 
@@ -65,37 +73,78 @@ this project could have and it does not exist yet.
 
 ## Part 1 — The console
 
-### 1.1 Get into privilege mode
+### 1.1 Factory reset the console
 
-The console has a maintenance mode behind a challenge-response gate. You need
-it to reach Android settings and turn on ADB.
+Start from a clean machine. It takes five to ten minutes and it means nothing
+left over from iFit is in the way.
 
-**On the machine this was built for:**
+Hold the **pinhole reset button** on the right side panel while you switch the
+treadmill on at the power switch. You should see *System recovery* in blue
+text. Let it finish.
 
-1. Wait for the welcome screen to finish loading.
-2. **Tap the screen ten times.**
-3. **Wait about seven seconds.** Nothing appears to happen — this pause is part
-   of the sequence, not you having got it wrong.
-4. **Tap ten times again.**
-5. A prompt appears showing a **challenge code** and asking for a response
-   code.
+> **Do not connect it to Wi-Fi in iFit afterwards.** Leave it offline until
+> you have finished step 1.3. A console that reaches the internet is a console
+> that can be offered the update that locks you out.
 
-The response code is derived from the challenge. Two ways to get one:
+### 1.2 Enable privileged mode
 
-- **Call NordicTrack support** and ask. This is the official route.
-- **<https://getresponsecode.com>** — a third-party calculator. Not affiliated
-  with this project, not endorsed, and not something we can vouch for; it is
-  listed because it is what people use.
+On the iFit welcome screen:
 
-Once you are in, enable **ADB over the network** in Android settings.
+1. Tap a **blank area** of the screen **ten times**.
+2. **Count to seven.** Nothing happens during this pause — that is the
+   sequence, not you having got it wrong.
+3. Tap **the same spot** ten more times.
 
-> **Where this varies:** the tap counts and the pause are what worked on one
-> console. Other models and firmware versions may differ. If yours does, please
-> [say what worked](https://github.com/keranm/strideApp/issues) — this is the
-> single most model-specific step in the whole process and the one most likely
-> to stop somebody.
+A message at the bottom of the screen confirms privileged mode is on. You can
+now **swipe up from the bottom** to reach the Android home button, which is how
+you get to Settings.
 
-Check it from your computer:
+> **Some consoles ask for a code here** instead of simply unlocking — a
+> challenge number, expecting a response. Two ways to get one: ring NordicTrack
+> support and ask, or use a third-party calculator such as
+> <https://getresponsecode.com> — not affiliated with this project, not
+> endorsed, listed only because it is what people use.
+
+### 1.3 Stop iFit locking you back out — **do not skip this**
+
+This is the step that decides whether any of the rest survives a reboot.
+
+In the console's Android settings there are two apps to deal with. They appear
+as **iFit Admin** and **iFit**:
+
+**iFit Admin** — the one that re-asserts the lock.
+
+- **Force stop** it.
+- Turn off **Draw over other apps**.
+- Turn off **Modify system settings**.
+- You **cannot uninstall it**; it is a system app. Stopping it and taking those
+  two permissions away is the most that can be done from here.
+
+**iFit** — the app itself.
+
+- **Force stop** it.
+- **Uninstall it if you can.** This one usually can be removed, and removing it
+  is the cleanest way to stop it starting up and taking the screen back.
+
+Leave iFit Admin with those permissions and it will quietly switch privileged
+mode off again the next time the treadmill boots, and you will be locked out
+with no explanation on screen.
+
+Later, [`tools/unchain.sh`](../tools/unchain.sh) disables these over ADB — and
+disables iFit Admin *first*, before anything else, for exactly this reason.
+What you are doing here is the manual version, and you need it now because you
+do not have ADB yet.
+
+### 1.4 Enable ADB over Wi-Fi
+
+1. **Settings → About tablet → Build number**, tapped **seven times**, unlocks
+   Developer Options.
+2. **Settings → Developer Options → Enable USB debugging.**
+3. Pull down the notification panel, long-press **Wi-Fi**, and join your
+   network.
+4. **Settings → About tablet → Status** gives you the console's IP address.
+
+From your computer:
 
 ```sh
 adb connect <console-ip>:5555
@@ -105,7 +154,20 @@ adb devices
 ✅ **Checkpoint:** the console appears in `adb devices` as `device` — not
 `unauthorized` or `offline`.
 
-### 1.2 Understand what you are about to run
+### 1.5 Back up the original software first
+
+Before changing anything, take a copy of what is on there:
+
+```sh
+./protocol/grab-ifit.sh
+```
+
+This pulls the console's own APKs onto your computer. They are yours, from a
+machine you own — **do not redistribute them**. Their value is recovery: if
+something goes wrong you have the originals rather than a factory reset and
+hope.
+
+### 1.6 Understand what you are about to run
 
 `tools/unchain.sh` does four things, in this order:
 
@@ -118,7 +180,7 @@ adb devices
 
 Read it before you run it. It is 80 lines and it operates on your treadmill.
 
-### 1.3 Build and install
+### 1.7 Build and install
 
 ```sh
 cd console/stride
@@ -132,7 +194,7 @@ default location under `~/Library/Android/sdk`.
 prints `limits: <min>..<max> km/h, <min>..<max> %` — those numbers came from
 your motor board, which means the USB link works.
 
-### 1.4 Set it up, on the console
+### 1.8 Set it up, on the console
 
 Everything is on the treadmill's own screen. There are no config files.
 
@@ -261,6 +323,20 @@ picker.
 
 ---
 
+## Credit
+
+Steps 1.1 to 1.4 follow a community *NordicTrack Gen 6 modding guide*, which is
+how the author got ADB onto this console in the first place. That guide
+continues towards QZ Companion, which is a different and perfectly good
+destination; STRIDE goes somewhere else after step 1.4 and replaces the console
+software entirely.
+
+If you know who wrote it, please
+[tell us](https://github.com/keranm/strideApp/issues) so it can be credited
+properly.
+
+---
+
 ## If it goes wrong
 
 1. **Pull the safety key.** Always first — it is hardware.
@@ -277,7 +353,8 @@ If you are following this as a new user — especially on a factory-reset
 treadmill and a fresh Home Assistant — the following are the things most likely
 to be wrong, and knowing either way is worth more than any feature right now:
 
-- **Step 1.1**, privilege mode, is model-specific and barely documented here.
+- **Steps 1.1–1.4** are the route the author took, written up afterwards. Nobody
+  has followed *this page* through them on a freshly reset machine.
 - **Step 2.2**, the package file, has never been installed on a clean Home
   Assistant.
 - **Every ✅ checkpoint** is a claim. If one does not happen, that is the bug.

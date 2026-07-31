@@ -23,6 +23,11 @@
 > before installing anything. The physical safety key remains the stop of
 > record; incline is driven, speed is only ever suggested.
 
+> ⛔ **Never accept the Gen 7 / iFit 2.0 update on your console.** It is
+> understood to close the privileged-mode route everything here depends on,
+> permanently and with no way back. Modify first, update never. If your machine
+> is already on Gen 7, none of this will work.
+
 STRIDE replaces the software on a treadmill console with something you own. The
 belt and deck work without a login, without a subscription, and without an
 internet connection — and everything the machine knows appears in Home
