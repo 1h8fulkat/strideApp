@@ -73,6 +73,12 @@ data class Snapshot(
     val nextIncline: Double = 0.0,
     /** Total plan length in seconds — one lap on a circuit. */
     val planTotalSec: Double = 0.0,
+    /** Total ascent of the plan in metres, when it is known — a route carries
+     *  its own, measured from the walk it came from. Zero for templates, whose
+     *  climb depends on how fast you take them. */
+    val planClimbM: Double = 0.0,
+    /** The steepest gradient anywhere in the plan. */
+    val planPeakIncline: Double = 0.0,
     /** The coach's closing line, ready before the summary appears. */
     val summaryLine: String = "",
     /** Plan time wrapped into the current lap. Equals elapsed unless looping. */
@@ -118,6 +124,8 @@ data class Snapshot(
         append("\"nextLabel\":\"$nextLabel\",")
         append("\"nextIncline\":${"%.1f".format(nextIncline)},")
         append("\"planTotalSec\":${"%.0f".format(planTotalSec)},")
+        append("\"planClimbM\":${"%.0f".format(planClimbM)},")
+        append("\"planPeakIncline\":${"%.1f".format(planPeakIncline)},")
         append("\"summaryLine\":\"$summaryLine\",")
         append("\"planElapsed\":${"%.0f".format(planElapsed)},")
         append("\"planLap\":$planLap,")

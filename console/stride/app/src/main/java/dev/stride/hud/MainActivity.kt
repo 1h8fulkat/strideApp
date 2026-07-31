@@ -81,6 +81,9 @@ class MainActivity : Activity() {
          */
         const val STOPPED_KPH = 0.3
 
+        /** Close enough to level to stop asking. The deck reports whole percent. */
+        const val LEVEL_GRADE = 0.5
+
         /** How close the derived speed must sit to the target before the readout
          *  stops following it — see accumulate(). */
         const val SETTLE_BAND_KPH = 0.45
@@ -230,9 +233,14 @@ class MainActivity : Activity() {
 
     /** Last speed the *board* reported, as opposed to what we asked for. */
     @Volatile private var lastActualKph = 0.0
+    /** The grade the board last reported, for enforceLevel. */
+    @Volatile private var lastActualGrade = 0.0
 
     /** How many times we have had to re-command a stop. Reset when it takes. */
     @Volatile private var stopNags = 0
+    /** True while the deck is being walked back to level after a workout. */
+    @Volatile private var levelling = false
+    @Volatile private var levelNags = 0
 
     /** True while the belt is winding down towards an automatic finish. */
     @Volatile private var stopping = false
@@ -578,6 +586,13 @@ class MainActivity : Activity() {
             if (inclineAuto) {
                 inclineAuto = false
                 Log.i(TAG, "guided: incline taken over by hand for this segment")
+            }
+            // A hand on the incline outranks the levelling nag, exactly as it
+            // outranks the plan. Otherwise setting a slope from the summary
+            // screen would be undone a fifth of a second later.
+            if (levelling) {
+                levelling = false
+                Log.i(TAG, "levelling abandoned — incline set by hand")
             }
             targetGrade = (targetGrade + delta).coerceIn(minGrade, maxGrade)
             pendingWrite = mapOf(FitPro.Field.GRADE to targetGrade)
@@ -1029,6 +1044,33 @@ class MainActivity : Activity() {
         )
     }
 
+    /**
+     * The deck must not be left tilted when the walk is over.
+     *
+     * `enforceStopped` exists because one dropped frame left the belt running.
+     * This is the same failure for the other axis, and it went unnoticed
+     * longer: every hand-authored template ends flat, so nothing was ever left
+     * standing on a slope. A route can end anywhere — and a walk stopped early
+     * ends wherever the ground happened to be, which on the first one tried was
+     * a −3% descent.
+     *
+     * Only while `levelling`, so this can never fight somebody setting an
+     * incline by hand from the welcome screen: the flag is set when a workout
+     * ends and cleared the moment the deck is level or anything else takes
+     * charge of the grade.
+     */
+    private fun enforceLevel(actualGrade: Double): Map<FitPro.Field, Double>? {
+        if (!levelling) return null
+        if (Session.isMoving(session)) { levelling = false; return null }
+        if (Math.abs(actualGrade) < LEVEL_GRADE) { levelling = false; return null }
+        levelNags++
+        if (levelNags == 1 || levelNags % 25 == 0) {
+            Log.w(TAG, "deck still at ${"%.1f".format(actualGrade)}% after the walk " +
+                    "— commanding level again (attempt $levelNags)")
+        }
+        return mapOf(FitPro.Field.GRADE to 0.0)
+    }
+
     /** Stop everything and show the recap. Reached by the cool-down expiring or SKIP. */
     private fun finishWorkout() {
         if (Session.isMoving(session)) {
@@ -1047,6 +1089,9 @@ class MainActivity : Activity() {
             FitPro.Field.GRADE to 0.0,
             FitPro.Field.WORKOUT_MODE to FitPro.Mode.PAUSE.toDouble(),
         )
+        // and keep asking until the board agrees it is level.
+        levelling = true
+        levelNags = 0
         Log.i(TAG, "workout ended: ${"%.0f".format(sessionDistance)} m in " +
                 "${accumulatedMs / 1000} s, ${"%.0f".format(sessionCalories)} kcal")
     }
@@ -1457,10 +1502,9 @@ class MainActivity : Activity() {
             // queued write: nothing is more important than a belt that should
             // not be moving.
             val queued = pendingWrite
-            val writes = enforceStopped(lastActualKph) ?: queued ?: decelStep() ?: rampStep()
-            // Only consume the queued write if that is what actually went out.
-            // A stop command jumping the queue must not silently eat it.
-            if (queued != null && writes === queued) pendingWrite = null
+            val writes = enforceStopped(lastActualKph)
+                ?: enforceLevel(lastActualGrade)
+                ?: queued ?: decelStep() ?: rampStep()
 
             val reply = conn.exchange(FitPro.readWrite(deviceId, READS, writes ?: emptyMap()))
             if (reply == null) { Thread.sleep(POLL_MS); continue }
@@ -1476,6 +1520,15 @@ class MainActivity : Activity() {
                 Thread.sleep(POLL_MS)
                 continue
             }
+
+            // Only now is the queued write known to have landed. Clearing it
+            // before the exchange is what lost the deck-levelling command on
+            // 31 July: finishWorkout queued {KPH 0, GRADE 0, PAUSE}, the very
+            // next frame came back `status:failed`, and the write was already
+            // gone — so the belt stopped (the decel ramp had it) and the deck
+            // stayed at -3% until somebody noticed. One dropped USB frame
+            // should not be able to spend a command.
+            if (queued != null && writes === queued) pendingWrite = null
 
             val v = FitPro.parse(reply, READS).filter { (f, value) ->
                 // Reject anything outside what the machine says it can do.
@@ -1592,6 +1645,11 @@ class MainActivity : Activity() {
             stopNags = 0
         }
         val incline = v[FitPro.Field.ACTUAL_INCLINE] ?: 0.0
+        lastActualGrade = incline
+        if (levelNags > 0 && Math.abs(incline) < LEVEL_GRADE) {
+            Log.i(TAG, "deck confirmed level after $levelNags nag(s)")
+            levelNags = 0
+        }
 
         // ActualKph reads 0.00 on this board at every speed — see beltSpeed().
         if (Session.isMoving(session) && targetKph > 0.0 && actual <= 0.0) {
@@ -1679,6 +1737,11 @@ class MainActivity : Activity() {
             nextLabel = nextStep(stepIndex)?.label ?: "",
             nextIncline = nextStep(stepIndex)?.incline ?: 0.0,
             planTotalSec = planSteps.lastOrNull()?.endSec ?: 0.0,
+            // A route's steps are in metres, so its ascent is real and
+            // measurable. A template's are in seconds and its climb depends on
+            // how fast it is walked, so it does not claim one.
+            planClimbM = route?.climbM ?: 0.0,
+            planPeakIncline = planSteps.maxOfOrNull { it.incline } ?: 0.0,
             summaryLine = summaryLine,
             planElapsed = planElapsed,
             planLap = planLap,

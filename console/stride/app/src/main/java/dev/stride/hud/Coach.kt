@@ -131,6 +131,9 @@ class Coach {
      *  rounding step on a route. See SEGMENT_MIN_CHANGE. */
     private var spokenIncline = 0.0
 
+    /** The briefing is offered once per walk, at the top. */
+    private var openingSent = false
+
     /** The closing line is asked for once per walk. */
     private var summarySent = false
     private var dropSince = 0L
@@ -157,6 +160,7 @@ class Coach {
         spokenIncline = 0.0
         awaitingSince = 0L
         awaitingKind = ""
+        openingSent = false
         said.clear()
     }
 
@@ -229,6 +233,34 @@ class Coach {
     }
 
     private fun detect(s: Snapshot, was: Int, now: Long): Moment? {
+        // --- the briefing -----------------------------------------------------
+        //
+        // Said once, at the top, before anything has happened. A walk used to
+        // begin in silence and the first word came only when the warm-up ended,
+        // by which point you are already walking and the shape of the thing is
+        // a surprise you discover a hill at a time.
+        //
+        // Not a summary of numbers — those are on the screen. It is the one
+        // moment where the coach knows something you do not: what is coming.
+        if (!openingSent && s.session != Session.WELCOME && s.plan.isNotEmpty()) {
+            openingSent = true
+            val shape = StringBuilder("this walk is \"${s.plan}\"")
+            if (s.planClimbM > 0) {
+                // A route: real distance and real ascent, measured outdoors.
+                shape.append(", ${"%.1f".format(s.planTotalSec / 1000)} km with " +
+                             "${"%.0f".format(s.planClimbM)} metres of climbing in it")
+            } else if (s.planTotalSec > 0) {
+                shape.append(", ${(s.planTotalSec / 60).toInt()} minutes")
+            }
+            if (s.planPeakIncline >= 4) {
+                shape.append(", steepest around ${"%.0f".format(s.planPeakIncline)}%")
+            }
+            return Moment("opening",
+                "$shape. He is at the very start and the belt is still easing up. " +
+                "Set him up for what is coming, and tell him to settle in and let " +
+                "the muscles warm — do not read the numbers back as a list")
+        }
+
         // --- phase changes: things that just happened, worth marking ---------
         if (was == Session.WARMUP && s.session == Session.ACTIVE) {
             return Moment("warmup_done", "the warm-up is over and the workout proper has started")
@@ -373,6 +405,7 @@ class Coach {
         "warmup_done" -> "Warm-up done. Settle into a pace that feels easy."
         "milestone" -> "Another one down. Keep it steady."
         "cooldown" -> "Easing down now. Good work."
+        "opening" -> "Right — let's get into it. Settle in and warm those legs."
         "segment" -> "New stretch coming up."
         "resumed" -> "Back on it."
         "pace_drop" -> "Pace has eased off a little."
