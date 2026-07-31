@@ -72,7 +72,7 @@ class Coach {
         /**
          * Below this, a walk gets no closing line.
          *
-         * Keran's rule, from stopping a route four minutes in and landing on a
+         * A rule that came from the belt: stopping a route four minutes in
          * summary that had nothing to sum up. A walk that short is an
          * interruption, not a session, and a coach reflecting on it sounds like
          * it was not paying attention.

@@ -1717,7 +1717,7 @@ class MainActivity : Activity() {
      * 7-byte frame, and devices 2 and 65 answer the same way. The board simply
      * never fills it in.
      *
-     * `Distance` *is* live and talexful though, so the belt tells us its speed
+     * `Distance` *is* live and truthful though, so the belt tells us its speed
      * whether or not the firmware will say so. Distance is whole metres, which
      * is coarse at walking pace, so measure across a window rather than between
      * consecutive polls: at 5 km/h a 4-second window covers ~5.5 m, good for
