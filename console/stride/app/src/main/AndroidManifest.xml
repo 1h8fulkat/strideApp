@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+    <uses-feature android:name="android.hardware.usb.host" android:required="true" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Bluetooth heart rate straps.
+
+         Not required: the console works without Bluetooth hardware, reading the
+         pulse from the handlebar grips as it always has.
+
+         ACCESS_COARSE_LOCATION is the one that surprises people. A BLE scan can
+         be used to infer position from nearby beacons, so from API 23 to 30 the
+         platform requires a location permission to perform one — and without it
+         the scan does not fail, it succeeds and returns nothing, which is a
+         miserable thing to debug. This app targets SDK 28, so that is the rule
+         that applies here and the permission has to be granted at runtime.
+
+         BLUETOOTH_SCAN / BLUETOOTH_CONNECT replaced it in API 31 and are
+         declared for the day targetSdk moves. `neverForLocation` states what is
+         already true — the scan filters on the heart rate service UUID and the
+         results are used for nothing but pairing a strap. -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" tools:targetApi="31" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" tools:targetApi="31" />
+    <!-- targetSdk 28 blocks cleartext by default, which would stop MediaPlayer
+         fetching the coach's synthesised audio from Home Assistant. It has to be
+         plain HTTP: the console's clock reads 2022, so TLS validation fails on
+         anything served over HTTPS. The URL never leaves the LAN. -->
+    <application
+        android:label="STRIDE"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:usesCleartextTraffic="true"
+        android:allowBackup="false"
+        android:theme="@style/Stride">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="landscape"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/device_filter" />
+        </activity>
+    </application>
+</manifest>

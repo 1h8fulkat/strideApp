@@ -1,0 +1,773 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280,height=800,initial-scale=1">
+<title>STRIDE — faceted terrain spike</title>
+<style>
+/* ---------------------------------------------------------------------------
+   SPIKE — faceted low-poly terrain for the guided-walk path.
+
+   Question this exists to answer: does a flat-shaded triangle mesh read as
+   landscape at arm's length while moving, in the interface blues, without
+   costing more than the 5 Hz budget already allows?
+
+   Not a HUD. The canvas is the shipped size (732x452) inside a 1280x800 frame
+   so it is judged at true scale, with a controls strip that would never ship.
+
+   Chromium 83 rules apply throughout (this is meant to be portable to the
+   console): explicit top/right/bottom/left, no flex gap, no :has(), no
+   aspect-ratio, no nesting, no external resources.
+--------------------------------------------------------------------------- */
+:root{
+  --bg-0:#050b1f;
+  --bg-1:#0a1533;
+  --ink:#eaf0ff;
+  --ink-dim:#7f92c4;
+  --ink-faint:#44548a;
+  --accent:#39e0ff;
+  --accent-warm:#ff9d3c;
+  --track-line:#16255a;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  background:#02060f;color:var(--ink);
+  font-family:"Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  user-select:none;
+}
+.frame{
+  position:relative;width:1280px;height:800px;margin:0 auto;
+  background:var(--bg-0);overflow:hidden;
+}
+/* The same radial lift the HUD puts behind its hero, so the mesh is judged
+   against the real page background rather than flat black. */
+.frame::before{
+  content:"";position:absolute;top:0;right:0;bottom:0;left:0;
+  background:radial-gradient(ellipse 900px 520px at 50% 44%,
+    rgba(28,58,140,.55) 0%, rgba(10,21,51,.25) 45%, transparent 72%);
+  pointer-events:none;
+}
+.stage{position:absolute;top:88px;left:274px;width:732px;height:452px}
+#cv{position:absolute;top:0;left:0;width:732px;height:452px}
+
+/* ---- the mock HUD numbers ------------------------------------------------
+   On by default: the real question is not whether the terrain is pretty, it is
+   whether it fights the four numbers someone is actually reading. */
+.hud{position:absolute;top:0;right:0;bottom:0;left:0;pointer-events:none}
+.hud.off{display:none}
+.big{position:absolute;font-weight:200;letter-spacing:-.02em;line-height:1}
+.big .u{font-size:22px;font-weight:400;color:var(--ink-dim);letter-spacing:.06em}
+.spd{top:6px;left:6px;font-size:84px}
+.dst{top:6px;right:6px;font-size:84px;text-align:right}
+.inc{bottom:6px;left:6px;font-size:50px;color:var(--accent-warm)}
+.tme{bottom:6px;right:6px;font-size:50px;text-align:right;color:var(--ink-dim)}
+.lbl{
+  position:absolute;top:-52px;left:0;right:0;text-align:center;
+  color:var(--ink-faint);font-size:14px;letter-spacing:.18em;
+}
+
+/* ---- controls (spike only) ---------------------------------------------- */
+.panel{
+  position:absolute;top:566px;left:24px;right:24px;bottom:14px;
+  background:rgba(6,14,36,.72);border:1px solid #14224e;border-radius:12px;
+  padding:13px 18px;font-size:12px;color:var(--ink-dim);
+  overflow:hidden;
+}
+.row{display:flex;align-items:center;margin-bottom:9px}
+.row:last-child{margin-bottom:0}
+.cell{width:224px;margin-right:14px;display:flex;align-items:center}
+.cell:last-child{margin-right:0}
+.cell span.k{width:82px;color:var(--ink-faint);letter-spacing:.04em}
+.cell span.v{width:40px;color:var(--ink);text-align:right;margin-left:6px}
+input[type=range]{width:92px;margin:0}
+select,button{
+  background:#0d1836;color:var(--ink);border:1px solid #1c3269;
+  border-radius:6px;padding:4px 9px;font-size:12px;font-family:inherit;
+}
+button{cursor:pointer}
+button.on{background:#16255a;border-color:var(--accent);color:var(--accent)}
+.stat{
+  position:absolute;top:13px;right:18px;text-align:right;
+  font-size:11px;line-height:1.55;color:var(--ink-faint);
+}
+.stat b{color:var(--accent);font-weight:400}
+.note{
+  position:absolute;bottom:12px;left:18px;right:190px;
+  font-size:11px;color:#33406e;line-height:1.5;
+}
+</style>
+</head>
+<body>
+
+<div class="frame">
+  <div class="stage">
+    <canvas id="cv" width="732" height="452"></canvas>
+    <div class="hud" id="hud">
+      <div class="lbl">ROLLING HILLS &middot; SEGMENT 2 OF 6</div>
+      <div class="big spd"><span id="oSpd">5.4</span><span class="u"> km/h</span></div>
+      <div class="big dst"><span id="oDst">1.82</span><span class="u"> km</span></div>
+      <div class="big inc"><span id="oInc">3.0</span><span class="u"> %</span></div>
+      <div class="big tme"><span id="oTme">20:14</span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="stat">
+      <div>triangles <b id="sTri">0</b></div>
+      <div>ms / frame <b id="sMs">0</b> of 200</div>
+      <div>vertices <b id="sVtx">0</b></div>
+    </div>
+
+    <div class="row">
+      <div class="cell"><span class="k">camera</span>
+        <select id="cCam">
+          <option value="fp">first person</option>
+          <option value="obl">oblique (shipped)</option>
+        </select></div>
+      <div class="cell"><span class="k">blue wash</span>
+        <input type="range" id="cWash" min="0" max="100" value="66">
+        <span class="v" id="vWash">66</span></div>
+      <div class="cell"><span class="k">haze</span>
+        <input type="range" id="cHaze" min="0" max="100" value="70">
+        <span class="v" id="vHaze">70</span></div>
+      <div class="cell"><span class="k">facet size</span>
+        <input type="range" id="cFacet" min="4" max="26" value="12">
+        <span class="v" id="vFacet">12</span></div>
+      <div class="cell"><span class="k">relief</span>
+        <input type="range" id="cRelief" min="0" max="200" value="100">
+        <span class="v" id="vRelief">100</span></div>
+    </div>
+
+    <div class="row">
+      <div class="cell"><span class="k">profile</span>
+        <select id="cProfile">
+          <option value="rolling">rolling hills</option>
+          <option value="climb">one long climb</option>
+          <option value="descent">descent</option>
+          <option value="flat">flat</option>
+        </select></div>
+      <div class="cell"><span class="k">dawn</span>
+        <input type="range" id="cDawn" min="0" max="100" value="0">
+        <span class="v" id="vDawn">0</span></div>
+      <div class="cell"><span class="k">speed km/h</span>
+        <input type="range" id="cSpeed" min="0" max="110" value="54">
+        <span class="v" id="vSpeed">5.4</span></div>
+      <div class="cell"><span class="k">trees</span>
+        <input type="range" id="cTrees" min="0" max="14" value="6">
+        <span class="v" id="vTrees">6</span></div>
+      <div class="cell"><span class="k">horizon</span>
+        <input type="range" id="cHzn" min="18" max="58" value="34">
+        <span class="v" id="vHzn">34</span></div>
+    </div>
+
+    <div class="row">
+      <button id="bPlay" class="on">pause</button>&nbsp;
+      <button id="bWire">wireframe</button>&nbsp;
+      <button id="bSeam" class="on">seam fix</button>&nbsp;
+      <button id="bWipe" class="on">edge dissolve</button>&nbsp;
+      <button id="bHud" class="on">HUD numbers</button>&nbsp;
+      <button id="bQuad">quads</button>&nbsp;
+      <button id="bReset">reset</button>
+    </div>
+
+    <div class="note">
+      Desktop Chrome is far faster than the console's 2016 MT8163 — read ms/frame
+      as a relative cost between settings, not as a device measurement.
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===========================================================================
+   Two cameras, because this is the finding the spike exists to expose.
+
+   The shipped HUD uses a 2D *oblique* fake: one parameter (metres ahead) mapped
+   along a fixed screen diagonal at 19 degrees. That was chosen deliberately —
+   see hud.html — because a head-on view compresses the path's meander into a
+   few pixels near the vanishing point. It is a good choice for a *line*.
+
+   It is the wrong choice for a *surface*. An oblique projection has no horizon,
+   so extending it sideways gives a receding strip of ground floating in the
+   frame rather than a landscape. The reference images are all a perspective
+   camera with a horizon, mountains silhouetted against sky, and aerial
+   perspective doing the depth work.
+
+   So: a real pinhole camera, with the oblique kept switchable for comparison.
+=========================================================================== */
+const cv = document.getElementById('cv'), ctx2 = cv.getContext('2d');
+const PW = 732, PH = 452;
+
+/* ---- shared world model ------------------------------------------------- */
+const KDEPTH = 45;                       // oblique only: metres to half scale
+const LAT_SCALE = 15;                    // oblique only: px per lateral metre
+const ELEV_SCALE = 26;                   // oblique only: px per metre of rise
+const HALF_W = 1.5;                      // path half-width, metres
+
+/* ---- oblique (as shipped) ---------------------------------------------- */
+const X0 = PW * 0.12, Y0 = PH * 0.82;
+const SPAN = 520;
+const THETA = 19 * Math.PI / 180;
+const CT = Math.cos(THETA), ST = Math.sin(THETA);
+
+/* ---- first person ------------------------------------------------------- */
+const CAM_H = 1.62;                      // eye height above the deck, metres
+const FOCAL = 700;                       // px; ~55 degrees horizontal on 732
+let   HZN_FRAC = 0.34;                   // where the horizon sits, 0..1 of PH
+const CX = PW / 2, CY = PH / 2;
+let   pitch = 0, sinP = 0, cosP = 1;
+function setHorizon(frac){
+  /* A point at infinite depth lands at CY - FOCAL*tan(pitch), so the pitch is
+     whatever puts the horizon where we asked for it. */
+  HZN_FRAC = frac;
+  pitch = Math.atan((CY - PH * frac) / FOCAL);
+  sinP = Math.sin(pitch); cosP = Math.cos(pitch);
+}
+function horizonY(){ return CY - FOCAL * Math.tan(pitch); }
+
+let camMode = 'fp';
+
+/* The camera yaws to follow the path.
+
+   Without this the meander is unusable head-on: the path wanders +/-14 m, and
+   14 m of lateral offset 10 m ahead is 980 px off the side of a 732 px canvas.
+   Someone walking a path looks *along* it, so the camera turns with the path's
+   heading and the world swings past instead. The meander then reads as the
+   ground rotating, which is both correct and far more legible than a line
+   leaving the frame. */
+let sinY = 0, cosY = 1;
+function setYaw(w){
+  /* Analytic derivative of bendAt: lateral metres per metre travelled. */
+  const d = (9 / 34) * Math.cos(w / 34) + (5 / 79) * Math.cos(w / 79);
+  const yaw = Math.atan(d);
+  sinY = Math.sin(yaw); cosY = Math.cos(yaw);
+}
+
+/* Project a world point: u metres ahead, latW absolute lateral metres, h metres
+   of height. bend0/rise0 are the walker's own lateral and vertical origin, so
+   everything is relative to where they are standing. */
+function projectPt(u, latW, h, bend0, rise0){
+  if (camMode === 'obl'){
+    const p = KDEPTH / (KDEPTH + u);
+    const along = SPAN * (1 - p);
+    const lat = (latW - bend0) * p * LAT_SCALE;
+    const rise = (h - rise0) * p * ELEV_SCALE;
+    return {
+      x: X0 + along * CT + lat * ST,
+      y: Y0 - along * ST + lat * CT - rise,
+      s: p,          // screen scale, for line widths
+      d: u           // depth in metres, for haze
+    };
+  }
+  /* Pinhole. X right, Y up, Z forward; camera yawed to the path heading, then
+     pitched down by `pitch`. */
+  const lat = latW - bend0;
+  const X = lat * cosY - u * sinY;
+  const Z = lat * sinY + u * cosY;
+  const Y = (h - rise0) - CAM_H;
+  const z = Z * cosP - Y * sinP;
+  if (z < 0.25) return null;             // behind or through the lens
+  const y = Y * cosP + Z * sinP;
+  return {
+    x: CX + FOCAL * X / z,
+    y: CY - FOCAL * y / z,
+    s: FOCAL / (z * 45),                 // matched to the oblique's scale range
+    d: z
+  };
+}
+
+/* Lateral wander, unchanged — two waves so it never reads as a sine test. */
+function bendAt(w){
+  return Math.sin(w / 34) * 9 + Math.sin(w / 79) * 5;
+}
+
+/* --- the gradient profile, integrated ------------------------------------
+   Rise is the plan's gradient integrated over distance, exactly as the HUD
+   does it, so a hill two minutes out is already visible. Precomputed on a
+   coarse grid and interpolated: cheaper than integrating every frame, and the
+   profile only changes when the dropdown does. */
+let riseTab = [], profile = 'rolling';
+const RISE_STEP = 4, RISE_MAX = 6000;
+function gradAt(w){
+  if (profile === 'flat')    return 0;
+  if (profile === 'climb')   return 2.2 + 3.4 * Math.min(1, w / 900);
+  if (profile === 'descent') return -1.4 - 2.2 * Math.min(1, w / 900);
+  return 2.6 + 3.2 * Math.sin(w / 118) + 1.1 * Math.sin(w / 41);
+}
+function buildRise(){
+  riseTab = [0];
+  let h = 0;
+  for (let w = 0; w < RISE_MAX; w += RISE_STEP){
+    h += gradAt(w) * 0.01 * RISE_STEP;
+    riseTab.push(h);
+  }
+}
+function riseAt(w){
+  if (w <= 0) return 0;
+  const i = w / RISE_STEP, i0 = Math.floor(i);
+  if (i0 >= riseTab.length - 1) return riseTab[riseTab.length - 1];
+  return riseTab[i0] + (riseTab[i0 + 1] - riseTab[i0]) * (i - i0);
+}
+
+/* --- terrain relief ------------------------------------------------------
+   Value noise anchored in world coordinates, so ridges stay put while the path
+   meanders through them.
+
+   Two things make this read as the reference rather than as bumpy ground:
+
+   1. The corridor. Relief is forced to zero either side of the centreline, so
+      the ground is flat where the feet go. This is what makes it a path and
+      not the river in the reference image.
+
+   2. Amplitude grows with lateral distance. Near the path it is gentle
+      undulation; a hundred metres out it is a mountain range. Because the mesh
+      fans outward with depth, that single rule is what puts foothills at the
+      mid distance and peaks on the horizon, with no separate ridge layers. */
+function hash2(x, y){
+  const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+function vnoise(x, y){
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const a = hash2(xi, yi),     b = hash2(xi + 1, yi);
+  const c = hash2(xi, yi + 1), d = hash2(xi + 1, yi + 1);
+  return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+}
+let reliefK = 1.0;
+function terrainH(wu, wv, vOff){
+  const a = Math.abs(vOff);
+  if (a < 5) return 0;                                  // the flat corridor
+  const corridor = Math.min(1, (a - 5) / 14);
+  const ampl = 2.5 + a * 0.62;                          // gentle near, alpine far
+  const n = vnoise(wu * 0.0065, wv * 0.0065)
+          + vnoise(wu * 0.021,  wv * 0.021) * 0.42
+          + vnoise(wu * 0.062,  wv * 0.062) * 0.16;
+  return corridor * ampl * (n / 1.58 - 0.42) * reliefK;
+}
+
+/* --- the mesh -----------------------------------------------------------
+   A fan, not a grid. Rings are geometric in depth because perspective
+   compresses distance; columns spread proportionally to depth because a ring
+   200 m out has to be 200 m wide to reach the edges of the frame. Together
+   those give facets of roughly even *screen* size, which is the only size that
+   matters — the look depends on a facet being big enough to read as one.
+*/
+let US = [], VFRAC = [];
+const SEE_AHEAD = 760;                   // metres of ground meshed
+function buildMesh(facet){
+  US = [];
+  const growth = 1 + facet * 0.020, seed = facet * 0.26;
+  let u = 3;
+  while (u < SEE_AHEAD){ US.push(u); u = u * growth + seed; }
+  US.push(SEE_AHEAD);
+
+  /* Symmetric, densest at the corridor so its edge stays crisp. */
+  const base = [0, 0.09, 0.20, 0.33, 0.48, 0.65, 0.84, 1.05, 1.30, 1.60, 2.00];
+  VFRAC = [];
+  for (let i = base.length - 1; i >= 1; i--) VFRAC.push(-base[i]);
+  for (let i = 0; i < base.length; i++)      VFRAC.push(base[i]);
+}
+/* Lateral half-width of the ring at depth u. The constant term keeps the near
+   rings wide enough to cover the bottom corners. */
+function ringSpread(u){ return 7 + u * 0.62; }
+
+/* --- colour ------------------------------------------------------------ */
+function mix(a, b, t){
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+function css(c){
+  return 'rgb(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ')';
+}
+/* The blue wash. Collapses a colour towards the interface hue while keeping its
+   luminance, which is what stops the faceting reading as a toy landscape and
+   lets it sit under the numbers. At 100 the scene is a single blue. */
+function washed(c, amt){
+  const l = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+  const t = [l * 0.40, l * 0.66, Math.min(255, l * 1.44)];
+  return mix(c, t, amt);
+}
+
+const SHADE = [8, 17, 40];        /* just above --bg-0, so a shadowed face
+                                     dissolves into the page */
+const LIT   = [86, 128, 205];
+let HAZE    = [26, 44, 98];       /* distance lifts *up* out of the black
+                                     rather than down towards white — the
+                                     inversion that makes the reference look
+                                     work in a dark room */
+let SKY_TOP = [4, 9, 26], SKY_HZN = [22, 38, 86];
+
+/* Light from over the walker's left shoulder, shallow, so slopes facing the
+   path catch it and the far sides of ridges fall away. */
+const LX = -0.46, LY = 0.83, LZ = -0.30;
+
+function setDawn(d){
+  /* Dawn is the answer to the 6am problem: the sky earns its brightness over
+     the session instead of being bright at minute one. At 0 this is a blue
+     pre-dawn; at 100 the horizon carries the warmth of the reference images,
+     which is only tolerable once you are 25 minutes in and awake. */
+  SKY_TOP = mix([4, 9, 26],   [18, 22, 56],   d);
+  SKY_HZN = mix([22, 38, 86], [186, 122, 92], d);
+  HAZE    = mix([26, 44, 98], [104, 80, 118], d);
+}
+
+/* Aerial perspective. Exponential in distance, which is what the reference
+   images are actually doing when their ranges fade band by band. */
+const HAZE_D = 190;
+function hazeAt(d){ return 1 - Math.exp(-d / HAZE_D); }
+
+/* ===========================================================================
+   State + draw
+=========================================================================== */
+let world = 0, elapsed = 0, speed = 5.4;
+let washAmt = 0.66, hazeAmt = 0.70, facet = 12, dawn = 0, trees = 6;
+let playing = true, wire = false, seam = true, wipe = true, quads = false;
+let hudOn = true;
+let triCount = 0, vtxCount = 0, msAvg = 0;
+
+function draw(){
+  const t0 = performance.now();
+  ctx2.clearRect(0, 0, PW, PH);
+  triCount = 0;
+
+  const bend0 = bendAt(world), rise0 = riseAt(world);
+  setYaw(world);
+
+  /* ---- sky ------------------------------------------------------------
+     One gradient fill, ending at the horizon so sky and ground meet there
+     instead of the ground ending on a visible edge. */
+  const hy = camMode === 'fp' ? horizonY() : PH * 0.30;
+  const sky = ctx2.createLinearGradient(0, 0, 0, Math.max(24, hy));
+  sky.addColorStop(0, css(washed(SKY_TOP, washAmt * 0.55)));
+  sky.addColorStop(1, css(washed(SKY_HZN, washAmt * 0.55)));
+  ctx2.fillStyle = sky;
+  ctx2.fillRect(0, 0, PW, Math.max(24, hy) + 1);
+
+  /* ---- vertex grid ----------------------------------------------------
+     Built once per frame into flat arrays: world position and height for the
+     lighting, screen position for the fill. Normals come from the faces
+     themselves rather than extra noise samples. */
+  const NI = US.length, NJ = VFRAC.length, N = NI * NJ;
+  const gx = new Float32Array(N), gy = new Float32Array(N);
+  const wU = new Float32Array(N), wV = new Float32Array(N), wH = new Float32Array(N);
+  const gd = new Float32Array(N);
+  const ok = new Uint8Array(N);
+
+  for (let i = 0; i < NI; i++){
+    const u = US[i];
+    const worldU = world + u;
+    const bend = bendAt(worldU);
+    /* The path's own rise, shared by every column in the ring: this is what
+       tilts the whole ground with the gradient, instead of lifting a line off a
+       static background. */
+    const pathRise = riseAt(worldU);
+    const spread = ringSpread(u);
+    for (let j = 0; j < NJ; j++){
+      const vOff = VFRAC[j] * spread;
+      const latW = bend + vOff;
+      const h = pathRise + terrainH(worldU, latW, vOff);
+      const pr = projectPt(u, latW, h, bend0, rise0);
+      const k = i * NJ + j;
+      if (!pr){ ok[k] = 0; continue; }
+      ok[k] = 1;
+      gx[k] = pr.x; gy[k] = pr.y; gd[k] = pr.d;
+      wU[k] = u; wV[k] = latW; wH[k] = h;
+    }
+  }
+  vtxCount = N;
+
+  /* ---- faces, far to near --------------------------------------------
+     Painter's order. No depth buffer and no sorting beyond the ring index,
+     which is sufficient because this is a heightfield seen from one side. */
+  for (let i = NI - 2; i >= 0; i--){
+    for (let j = 0; j < NJ - 1; j++){
+      const k00 = i * NJ + j,       k01 = i * NJ + j + 1;
+      const k10 = (i + 1) * NJ + j, k11 = (i + 1) * NJ + j + 1;
+      if (!(ok[k00] && ok[k01] && ok[k10] && ok[k11])) continue;
+
+      /* Cull anything wholly off-canvas. Cheap, and it removes a good third of
+         the mesh at wide facet scales. */
+      const minx = Math.min(gx[k00], gx[k01], gx[k10], gx[k11]);
+      if (minx > PW + 8) continue;
+      const maxx = Math.max(gx[k00], gx[k01], gx[k10], gx[k11]);
+      if (maxx < -8) continue;
+      const miny = Math.min(gy[k00], gy[k01], gy[k10], gy[k11]);
+      if (miny > PH + 8) continue;
+      const maxy = Math.max(gy[k00], gy[k01], gy[k10], gy[k11]);
+      if (maxy < -8) continue;
+
+      const depth = hazeAt(gd[k00]);
+
+      if (quads){
+        face(4, k00, k01, k11, k10, gx, gy, wU, wV, wH, depth);
+      } else {
+        /* Two triangles per quad, each lit by its own normal. The shade step
+           between them across a slope is what actually sells low-poly — a quad
+           averages it away. */
+        face(3, k00, k01, k10, 0, gx, gy, wU, wV, wH, depth);
+        face(3, k01, k11, k10, 0, gx, gy, wU, wV, wH, depth);
+      }
+    }
+  }
+
+  if (trees > 0) drawTrees(bend0, rise0);
+  if (wipe) dissolveEdges();
+  drawPathRibbon(bend0, rise0);
+
+  const ms = performance.now() - t0;
+  msAvg = msAvg ? msAvg * 0.85 + ms * 0.15 : ms;
+}
+
+/* Flat shading from the face's own world-space normal. World axes here are
+   (u ahead, v lateral, h up), so the light vector is written in that frame. */
+function shadeOf(ka, kb, kc, wU, wV, wH, depth){
+  const ax = wU[kb] - wU[ka], ay = wV[kb] - wV[ka], az = wH[kb] - wH[ka];
+  const bx = wU[kc] - wU[ka], by = wV[kc] - wV[ka], bz = wH[kc] - wH[ka];
+  let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+  const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+  nx /= len; ny /= len; nz /= len;
+  if (nz < 0){ nx = -nx; ny = -ny; nz = -nz; }   // normals point up
+  let nd = nx * LX + ny * LZ + nz * LY;
+  if (nd < 0) nd = 0;
+  /* Ambient floor, so a face turned away from the light still separates from
+     the background instead of going to pure --bg-0. */
+  const lit = 0.16 + 0.84 * nd;
+  let c = mix(SHADE, LIT, lit);
+  c = mix(c, HAZE, depth * hazeAmt);
+  return css(washed(c, washAmt));
+}
+
+function face(n, ka, kb, kc, kd, gx, gy, wU, wV, wH, depth){
+  const fill = shadeOf(ka, kb, kc, wU, wV, wH, depth);
+  ctx2.beginPath();
+  ctx2.moveTo(gx[ka], gy[ka]);
+  ctx2.lineTo(gx[kb], gy[kb]);
+  ctx2.lineTo(gx[kc], gy[kc]);
+  if (n === 4) ctx2.lineTo(gx[kd], gy[kd]);
+  ctx2.closePath();
+  if (wire){
+    ctx2.strokeStyle = 'rgba(57,224,255,.30)';
+    ctx2.lineWidth = 0.6;
+    ctx2.stroke();
+  } else {
+    ctx2.fillStyle = fill;
+    ctx2.fill();
+    /* Adjacent antialiased fills leave hairline seams the colour of whatever is
+       behind them, which on a dark page reads as cracks in the ground. Stroking
+       the same path in the same colour closes them for far less than a second
+       fill would cost. */
+    if (seam){ ctx2.strokeStyle = fill; ctx2.lineWidth = 1; ctx2.stroke(); }
+  }
+  triCount++;
+}
+
+/* --- trees ---------------------------------------------------------------
+   Faceted like the reference rather than the flat triangles the HUD draws now:
+   three tiers, each with a lit and a shaded half. Placed on the surface, and
+   never inside the corridor — a tree growing out of the path reads as a bug.
+   World-anchored by index so they do not shimmer as the view advances. */
+function drawTrees(bend0, rise0){
+  const SPACING = 22;
+  const first = Math.floor(world / SPACING) - 1;
+  let drawn = 0;
+  for (let n = first; n < first + 400 && drawn < trees; n++){
+    const h1 = hash2(n * 3.1, 7.7), h2 = hash2(n * 5.3, 11.3), h3 = hash2(n * 9.1, 2.9);
+    const wpos = n * SPACING + h1 * SPACING;
+    const u = wpos - world;
+    if (u < 6 || u > 190) continue;
+    const side = h2 < 0.5 ? -1 : 1;
+    const vOff = side * (7.5 + h3 * 22);
+    const latW = bendAt(wpos) + vOff;
+    const gh = riseAt(wpos) + terrainH(wpos, latW, vOff);
+    const base = projectPt(u, latW, gh, bend0, rise0);
+    if (!base) continue;
+    if (base.x < -40 || base.x > PW + 40) continue;
+
+    /* Height taken from the projection of a point one tree-height up, so the
+       tree scales with the camera rather than with a fudge factor. */
+    const treeM = 5.4 + h1 * 3.6;
+    const top = projectPt(u, latW, gh + treeM, bend0, rise0);
+    if (!top) continue;
+    const size = base.y - top.y;
+    if (size < 6) continue;
+    drawn++;
+
+    const depth = hazeAt(base.d);
+    const litC  = css(washed(mix(mix(SHADE, LIT, 0.66), HAZE, depth * hazeAmt), washAmt));
+    const darkC = css(washed(mix(mix(SHADE, LIT, 0.24), HAZE, depth * hazeAmt), washAmt));
+
+    for (let tier = 0; tier < 3; tier++){
+      const ty = base.y - tier * size * 0.29;
+      const tw = size * 0.32 * (1 - tier * 0.20);
+      const apex = ty - size * 0.56;
+      ctx2.beginPath();
+      ctx2.moveTo(base.x, apex); ctx2.lineTo(base.x - tw, ty); ctx2.lineTo(base.x, ty);
+      ctx2.closePath(); ctx2.fillStyle = darkC; ctx2.fill();
+      ctx2.beginPath();
+      ctx2.moveTo(base.x, apex); ctx2.lineTo(base.x, ty); ctx2.lineTo(base.x + tw, ty);
+      ctx2.closePath(); ctx2.fillStyle = litC; ctx2.fill();
+      triCount += 2;
+    }
+  }
+}
+
+/* Unchanged in spirit from the HUD: wipe the scene back towards the canvas
+   edges so it dissolves into the page instead of ending on a rectangle. Done
+   before the path, so the path keeps its own soft edges. */
+function dissolveEdges(){
+  ctx2.globalCompositeOperation = 'destination-out';
+  const wipes = [
+    [0, 0, PW * 0.13, 0],
+    [PW, 0, PW * 0.87, 0],
+    [0, PH, 0, PH * 0.86],
+    [0, 0, 0, PH * 0.09]
+  ];
+  for (let i = 0; i < wipes.length; i++){
+    const g = ctx2.createLinearGradient(wipes[i][0], wipes[i][1], wipes[i][2], wipes[i][3]);
+    g.addColorStop(0, 'rgba(0,0,0,1)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx2.fillStyle = g;
+    ctx2.fillRect(0, 0, PW, PH);
+  }
+  /* Corners last: linear wipes leave them, and a corner is where a hard canvas
+     edge shows most. */
+  const vig = ctx2.createRadialGradient(CX, PH * 0.48, PH * 0.62,
+                                        CX, PH * 0.48, PH * 1.45);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,1)');
+  ctx2.fillStyle = vig;
+  ctx2.fillRect(0, 0, PW, PH);
+  ctx2.globalCompositeOperation = 'source-over';
+}
+
+/* The path itself — the brightest thing in the frame, the way the river leads
+   the eye in the reference. It is the v=0 contour of the same surface, so it
+   climbs when the ground climbs and cannot drift above the horizon. */
+function drawPathRibbon(bend0, rise0){
+  const pts = [];
+  for (let u = 1.5; u < 300; u = u < 6 ? u + 1.5 : u * 1.07){
+    const latW = bendAt(world + u);
+    const pr = projectPt(u, latW, riseAt(world + u), bend0, rise0);
+    if (!pr) continue;
+    /* Half-width taken from two projected edge points rather than a scale
+       fudge, so the ribbon narrows exactly as perspective says it should. */
+    const l = projectPt(u, latW - HALF_W, riseAt(world + u), bend0, rise0);
+    const r = projectPt(u, latW + HALF_W, riseAt(world + u), bend0, rise0);
+    if (!l || !r) continue;
+    pts.push({ x: pr.x, y: pr.y, lx: l.x, ly: l.y, rx: r.x, ry: r.y, s: pr.s });
+  }
+  const n = pts.length;
+  if (n < 2) return;
+
+  ctx2.lineCap = 'round'; ctx2.lineJoin = 'round';
+
+  /* The ribbon: a soft wash between the edges, no outline, so there is no hard
+     cut anywhere. */
+  ctx2.beginPath();
+  ctx2.moveTo(pts[0].lx, pts[0].ly);
+  for (let i = 1; i < n; i++) ctx2.lineTo(pts[i].lx, pts[i].ly);
+  for (let i = n - 1; i >= 0; i--) ctx2.lineTo(pts[i].rx, pts[i].ry);
+  ctx2.closePath();
+  const wash = ctx2.createLinearGradient(0, PH, 0, camMode === 'fp' ? horizonY() : 0);
+  wash.addColorStop(0, 'rgba(57,224,255,.26)');
+  wash.addColorStop(1, 'rgba(57,224,255,0)');
+  ctx2.fillStyle = wash;
+  ctx2.fill();
+
+  /* Three cheap passes instead of shadowBlur, which this 2016 GPU does not
+     enjoy at 5 Hz. */
+  const PASSES = [[5.0, 0.06], [2.6, 0.14], [1.0, 0.95]];
+  for (let k = 0; k < PASSES.length; k++){
+    for (let i = 1; i < n; i++){
+      const fade = Math.max(0, 1 - Math.pow(i / n, 0.75));
+      if (fade <= 0.01) continue;
+      ctx2.beginPath();
+      ctx2.moveTo(pts[i - 1].x, pts[i - 1].y);
+      ctx2.lineTo(pts[i].x, pts[i].y);
+      ctx2.lineWidth = Math.max(0.7, Math.min(6, pts[i].s * 7)) * PASSES[k][0];
+      ctx2.strokeStyle = 'rgba(57,224,255,' + (PASSES[k][1] * fade).toFixed(3) + ')';
+      ctx2.stroke();
+    }
+  }
+}
+
+/* ===========================================================================
+   Controls and the 5 Hz loop
+=========================================================================== */
+function $(id){ return document.getElementById(id); }
+
+function bindRange(id, vid, fn, fmt){
+  const el = $(id);
+  el.addEventListener('input', function(){
+    const v = parseFloat(el.value);
+    fn(v);
+    $(vid).textContent = fmt ? fmt(v) : el.value;
+  });
+}
+bindRange('cWash',   'vWash',   function(v){ washAmt = v / 100; });
+bindRange('cHaze',   'vHaze',   function(v){ hazeAmt = v / 100; });
+bindRange('cRelief', 'vRelief', function(v){ reliefK = v / 100; });
+bindRange('cDawn',   'vDawn',   function(v){ dawn = v / 100; setDawn(dawn); });
+bindRange('cTrees',  'vTrees',  function(v){ trees = v; });
+bindRange('cHzn',    'vHzn',    function(v){ setHorizon(v / 100); });
+bindRange('cSpeed',  'vSpeed',  function(v){ speed = v / 10; },
+                                function(v){ return (v / 10).toFixed(1); });
+bindRange('cFacet',  'vFacet',  function(v){ facet = v; buildMesh(facet); });
+
+$('cProfile').addEventListener('change', function(){
+  profile = $('cProfile').value;
+  buildRise();
+});
+$('cCam').addEventListener('change', function(){ camMode = $('cCam').value; });
+
+function toggle(id, get, set){
+  const el = $(id);
+  el.addEventListener('click', function(){
+    set(!get());
+    el.className = get() ? 'on' : '';
+  });
+}
+toggle('bPlay', function(){ return playing; }, function(v){
+  playing = v; $('bPlay').textContent = v ? 'pause' : 'play';
+});
+toggle('bWire', function(){ return wire;  }, function(v){ wire = v; });
+toggle('bSeam', function(){ return seam;  }, function(v){ seam = v; });
+toggle('bWipe', function(){ return wipe;  }, function(v){ wipe = v; });
+toggle('bQuad', function(){ return quads; }, function(v){ quads = v; });
+toggle('bHud',  function(){ return hudOn; }, function(v){
+  hudOn = v; $('hud').className = v ? 'hud' : 'hud off';
+});
+
+$('bReset').addEventListener('click', function(){ world = 0; elapsed = 0; });
+
+/* The console repaints at 5 Hz. Matching that here is the point — a spike
+   running at 60 fps would flatter the motion and hide whether the terrain
+   crawls acceptably at the real rate. */
+const HZ = 5, DT = 1 / HZ;
+setInterval(function(){
+  if (playing){
+    world += (speed / 3.6) * DT;
+    elapsed += DT;
+  }
+  draw();
+
+  $('sTri').textContent = triCount;
+  $('sVtx').textContent = vtxCount;
+  $('sMs').textContent = msAvg.toFixed(1);
+
+  $('oSpd').textContent = speed.toFixed(1);
+  $('oDst').textContent = (world / 1000).toFixed(2);
+  $('oInc').textContent = gradAt(world).toFixed(1);
+  const m = Math.floor(elapsed / 60), s = Math.floor(elapsed % 60);
+  $('oTme').textContent = m + ':' + (s < 10 ? '0' : '') + s;
+}, 1000 / HZ);
+
+setHorizon(0.34);
+buildRise();
+buildMesh(facet);
+setDawn(0);
+draw();
+</script>
+</body>
+</html>

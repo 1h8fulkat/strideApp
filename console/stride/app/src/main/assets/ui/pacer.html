@@ -1,0 +1,936 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280,height=800,initial-scale=1">
+<title>STRIDE · Pacer</title>
+<style>
+/* ---------------------------------------------------------------------------
+   STRIDE · PACER
+
+   Violet and lime, chunky rounded pills, plain-spoken copy. Ported from
+   claudeDesign/design_handoff_stride_console/designs/STRIDE 6 Pacer.dc.html.
+
+   The loud one, and the one hardest to misread: every figure is 800 weight,
+   every surface is a soft-cornered slab, and the copy talks like a person
+   ("taking a breather", "back to it") rather than like an instrument.
+
+   TWO DEPARTURES FROM THE HANDOFF, both deliberate.
+
+   1. The casual hero is an oblique oval, not a flat lane. On a casual walk the
+      lane has nothing to say — no hills, so it draws a straight line — while a
+      ring counts laps by going round, which is the thing a casual walk
+      actually accumulates. The guided hero keeps the lane, because the lane's
+      *height* is the gradient and a loop cannot show that.
+
+      The oval is foreshortened rather than face-on, which is what lets it fit
+      a 170px band at all. See stride-core for the ordering that keeps the head
+      dot welded to the rail under that squash.
+
+   2. The "LAPS DONE 2" card in the top centre is gone, absorbed into the
+      middle of the oval. It was saying the same thing twice, and dropping it
+      takes the top row from three cards to two — which is more Pacer, not
+      less.
+
+   Vertical budget, fixed:
+
+       28 –  72   status pills
+       92 – 272   speed · centre · incline
+      282 – 452   hero slab: the lane, the oval, or the warm-up
+      460 – 544   coach, docked. Empty band when the coach is silent.
+      554 – 646   telemetry
+      660 – 764   control row
+
+   The handoff has no free band for the coach and floats it over the telemetry
+   at y=508. Everything above is squeezed a little to make it a real band, so
+   the coach covers nothing.
+
+   Chromium 83: no `inset`, no flexbox `gap`, no `:has()`, no CSS nesting.
+--------------------------------------------------------------------------- */
+:root{
+  --bg:#16121f;
+  --panel:#211b2e;
+  --slab:#1c1728;
+  --control:#2b2340;
+  --line:#2f2743;
+  --ink:#f7f4ff;
+  --dim:#8f82a8;
+  --faint:#6d6088;
+  --accent:#c6f24e;
+  --on-accent:#1a2405;
+  --pin:#ffb347;
+  --alert:#ff4d3d;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  width:1280px;height:800px;overflow:hidden;
+  background:var(--bg);color:var(--ink);
+  font-family:"Avenir Next","Trebuchet MS",Verdana,sans-serif;
+  font-weight:700;
+  -webkit-font-smoothing:antialiased;
+  user-select:none;
+  -webkit-tap-highlight-color:rgba(0,0,0,0);
+}
+*:focus{outline:none}
+button{font-family:inherit;color:inherit;background:none;border:none;text-align:left;
+       -webkit-tap-highlight-color:rgba(0,0,0,0);outline:none;touch-action:manipulation}
+
+.screen{position:absolute;top:0;right:0;bottom:0;left:0;display:none}
+.screen.on{display:block}
+.gone{display:none !important}
+
+.slab{position:relative;display:block;background:var(--panel);border-radius:36px}
+.slab.down{background:#2c2440}
+.slab.pick{background:var(--accent);color:var(--on-accent)}
+.slab.pick.down{background:#b2db44}
+
+/* ===================== setup ============================================= */
+.ask{position:absolute;left:0;width:1280px;text-align:center;
+     font-size:64px;font-weight:800;letter-spacing:-.02em}
+
+.row4{position:absolute;left:60px;top:270px;width:1160px;display:flex}
+.row4 .slab{flex:1;height:320px;margin-right:22px}
+.row4 .slab:last-child{margin-right:0}
+.row4 .nm{position:absolute;left:0;top:126px;width:100%;text-align:center;
+          font-size:44px;font-weight:800}
+
+.row2{position:absolute;left:170px;top:280px;width:940px;display:flex}
+.row2 .slab{flex:1;height:340px;margin-right:32px;border-radius:40px}
+.row2 .slab:last-child{margin-right:0}
+.row2 .nm{position:absolute;left:0;top:110px;width:100%;text-align:center;
+          font-size:60px;font-weight:800}
+.row2 .bl{position:absolute;left:40px;top:206px;width:calc(100% - 80px);text-align:center;
+          font-size:19px;font-weight:700;line-height:1.5;color:var(--dim)}
+.row2 .slab.pick .bl{color:#3d520c}
+
+.mins{position:absolute;left:180px;top:146px;width:920px;display:flex}
+.mins .slab{flex:1;height:96px;margin-right:16px;border-radius:48px}
+.mins .slab:last-child{margin-right:0}
+.mins .nm{position:absolute;left:0;top:28px;width:100%;text-align:center;
+          font-size:30px;font-weight:800}
+
+/* Shapes as full-width rows rather than columns — the lane is the motif, so
+   the picker shows four lanes. */
+/* Four rows of 88 plus 12 of air is 400, so 262 lands the last one at 662 and
+   BACK starts at 690. The handoff had the rows running to 744 with BACK at 690
+   sitting on top of the fourth — and tapping the fourth arms the treadmill, so
+   a stray press near BACK started a walk. Rows end well clear of it now. */
+.shapes{position:absolute;left:36px;top:262px;width:1208px}
+/* width:100% is load-bearing. A <button> with display:block and width:auto
+   shrink-to-fits rather than filling its parent, which a <div> would — and
+   every child in here is absolutely positioned, so shrink-to-fit means zero.
+   The rows collapsed to nothing, the blurbs wrapped one word per line, and the
+   sparklines went off the left edge because `right:34px` was measured from a
+   zero-width box. Every other slab in this file takes its width from flex or
+   an explicit value; these four are the only full-width buttons. */
+.shapes .slab{width:100%;height:88px;margin-bottom:12px;border-radius:26px}
+.shapes .nm{position:absolute;left:34px;top:26px;font-size:28px;font-weight:800}
+.shapes .bl{position:absolute;left:300px;top:34px;width:420px;font-size:17px;
+            font-weight:700;color:var(--dim)}
+.shapes .slab.pick{background:#2c3a12;color:var(--accent)}
+.shapes .slab.pick .nm{color:var(--accent)}
+.shapes .slab.pick .bl{color:var(--accent)}
+.shapes svg{position:absolute;right:34px;top:16px;width:420px;height:56px}
+
+.pill{position:absolute;height:80px;width:200px;background:var(--control);border-radius:40px}
+.pill .lab{position:absolute;left:0;top:28px;width:100%;text-align:center;
+           font-size:16px;font-weight:800;letter-spacing:.18em;color:#b6a9cd}
+#btnBack{left:36px;top:690px}
+#btnSettings{right:36px;top:690px}
+
+/* ===================== live ============================================== */
+.tag{position:absolute;top:28px;height:44px;line-height:44px;padding:0 20px;
+     background:#231c31;border-radius:22px;font-size:14px;font-weight:700;
+     letter-spacing:.16em;color:#b6a9cd}
+.tag.l{left:36px}
+.tag.r{right:36px}
+.badge{position:absolute;left:0;top:28px;width:1280px;text-align:center}
+.badge span{display:inline-block;height:44px;line-height:44px;padding:0 22px;
+            background:var(--accent);color:var(--on-accent);border-radius:22px;
+            font-size:14px;font-weight:800;letter-spacing:.18em}
+
+.fig{position:absolute;top:92px;width:400px;height:180px;background:var(--panel);border-radius:28px}
+.fig.l{left:36px}
+.fig.r{right:36px}
+.fig .k{position:absolute;top:22px;font-size:14px;font-weight:800;letter-spacing:.2em;color:var(--dim)}
+.fig .v{position:absolute;top:44px;font-size:124px;font-weight:800;line-height:1;
+        letter-spacing:-.05em;font-variant-numeric:tabular-nums}
+.fig .u{position:absolute;bottom:22px;font-size:20px;font-weight:700;color:var(--dim)}
+.fig.l .k{left:30px}
+.fig.l .v{left:26px}
+.fig.l .u{right:28px}
+.fig.r .k{right:30px}
+.fig.r .v{right:26px}
+.fig.r .u{left:28px}
+
+/* The middle column, between the two figures. Empty on a casual walk — the
+   lap count it used to hold now lives inside the oval. */
+.mid{position:absolute;left:456px;top:96px;width:368px;text-align:center;display:none}
+.mid.on{display:block}
+#midPlan .n{font-size:34px;font-weight:800;letter-spacing:-.01em}
+#midPlan .m{margin-top:10px;font-size:15px;font-weight:700;letter-spacing:.14em;color:var(--dim)}
+/* A suggestion, in a shape that is obviously not a button. Nothing in this
+   app may act on it — the pace is the walker's. */
+#midPlan .sug{margin-top:18px;display:inline-block;height:48px;line-height:48px;
+              padding:0 22px;background:var(--control);border-radius:24px;
+              font-size:18px;font-weight:700;color:var(--accent)}
+#midPlan .sug.off{visibility:hidden}
+#midWarm .k{font-size:15px;font-weight:800;letter-spacing:.2em;color:var(--dim)}
+#midWarm .n{margin-top:10px;font-size:32px;font-weight:800}
+#midWarm .m{margin-top:10px;font-size:16px;font-weight:700;color:var(--dim)}
+
+/* ---- the hero slab ------------------------------------------------------- */
+.hero{position:absolute;left:36px;top:282px;width:1208px;height:170px;
+      background:var(--slab);border-radius:32px;overflow:hidden;display:none}
+.hero.on{display:block}
+.hero svg{position:absolute;left:0;top:0;width:1208px;height:170px}
+/* Bobs, because a lane you are walking down should feel walked. */
+.walker{position:absolute;width:34px;height:34px;border-radius:17px;background:#fff;
+        border:5px solid var(--bg);animation:bob 1.6s infinite}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.hero .ax{position:absolute;right:14px;font-size:11px;font-weight:800;
+          letter-spacing:.14em;color:#5b4f78}
+.hero .ll{position:absolute;left:26px;bottom:12px;font-size:13px;font-weight:800;
+          letter-spacing:.18em;color:var(--faint)}
+.hero .lr{position:absolute;right:26px;bottom:12px;font-size:13px;font-weight:800;
+          letter-spacing:.18em;color:var(--faint)}
+/* the oval's middle, which used to be a card of its own */
+#heroLaps .n{position:absolute;left:0;top:44px;width:1208px;text-align:center;
+             font-size:62px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+#heroLaps .k{position:absolute;left:0;top:112px;width:1208px;text-align:center;
+             font-size:13px;font-weight:800;letter-spacing:.2em;color:var(--dim)}
+#heroWarm{background:var(--accent);color:var(--on-accent)}
+#heroWarm .k{position:absolute;left:40px;top:26px;font-size:17px;font-weight:800;letter-spacing:.2em}
+#heroWarm .c{position:absolute;left:36px;top:50px;font-size:100px;font-weight:800;line-height:1;
+             font-variant-numeric:tabular-nums}
+#heroWarm .m{position:absolute;right:40px;top:70px;width:520px;text-align:right;
+             font-size:22px;font-weight:700}
+
+/* ---- coach --------------------------------------------------------------- */
+/* Inverted to paper-white. On a violet field that is the loudest thing
+   available short of the alert red, which is spoken for. */
+.coach{position:absolute;left:36px;top:460px;width:1208px;height:84px;
+       background:var(--ink);color:var(--bg);border-radius:28px;
+       opacity:0;pointer-events:none;transition:opacity .3s ease}
+.coach.show{opacity:1;pointer-events:auto}
+.coach.down{background:#ded7ef}
+.coach .w{position:absolute;left:30px;top:16px;font-size:13px;font-weight:800;
+          letter-spacing:.2em;color:#6b5f86}
+.coach .x{position:absolute;right:30px;top:16px;font-size:13px;font-weight:800;
+          letter-spacing:.16em;color:#8f82a8}
+.coach .t{position:absolute;left:30px;right:30px;top:38px;font-size:24px;font-weight:700;
+          line-height:1.25;overflow:hidden;max-height:36px}
+
+/* ---- telemetry ----------------------------------------------------------- */
+.tele{position:absolute;left:36px;top:554px;width:1208px;display:flex}
+.tele .cell{flex:1;height:92px;margin-right:16px;background:var(--panel);
+            border-radius:24px;position:relative}
+.tele .cell:last-child{margin-right:0}
+.tele .k{position:absolute;left:24px;top:18px;font-size:13px;font-weight:800;
+         letter-spacing:.18em;color:var(--dim)}
+.tele .v{position:absolute;left:22px;top:40px;font-size:40px;font-weight:800;
+         font-variant-numeric:tabular-nums}
+.tele .v .u{font-size:18px;color:var(--dim)}
+
+/* ---- control row --------------------------------------------------------- */
+.controls{position:absolute;left:36px;top:660px;width:1208px;display:flex}
+.controls .key{flex:1;height:104px;margin-right:14px;background:var(--control);
+               border-radius:28px;position:relative}
+.controls .key.down{background:#3d3159}
+.controls .key .lab{position:absolute;left:0;top:38px;width:100%;text-align:center;
+                    font-size:19px;font-weight:800;letter-spacing:.12em}
+.controls .key .sym{position:absolute;left:0;top:20px;width:100%;text-align:center;
+                    font-size:40px;font-weight:800}
+.controls .key .sub{position:absolute;left:0;bottom:14px;width:100%;text-align:center;
+                    font-size:12px;font-weight:800;letter-spacing:.16em;color:var(--dim)}
+.controls .key.fan{margin-right:28px}
+.controls .key.fan .lab{top:28px}
+.controls .key.fan .sub{color:var(--accent)}
+/* Square-ish where everything else is a pill, so the hand finds it without
+   the eye having to read. */
+.controls .stop{width:230px;flex:none;height:104px;background:var(--alert);
+                border-radius:16px;position:relative}
+.controls .stop.down{background:#cc3527}
+.controls .stop .lab{position:absolute;left:0;top:36px;width:100%;text-align:center;
+                     font-size:26px;font-weight:800;letter-spacing:.16em;color:#fff}
+.controls .key.mute{opacity:.45}
+
+/* ---- paused --------------------------------------------------------------- */
+.paused{position:absolute;top:0;right:0;bottom:0;left:0;display:none;z-index:40}
+.paused.on{display:block}
+.paused .scrim{position:absolute;left:0;top:0;width:1280px;height:652px;
+               background:rgba(14,11,20,.975)}
+.paused .k{position:absolute;left:0;top:160px;width:1280px;text-align:center;
+           font-size:24px;font-weight:800;letter-spacing:.2em;color:var(--accent)}
+.paused .h{position:absolute;left:0;top:212px;width:1280px;text-align:center;
+           font-size:104px;font-weight:800;letter-spacing:-.03em}
+.paused .s{position:absolute;left:0;top:342px;width:1280px;text-align:center;
+           font-size:22px;font-weight:700;color:#b6a9cd}
+.paused .row{position:absolute;left:280px;top:418px;width:720px;display:flex}
+.paused .row .slab{flex:1;height:140px;margin-right:24px;border-radius:34px}
+.paused .row .slab:last-child{margin-right:0}
+.paused .row .lab{position:absolute;left:0;top:54px;width:100%;text-align:center;
+                  font-size:24px;font-weight:800;letter-spacing:.14em}
+.paused .row .slab.quiet{background:var(--control)}
+
+/* ---- safety key ----------------------------------------------------------- */
+.safety{position:absolute;top:0;right:0;bottom:0;left:0;display:none;
+        background:#1c0603;z-index:60}
+.safety.on{display:block}
+.safety .frame{position:absolute;left:0;top:0;width:1280px;height:800px;
+               border:18px solid var(--alert);animation:flash 1s infinite}
+@keyframes flash{0%,100%{opacity:1}50%{opacity:.3}}
+.safety .k{position:absolute;left:0;top:190px;width:1280px;text-align:center;
+           font-size:20px;font-weight:800;letter-spacing:.32em;color:#ffb0a6}
+.safety .h{position:absolute;left:0;top:244px;width:1280px;text-align:center;
+           font-size:104px;font-weight:800;letter-spacing:-.03em;color:#fff}
+.safety .s{position:absolute;left:0;top:400px;width:1280px;text-align:center;
+           font-size:26px;font-weight:700;color:#f0b8b0}
+.safety .hold{position:absolute;left:390px;top:520px;width:500px;height:132px;
+              border:4px solid var(--alert);border-radius:34px;overflow:hidden}
+.safety .hold .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(255,77,61,.3)}
+.safety .hold .lab{position:absolute;left:0;top:50px;width:100%;text-align:center;
+                   font-size:22px;font-weight:800;letter-spacing:.18em;color:#ffb0a6}
+
+/* ---- summary --------------------------------------------------------------- */
+.sum .k{position:absolute;left:0;top:96px;width:1280px;text-align:center;
+        font-size:20px;font-weight:800;letter-spacing:.22em;color:var(--accent)}
+.sum .h{position:absolute;left:0;top:146px;width:1280px;text-align:center;
+        font-size:80px;font-weight:800;letter-spacing:-.03em}
+.sum .band{position:absolute;left:36px;top:300px;width:1208px;height:140px;
+           background:var(--slab);border-radius:32px;overflow:hidden}
+.sum .band svg{position:absolute;left:0;top:0;width:1208px;height:140px}
+.sum .grid{position:absolute;left:36px;top:474px;width:1208px;display:flex}
+.sum .grid .cell{flex:1;height:130px;margin-right:16px;background:var(--panel);
+                 border-radius:26px;position:relative}
+.sum .grid .cell:last-child{margin-right:0}
+.sum .grid .kk{position:absolute;left:26px;top:24px;font-size:13px;font-weight:800;
+               letter-spacing:.18em;color:var(--dim)}
+.sum .grid .vv{position:absolute;left:24px;top:52px;font-size:52px;font-weight:800;
+               font-variant-numeric:tabular-nums}
+.sum .foot{position:absolute;left:36px;top:648px;width:1208px;display:flex}
+.sum .foot .slab{width:400px;height:112px;flex:none;border-radius:32px}
+.sum .foot .lab{position:absolute;left:0;top:40px;width:100%;text-align:center;
+                font-size:22px;font-weight:800;letter-spacing:.16em}
+.sum .foot .note{margin-left:30px;height:112px;line-height:112px;font-size:22px;
+                 font-weight:700;color:var(--dim)}
+
+/* ---- settings --------------------------------------------------------------- */
+.settings{position:absolute;top:0;right:0;bottom:0;left:0;display:none;
+          background:rgba(22,18,31,.985);z-index:50}
+.settings.on{display:block}
+.settings .h{position:absolute;left:0;top:78px;width:1280px;text-align:center;
+             font-size:56px;font-weight:800;letter-spacing:-.02em}
+.settings .s{position:absolute;left:0;top:158px;width:1280px;text-align:center;
+             font-size:20px;font-weight:700;color:var(--dim)}
+.uis{position:absolute;left:36px;top:224px;width:1208px;display:flex}
+.uis .slab{flex:1;margin-right:16px;padding:16px 16px 22px;border-radius:28px}
+.uis .slab:last-child{margin-right:0}
+.uis .slab svg{display:block;width:100%;height:112px;border-radius:14px}
+.uis .nm{margin-top:14px;font-size:18px;font-weight:800;letter-spacing:.14em;
+         text-transform:uppercase;text-align:center}
+.uis .bl{margin-top:8px;font-size:13px;font-weight:700;color:var(--dim);
+         line-height:1.4;min-height:54px;text-align:center}
+.uis .slab.pick .bl{color:#3d520c}
+.uis .slab.soon{opacity:.34}
+.settings .close{position:absolute;left:440px;top:626px;width:400px;height:104px;
+                 border-radius:52px}
+.settings .close .lab{position:absolute;left:0;top:36px;width:100%;text-align:center;
+                      font-size:20px;font-weight:800;letter-spacing:.18em}
+
+/* ---- sleep --------------------------------------------------------------- */
+.sleep{position:absolute;top:0;right:0;bottom:0;left:0;display:none;background:#08060d;z-index:80}
+.sleep.on{display:block}
+.sleep .t{position:absolute;left:0;top:300px;width:1280px;text-align:center;
+          font-size:112px;font-weight:800;color:#221b33;font-variant-numeric:tabular-nums}
+.sleep .w{position:absolute;left:0;top:452px;width:1280px;text-align:center;
+          font-size:17px;font-weight:800;letter-spacing:.3em;text-transform:uppercase;color:#181327}
+</style>
+</head>
+<body>
+
+<!-- ===================== 01–04 · SETUP ================================= -->
+<div class="screen" id="scSetup">
+  <div class="step" id="stProfile">
+    <div class="ask" style="top:120px" id="greeting">Morning! Who&rsquo;s up?</div>
+    <div class="row4" id="people"></div>
+    <button class="pill" id="btnSettings"><span class="lab">SETTINGS</span></button>
+  </div>
+
+  <div class="step gone" id="stMode">
+    <div class="ask" style="top:130px" id="askMode">Walking or running?</div>
+    <div class="row2">
+      <button class="slab" id="pickWalk">
+        <span class="nm">Walk</span><span class="bl">up to 6.5 km/h</span></button>
+      <button class="slab" id="pickRun">
+        <span class="nm">Run</span><span class="bl">6.5 and up</span></button>
+    </div>
+  </div>
+
+  <div class="step gone" id="stControl">
+    <div class="ask" style="top:130px">Free run, or a route?</div>
+    <div class="row2">
+      <button class="slab" id="pickCasual">
+        <span class="nm">Free</span><span class="bl">Flat lane, your pace. Laps stack up as you go.</span></button>
+      <button class="slab pick" id="pickGuided">
+        <span class="nm">Route</span><span class="bl">Hills in the lane ahead, and a coach in your ear.</span></button>
+    </div>
+  </div>
+
+  <div class="step gone" id="stPlan">
+    <div class="ask" style="top:60px;font-size:44px">Pick a length, pick a lane</div>
+    <div class="mins" id="mins"></div>
+    <div class="shapes" id="shapes"></div>
+  </div>
+
+  <button class="pill gone" id="btnBack"><span class="lab">BACK</span></button>
+</div>
+
+<!-- ===================== 05–09 · LIVE ================================== -->
+<div class="screen" id="scLive">
+  <div class="tag l" id="tagLeft">&mdash;</div>
+  <div class="badge"><span id="badge">WALKING</span></div>
+  <div class="tag r" id="tagRight">&mdash;</div>
+
+  <div class="fig l">
+    <div class="k">SPEED</div>
+    <div class="v" id="speed">0.0</div>
+    <div class="u">km/h</div>
+  </div>
+  <div class="fig r">
+    <div class="k">INCLINE</div>
+    <div class="v" id="incline">0.0</div>
+    <div class="u">% &middot; <span id="inclineNote">yours</span></div>
+  </div>
+
+  <div class="mid" id="midPlan">
+    <div class="n" id="segName">&mdash;</div>
+    <div class="m" id="segMeta">&mdash;</div>
+    <div class="sug off" id="suggest">&mdash;</div>
+  </div>
+  <div class="mid" id="midWarm">
+    <div class="k">UP FIRST</div>
+    <div class="n" id="warmNext">&mdash;</div>
+    <div class="m" id="warmMeta">&mdash;</div>
+  </div>
+
+  <!-- hero A · the lane, for a guided walk. Its height is the gradient. -->
+  <div class="hero" id="heroLane">
+    <svg viewBox="0 0 1208 170" preserveAspectRatio="none">
+      <line id="gridA" x1="0" x2="1208" stroke="#241d33" stroke-width="1"/>
+      <line id="gridB" x1="0" x2="1208" stroke="#241d33" stroke-width="1"/>
+      <line id="gridC" x1="0" x2="1208" stroke="#2c2340" stroke-width="1" stroke-dasharray="4 8"/>
+      <path id="laneUnder" fill="#231c31"/>
+      <path id="laneBase" fill="none" stroke="#3a3050" stroke-width="18" stroke-linecap="round"/>
+      <path id="laneGlow" fill="none" stroke="rgba(198,242,78,0.2)" stroke-width="26"
+            stroke-linecap="round" pathLength="1000" stroke-dasharray="0 1000"/>
+      <path id="laneDone" fill="none" stroke="#c6f24e" stroke-width="16"
+            stroke-linecap="round" pathLength="1000" stroke-dasharray="0 1000"/>
+      <g id="beads"></g>
+    </svg>
+    <div class="walker" id="laneWalker"></div>
+    <div class="ax" id="axHi" style="top:30px">&mdash;</div>
+    <div class="ax" id="axLo" style="top:126px">&mdash;</div>
+    <div class="ll">BEHIND</div>
+    <div class="lr" id="laneAhead">AHEAD</div>
+  </div>
+
+  <!-- hero B · the oblique oval, for a casual one. Carries the lap count in
+       its middle, which is why the top row lost a card. -->
+  <div class="hero" id="heroLaps">
+    <svg viewBox="0 0 1208 170">
+      <path id="ovalBase" fill="none" stroke="#3a3050" stroke-width="18" stroke-linecap="round"/>
+      <path id="ovalGlow" fill="none" stroke="rgba(198,242,78,0.2)" stroke-width="26"
+            stroke-linecap="round" pathLength="1000" stroke-dasharray="0 1000"/>
+      <path id="ovalDone" fill="none" stroke="#c6f24e" stroke-width="16"
+            stroke-linecap="round" pathLength="1000" stroke-dasharray="0 1000"/>
+      <line id="ovalTick" stroke="#f7f4ff" stroke-width="3"/>
+    </svg>
+    <div class="walker" id="ovalWalker"></div>
+    <div class="n" id="laps">0</div>
+    <div class="k">LAPS &middot; 400 M EACH</div>
+    <div class="ll">START / FINISH</div>
+    <div class="lr" id="lapPct">&mdash;</div>
+  </div>
+
+  <!-- hero C · warm-up takes the whole slab, in lime -->
+  <div class="hero" id="heroWarm">
+    <div class="k" id="warmTitle">WARM-UP &middot; TAKE IT EASY</div>
+    <div class="c" id="warmClock">0:00</div>
+    <div class="m" id="warmNote">&mdash;</div>
+  </div>
+
+  <div class="coach" id="coach">
+    <div class="w">YOUR COACH</div>
+    <div class="x">TAP TO CLOSE</div>
+    <div class="t" id="coachText"></div>
+  </div>
+
+  <div class="tele">
+    <div class="cell"><div class="k">TIME</div><div class="v" id="elapsed">0:00</div></div>
+    <div class="cell"><div class="k">DISTANCE</div><div class="v"><span id="dist">0.00</span><span class="u"> km</span></div></div>
+    <div class="cell"><div class="k">BURNED</div><div class="v"><span id="cals">0</span><span class="u"> kcal</span></div></div>
+    <div class="cell"><div class="k">CLIMBED</div><div class="v"><span id="climb">0</span><span class="u"> m</span></div></div>
+  </div>
+
+  <div class="controls">
+    <button class="key" id="btnLead"><span class="lab" id="leadLab">PAUSE</span></button>
+    <button class="key" id="btnSpeedDown"><span class="sym">&minus;</span><span class="sub">SPEED</span></button>
+    <button class="key" id="btnSpeedUp"><span class="sym">+</span><span class="sub">SPEED</span></button>
+    <button class="key" id="btnInclineDown"><span class="sym">&minus;</span><span class="sub">INCLINE</span></button>
+    <button class="key" id="btnInclineUp"><span class="sym">+</span><span class="sub">INCLINE</span></button>
+    <button class="key fan" id="btnFan"><span class="lab">FAN</span><span class="sub" id="fanLab">OFF</span></button>
+    <button class="stop" id="btnStop"><span class="lab">STOP</span></button>
+  </div>
+
+  <div class="paused" id="paused">
+    <div class="scrim"></div>
+    <div class="k">TAKING A BREATHER</div>
+    <div class="h" id="pausedAt">0:00 in</div>
+    <div class="s" id="pausedWhere">No rush.</div>
+    <div class="row">
+      <button class="slab pick" id="btnResume"><span class="lab">BACK TO IT</span></button>
+      <button class="slab quiet" id="btnEnd"><span class="lab">I&rsquo;M DONE</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 11 · SUMMARY ================================== -->
+<div class="screen sum" id="scSummary">
+  <div class="k" id="sumKind">&mdash;</div>
+  <div class="h" id="sumHead">Nice one</div>
+  <div class="band">
+    <svg viewBox="0 0 1208 140" preserveAspectRatio="none">
+      <path id="sumLine" fill="none" stroke="#c6f24e" stroke-width="12" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <div class="grid">
+    <div class="cell"><div class="kk">TIME</div><div class="vv" id="sumTime">0:00</div></div>
+    <div class="cell"><div class="kk">DISTANCE</div><div class="vv" id="sumDist">0.00</div></div>
+    <div class="cell"><div class="kk">BURNED</div><div class="vv" id="sumCals">0</div></div>
+    <div class="cell"><div class="kk">CLIMBED</div><div class="vv" id="sumClimb">0</div></div>
+  </div>
+  <div class="foot">
+    <button class="slab pick" id="btnDone"><span class="lab">NICE ONE</span></button>
+    <div class="note" id="sumNote"></div>
+  </div>
+</div>
+
+<!-- ===================== 10 · SAFETY KEY =============================== -->
+<div class="safety" id="safety">
+  <div class="frame"></div>
+  <div class="k">SAFETY KEY IS OUT</div>
+  <div class="h">Belt stopped</div>
+  <div class="s">Pop the key back on, then hold the button for two seconds.</div>
+  <button class="hold" id="btnKeyBack">
+    <span class="fill" id="keyFill"></span>
+    <span class="lab">HOLD TO CARRY ON</span>
+  </button>
+</div>
+
+<!-- ===================== SETTINGS ====================================== -->
+<div class="settings" id="settings">
+  <div class="h">Interface</div>
+  <div class="s">Five ways to walk. The treadmill behaves identically in all of them.</div>
+  <div class="uis" id="uis"></div>
+  <button class="slab close" id="btnUiClose"><span class="lab">CLOSE</span></button>
+</div>
+
+<div class="sleep" id="sleep">
+  <div class="t" id="sleepClock">&mdash;</div>
+  <div class="w">Tap to wake</div>
+</div>
+
+<script src="stride-core.js"></script>
+<script src="stride-settings.js"></script>
+<script>
+const standalone = STRIDE.stub();
+const $ = STRIDE.$, tap = STRIDE.tap, mmss = STRIDE.mmss, nf = STRIDE.nf;
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+/* ---- the oblique oval ----------------------------------------------------
+   Wide and flat: 620px straights, r=150, squashed to 0.44 of its height. That
+   is what lets a 400 m track live in a 170px slab at all, and it is also just
+   what a track looks like seen from one end of it.
+
+   The squash is applied to the *point*, never to the measurement — see the
+   ordering note in stride-core. Do it the other way round and the head dot
+   slides off the rail on the bends, which on a foreshortened oval is the most
+   visible place for it to happen. */
+const TRACK = STRIDE.track({straight:620, radius:150, cx:604, cy:85, squash:0.44});
+$('ovalBase').setAttribute('d', TRACK.pathD(0));
+$('ovalGlow').setAttribute('d', TRACK.pathD(0));
+$('ovalDone').setAttribute('d', TRACK.pathD(0));
+(() => {
+  const p = TRACK.atFraction(0), t = $('ovalTick');
+  t.setAttribute('x1', p.x); t.setAttribute('y1', p.y - 15);
+  t.setAttribute('x2', p.x); t.setAttribute('y2', p.y + 15);
+})();
+
+/* ---- the lane ------------------------------------------------------------
+   Height is gradient. Room left above and below for the 18px stroke and the
+   two corner labels. */
+const LANE = {width:1208, height:132, headroom:44};
+const SUMM = {width:1208, height:112, headroom:28};
+let prof = null, summ = null, planName = '', planMinutes = 0;
+
+window.plan = function(p){
+  const steps = STRIDE.setPlan(p);
+  planName = (p && p.name) || '';
+  prof = STRIDE.profile(steps, LANE);
+  summ = STRIDE.profile(steps, SUMM);
+  planMinutes = Math.round(prof.total / 60);
+
+  $('laneUnder').setAttribute('d', prof.d + ' L 1208 170 L 0 170 Z');
+  ['laneBase','laneGlow','laneDone'].forEach(id => $(id).setAttribute('d', prof.d));
+  $('sumLine').setAttribute('d', summ.d);
+
+  const mid = (prof.hi + prof.lo) / 2;
+  [['gridA', prof.hi], ['gridB', mid], ['gridC', 0]].forEach(([id, v]) => {
+    const y = prof.yFor(v).toFixed(1);
+    $(id).setAttribute('y1', y); $(id).setAttribute('y2', y);
+  });
+  // The lower label marks level ground, which is the line that means
+  // something — not the walk's lowest dip, which is just where this template
+  // happens to bottom out.
+  $('axHi').textContent = '+' + prof.hi + '%';
+  $('axLo').textContent = '0%';
+  $('axHi').style.top = (prof.yFor(prof.hi) - 6).toFixed(0) + 'px';
+  $('axLo').style.top = (prof.yFor(0) - 6).toFixed(0) + 'px';
+
+  // One bead per stretch, lit as it is passed.
+  const g = $('beads');
+  g.innerHTML = '';
+  prof.pins.forEach(pt => {
+    const c = document.createElementNS(SVGNS, 'circle');
+    c.setAttribute('cx', pt.x.toFixed(1));
+    c.setAttribute('cy', pt.y.toFixed(1));
+    c.setAttribute('r', 7);
+    c.setAttribute('fill', '#4a3f66');
+    g.appendChild(c);
+  });
+};
+
+/* ---- setup --------------------------------------------------------------- */
+const STEPS = {profile:'stProfile', mode:'stMode', control:'stControl', plan:'stPlan'};
+const flow = STRIDE.flow((step, f) => {
+  Object.keys(STEPS).forEach(k => $(STEPS[k]).classList.toggle('gone', k !== step));
+  $('btnBack').classList.toggle('gone', step === 'profile');
+  if (step === 'mode') $('askMode').textContent = 'Walking or running, ' + f.profile + '?';
+});
+
+/* Read from Settings, never written here. A name offered on this picker
+   that Settings does not have is a walker who silently gets no coaching
+   and no history — coaching and recording are per person now. Rebuilt
+   whenever settings close, because somebody may have just been added. */
+function buildPeople(){
+  $('people').innerHTML = '';
+  STRIDE.profiles().forEach(name => {
+    const b = document.createElement('button');
+    b.className = 'slab';
+    b.innerHTML = '<span class="nm">' + name + '</span>';
+    tap(b, () => flow.setProfile(name));
+    $('people').appendChild(b);
+  });
+}
+buildPeople();
+document.addEventListener('stride-settings-closed', buildPeople);
+
+STRIDE.DURATIONS.forEach(m => {
+  const b = document.createElement('button');
+  b.className = 'slab' + (m === flow.minutes ? ' pick' : '');
+  b.innerHTML = '<span class="nm">' + STRIDE.durationLabel(m) + '</span>';
+  tap(b, () => {
+    flow.setMinutes(m);
+    [].forEach.call($('mins').children, c => c.classList.toggle('pick', c === b));
+  });
+  $('mins').appendChild(b);
+});
+
+/* Four lanes, drawn as lanes. */
+STRIDE.SHAPES.forEach(s => {
+  const chosen = s.id === flow.shape;
+  const lo = Math.min.apply(null, s.points), hi = Math.max.apply(null, s.points);
+  const pts = s.points.map((v, i) =>
+    (i / (s.points.length - 1) * 420).toFixed(0) + ',' +
+    (52 - (v - lo) / (hi - lo) * 44).toFixed(0)).join(' ');
+  const b = document.createElement('button');
+  b.className = 'slab' + (chosen ? ' pick' : '');
+  b.innerHTML =
+    '<span class="nm">' + s.name + '</span>' +
+    '<span class="bl">' + s.blurb.toLowerCase() + '</span>' +
+    '<svg viewBox="0 0 420 60" preserveAspectRatio="none"><polyline points="' + pts +
+      '" fill="none" stroke="' + (chosen ? '#c6f24e' : '#6d6088') +
+      '" stroke-width="6" stroke-linecap="round"/></svg>';
+  tap(b, () => { flow.setShape(s.id); flow.commit(); });
+  $('shapes').appendChild(b);
+});
+
+tap($('pickWalk'),   () => flow.setMode('walk'));
+tap($('pickRun'),    () => flow.setMode('run'));
+tap($('pickCasual'), () => flow.setControl('casual'));
+tap($('pickGuided'), () => flow.setControl('guided'));
+tap($('btnBack'),    () => flow.back());
+
+/* ---- settings ------------------------------------------------------------ */
+function buildUis(){
+  const here = STRIDE.currentUi(), built = STRIDE.uiList(), box = $('uis');
+  box.innerHTML = '';
+  STRIDE.UI_META.forEach(u => {
+    const ready = built.indexOf(u.id) >= 0;
+    const b = document.createElement('button');
+    b.className = 'slab' + (u.id === here ? ' pick' : '') + (ready ? '' : ' soon');
+    b.innerHTML = '<svg viewBox="0 0 160 100" preserveAspectRatio="none">' + u.sketch + '</svg>' +
+                  '<div class="nm">' + u.name + '</div>' +
+                  '<div class="bl">' + (ready ? u.blurb : 'not in this build yet') + '</div>';
+    if (ready && u.id !== here) tap(b, () => Stride.setUi(u.id));
+    box.appendChild(b);
+  });
+}
+/* The settings screen is shared by all five interfaces — see
+   stride-settings.js. This document keeps the button and nothing else;
+   eight sections of real configuration maintained in five places is how
+   the copy nobody opens stops matching the store. */
+tap($('btnSettings'), () => STRIDE_SETTINGS.open());
+if ($('btnUiClose')) tap($('btnUiClose'), () => STRIDE_SETTINGS.close());
+
+/* ---- controls ------------------------------------------------------------ */
+let shownScreen = null, shownPhase = null;
+
+tap($('btnLead'), () => {
+  switch (shownPhase){
+    case 'warmup':   Stride.skipWarmup();   break;
+    case 'cooldown': Stride.skipCooldown(); break;
+    case 'paused':   Stride.resume();       break;
+    case 'active':   Stride.pause();        break;
+  }
+});
+tap($('btnStop'), () => {
+  if (shownPhase !== 'active' && shownPhase !== 'warmup' && shownPhase !== 'paused') return;
+  Stride.pause();
+  $('paused').classList.add('on');
+});
+tap($('btnResume'), () => { $('paused').classList.remove('on'); Stride.resume(); });
+tap($('btnEnd'),    () => { $('paused').classList.remove('on'); Stride.end(); });
+tap($('btnDone'),   () => Stride.home());
+tap($('btnFan'),    () => Stride.fan());
+
+STRIDE.stepper($('btnSpeedUp'),     d => Stride.speed(d),    0.1, 0.5);
+STRIDE.stepper($('btnSpeedDown'),   d => Stride.speed(-d),   0.1, 0.5);
+STRIDE.stepper($('btnInclineUp'),   d => Stride.incline(d),  0.5, 0.5);
+STRIDE.stepper($('btnInclineDown'), d => Stride.incline(-d), 0.5, 0.5);
+STRIDE.hold($('btnKeyBack'), 2000, () => Stride.ackDmk(),
+            p => { $('keyFill').style.width = (p * 100) + '%'; });
+
+/* ---- coach --------------------------------------------------------------- */
+let coachTimer = null;
+tap($('coach'), () => {
+  $('coach').classList.remove('show');
+  clearTimeout(coachTimer);
+  Stride.hushCoach();
+});
+window.coach = function(c){
+  const line = (c && c.line) || '';
+  if (!line) return;
+  $('coachText').textContent = line;
+  $('coach').classList.add('show');
+  clearTimeout(coachTimer);
+  coachTimer = setTimeout(() => $('coach').classList.remove('show'),
+                          Math.min(18000, Math.max(9000, 5000 + line.length * 90)));
+};
+
+/* ---- sleep --------------------------------------------------------------- */
+const SLEEP_AFTER_MS = 5 * 60 * 1000;
+let lastTouch = Date.now(), asleep = false;
+$('sleep').addEventListener('touchstart', e => { e.preventDefault(); wake(); }, {passive:false});
+$('sleep').addEventListener('mousedown',  e => { e.preventDefault(); wake(); });
+function wake(){
+  lastTouch = Date.now();
+  if (!asleep) return;
+  asleep = false;
+  STRIDE.suppress(500);
+  $('sleep').classList.remove('on');
+  Stride.dim(false);
+}
+document.addEventListener('touchstart', () => { lastTouch = Date.now(); }, {capture:true, passive:true});
+document.addEventListener('mousedown',  () => { lastTouch = Date.now(); }, {capture:true});
+setInterval(() => {
+  const restful = shownScreen === 'scSetup' || shownScreen === 'scSummary' || shownScreen === null;
+  if (!asleep && restful && Date.now() - lastTouch > SLEEP_AFTER_MS){
+    asleep = true;
+    $('sleep').classList.add('on');
+    Stride.dim(true);
+  }
+}, 5000);
+
+/* ---- screens ------------------------------------------------------------- */
+function showScreen(id){
+  if (id === shownScreen) return;
+  ['scSetup','scLive','scSummary'].forEach(s => $(s).classList.toggle('on', s === id));
+  if (id === 'scSetup'){ flow.reset(); STRIDE.resetDerived(); }
+  if (id !== 'scSetup') STRIDE_SETTINGS.close();
+  if (id !== 'scLive'){ $('paused').classList.remove('on'); $('coach').classList.remove('show'); }
+  lastTouch = Date.now();
+  shownScreen = id;
+}
+
+window.render = function(raw){
+  const s = STRIDE.adapt(raw);
+  const screen = STRIDE.screenFor(s);
+
+  $('safety').classList.toggle('on', s.safetyKey === 'out');
+
+  if (screen === 'welcome'){ showScreen('scSetup'); shownPhase = s.phase; return; }
+  if (screen === 'summary'){ showScreen('scSummary'); renderSummary(s); shownPhase = s.phase; return; }
+
+  showScreen('scLive');
+  shownPhase = s.phase;
+  const guided = s.control === 'guided';
+  const timed  = s.phase === 'warmup' || s.phase === 'cooldown';
+
+  $('tagLeft').textContent = (s.profile || '').toUpperCase() + ' · ' + clockNow();
+  $('tagRight').textContent = 'FAN ' + STRIDE.fanLabel(s.fan) +
+    (s.session.pulse ? ' · ' + s.session.pulse + ' BPM' : ' · NO STRAP');
+  $('badge').textContent =
+      s.phase === 'warmup'   ? 'WARMING UP'
+    : s.phase === 'cooldown' ? 'COOLING DOWN'
+    : s.phase === 'paused'   ? 'PAUSED'
+    : s.ramping === 'resuming' ? 'RESUMING'
+    : s.mode === 'run' ? 'RUNNING' : 'WALKING';
+
+  $('speed').textContent   = s.belt.speed.toFixed(1);
+  $('incline').textContent = s.belt.incline.toFixed(1);
+  $('inclineNote').textContent = !guided ? 'yours'
+                               : s.targets.inclineAuto ? 'auto' : 'yours for now';
+
+  $('elapsed').textContent = mmss(s.session.elapsed);
+  $('dist').textContent    = STRIDE.km(s.session.distance);
+  $('cals').textContent    = nf(s.session.calories);
+  $('climb').textContent   = Math.round(s.session.climb);
+
+  $('fanLab').textContent  = STRIDE.fanLabel(s.fan);
+  $('leadLab').textContent = timed ? 'SKIP' : s.phase === 'paused' ? 'RESUME' : 'PAUSE';
+  const moving = s.phase === 'active' || timed;
+  $('btnSpeedUp').classList.toggle('mute', !moving);
+  $('btnSpeedDown').classList.toggle('mute', !moving);
+
+  /* The middle column. Empty on a casual walk: its lap count moved inside the
+     oval, and repeating it here would be the card saying what the hero says. */
+  $('midPlan').classList.toggle('on', guided && !timed);
+  $('midWarm').classList.toggle('on', guided && timed);
+  if (guided && !timed){
+    $('segName').textContent = s.segment.name;
+    $('segMeta').textContent = ((s.plan.loops ? 'lap ' + s.plan.lap + ' · ' : '') +
+      planName + ' · ' + s.segment.index + ' of ' + s.segment.count + ' · ' +
+      mmss(s.segment.secondsLeft) + ' left').toUpperCase();
+    const suggesting = s.targets.suggest > 0;
+    $('suggest').classList.toggle('off', !suggesting);
+    if (suggesting) $('suggest').textContent =
+      'try ' + s.targets.suggest.toFixed(1) + ' km/h — up to you';
+  }
+  if (guided && timed){
+    /* A preview. Not "2 of 9, 1:36 left" — the plan has not started, so it has
+       no segment and no clock to report yet. */
+    const first = s.plan.steps[0];
+    $('warmNext').textContent = first ? first.label : planName;
+    $('warmMeta').textContent = s.plan.steps.length + ' stretches · ' +
+      (s.plan.loops ? planMinutes + ' min a lap, open end' : planMinutes + ' minutes');
+  }
+
+  const hero = timed ? 'heroWarm' : guided ? 'heroLane' : 'heroLaps';
+  ['heroLane','heroLaps','heroWarm'].forEach(h => $(h).classList.toggle('on', h === hero));
+  if (hero === 'heroLane') renderLane(s);
+  if (hero === 'heroLaps') renderOval(s);
+  if (hero === 'heroWarm') renderWarm(s);
+
+  if (s.phase !== 'paused') $('paused').classList.remove('on');
+  if (s.phase === 'paused'){
+    $('paused').classList.add('on');
+    $('pausedAt').textContent = mmss(s.session.elapsed) + ' in';
+    const left = guided ? s.segment.count - s.segment.index : 0;
+    $('pausedWhere').textContent = guided && s.segment.count
+      ? (s.segment.index - 1) + ' down, ' + (left + 1) + ' waiting. No rush.'
+      : STRIDE.km(s.session.distance) + ' km banked. No rush.';
+  }
+};
+
+function renderLane(s){
+  if (!prof || prof.empty) return;
+  // Plan time: one lap of ground, and Kotlin wraps the clock into it.
+  const t = s.plan.elapsed;
+  const dash = prof.dashAt(t).toFixed(1) + ' 1000';
+  $('laneGlow').setAttribute('stroke-dasharray', dash);
+  $('laneDone').setAttribute('stroke-dasharray', dash);
+  const p = prof.atSeconds(t);
+  $('laneWalker').style.left = (p.x - 17).toFixed(1) + 'px';
+  $('laneWalker').style.top  = (p.y - 17).toFixed(1) + 'px';
+  const beads = $('beads').children;
+  for (let i = 0; i < beads.length; i++){
+    beads[i].setAttribute('fill', prof.pins[i].x <= p.x ? '#ffb347' : '#4a3f66');
+  }
+  const left = Math.max(0, s.segment.count - s.segment.index);
+  $('laneAhead').textContent = s.plan.loops ? 'AHEAD · ROUND AGAIN'
+    : left ? 'AHEAD · ' + left + ' TO GO' : 'AHEAD · LAST ONE';
+}
+
+function renderOval(s){
+  const d = s.session.distance;
+  const frac = TRACK.lapFraction(d);
+  $('laps').textContent = TRACK.laps(d);
+  $('lapPct').textContent = Math.round(frac * 100) + '% ROUND';
+
+  /* Not frac × 1000. On a squashed oval the drawn path length and the real
+     arc-length part company by several percent, and stroke-dasharray measures
+     the drawn one — so the bright arc would stop short of the dot. */
+  const dash = TRACK.dashFraction(frac).toFixed(1) + ' 1000';
+  $('ovalGlow').setAttribute('stroke-dasharray', dash);
+  $('ovalDone').setAttribute('stroke-dasharray', dash);
+  const on = frac > 0.004 ? 1 : 0;
+  $('ovalGlow').style.opacity = on;
+  $('ovalDone').style.opacity = on;
+
+  const p = TRACK.atFraction(frac);
+  $('ovalWalker').style.left = (p.x - 17).toFixed(1) + 'px';
+  $('ovalWalker').style.top  = (p.y - 17).toFixed(1) + 'px';
+  $('ovalWalker').style.opacity = d > 0 ? 1 : 0;
+}
+
+function renderWarm(s){
+  const warm = s.phase === 'warmup';
+  $('warmTitle').textContent = warm ? 'WARM-UP · TAKE IT EASY' : 'COOL-DOWN · EASING OFF';
+  $('warmClock').textContent = mmss(s.phaseLeft);
+  $('warmNote').textContent = !warm ? 'that is the walk done — skip to finish'
+    : s.plan.steps.length ? 'the hills start when this hits zero'
+    : 'then it is all yours — skip whenever';
+}
+
+function renderSummary(s){
+  $('sumKind').textContent = ((s.plan.name || (s.mode === 'run' ? 'A run' : 'A walk')) +
+    ' · ' + Math.round(s.session.elapsed / 60) + ' minutes').toUpperCase();
+  const hills = s.plan.steps.filter(st => st.incline > 0).length;
+  $('sumHead').textContent = hills
+    ? 'That’s ' + hills + ' hills, ' + (s.profile || 'you')
+    : 'Nice one, ' + (s.profile || 'you');
+  $('sumTime').textContent  = mmss(s.session.elapsed);
+  $('sumDist').textContent  = STRIDE.km(s.session.distance);
+  $('sumCals').textContent  = nf(s.session.calories);
+  $('sumClimb').textContent = Math.round(s.session.climb) + ' m';
+  $('sumNote').textContent  = s.session.climb > 60 ? 'A proper hill’s worth of climbing.' : '';
+}
+
+/* ---- clock ---------------------------------------------------------------- */
+function clockNow(){
+  return new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+}
+setInterval(() => {
+  $('sleepClock').textContent = clockNow();
+  const h = new Date().getHours();
+  $('greeting').textContent =
+    (h < 12 ? 'Morning' : h < 18 ? 'Afternoon' : 'Evening') + '! Who’s up?';
+}, 1000);
+
+showScreen('scSetup');
+if (standalone) STRIDE.demo();
+</script>
+</body>
+</html>

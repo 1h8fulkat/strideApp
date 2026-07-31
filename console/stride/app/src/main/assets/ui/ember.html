@@ -1,0 +1,983 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280,height=800,initial-scale=1">
+<title>STRIDE · Ember</title>
+<style>
+/* ---------------------------------------------------------------------------
+   STRIDE · EMBER
+
+   Warm near-black, hairlines, thin type, one amber light. Ported from
+   claudeDesign/design_handoff_stride_console/designs/STRIDE 1 Ember.dc.html —
+   the inline values in that file are the spec, and they are reproduced here
+   rather than reinterpreted.
+
+   Of the five this is the one built for the actual constraint: the console is
+   the only light in the room at six in the morning. So there are no panels of
+   colour, nothing is filled except STOP, and every division on the screen is a
+   one-pixel line rather than a box.
+
+   Vertical budget, fixed:
+
+       34         status row
+       76 – 138   segment header (guided only)
+      142 – 410   hero: lap track, elevation profile, or warm-up countdown
+      418 – 504   coach ribbon, docked. Empty band when the coach is silent.
+      514        rule
+      526 – 602   telemetry
+      664 – 760   control row
+
+   The coach is docked between the hero and the telemetry, not floated over the
+   hero. The handoff calls that placement load-bearing and it is: the thing it
+   used to cover was the segment name and the warm-up clock.
+
+   Chromium 83: no `inset`, no flexbox `gap`, no `:has()`, no CSS nesting, no
+   `aspect-ratio`. Fixed pixels throughout; the viewport never changes.
+--------------------------------------------------------------------------- */
+:root{
+  --bg:#0b0a09;
+  --panel:#131110;
+  --line:#221f1c;
+  --hair:#1c1917;
+  --ink:#f4efe6;
+  --dim:#7c756b;
+  --faint:#4a423a;
+  --ghost:#3e3934;
+  --accent:#e0a458;
+  --alert:#e0553e;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  width:1280px;height:800px;overflow:hidden;
+  background:var(--bg);
+  /* A single soft lift behind the middle of the screen. No second light. */
+  background-image:radial-gradient(900px 600px at 50% 42%, #14110e 0%, #0b0a09 70%);
+  color:var(--ink);
+  font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;
+  font-weight:300;
+  -webkit-font-smoothing:antialiased;
+  user-select:none;
+  -webkit-tap-highlight-color:rgba(0,0,0,0);
+}
+*:focus{outline:none}
+button{font-family:inherit;color:inherit;background:none;border:none;
+       -webkit-tap-highlight-color:rgba(0,0,0,0);outline:none;
+       touch-action:manipulation}
+
+.screen{position:absolute;top:0;right:0;bottom:0;left:0;display:none}
+.screen.on{display:block}
+.gone{display:none !important}
+
+/* Every label on the console is this. */
+.cap{font-size:15px;letter-spacing:.24em;text-transform:uppercase;color:var(--dim)}
+
+/* ---- the setup cards ----------------------------------------------------
+   One shape, used by all four pre-workout screens: a hairline box on the
+   panel colour, with the accent reserved for the recommended choice. */
+.card{
+  position:relative;display:block;
+  border:1px solid var(--line);background:var(--panel);border-radius:3px;
+  text-align:center;
+}
+.card.down{background:#1c1916}
+.card.pick{border-color:var(--accent);background:#191410}
+.card .big{font-size:44px;font-weight:200;letter-spacing:.01em}
+.card .sub{margin-top:16px;font-size:17px;line-height:1.5;color:var(--dim)}
+.card.pick .big{color:var(--accent)}
+.card.pick .sub{color:#a89c8c}
+
+.ask{
+  position:absolute;left:0;top:150px;width:1280px;text-align:center;
+  font-size:34px;font-weight:200;letter-spacing:.02em;
+}
+.row4{position:absolute;left:100px;top:250px;width:1080px;display:flex}
+.row4 .card{flex:1;height:300px;margin-right:24px}
+.row4 .card:last-child{margin-right:0}
+.row4 .card .big{position:absolute;left:0;top:112px;width:100%}
+
+.row2{position:absolute;left:200px;top:250px;width:880px;display:flex}
+.row2 .card{flex:1;height:320px;margin-right:32px}
+.row2 .card:last-child{margin-right:0}
+.row2 .card .big{position:absolute;left:0;top:112px;width:100%;font-size:52px}
+.row2 .card .sub{position:absolute;left:40px;top:192px;width:calc(100% - 80px);margin:0}
+
+.stamp{
+  position:absolute;left:0;top:640px;width:1280px;text-align:center;
+  font-size:15px;letter-spacing:.24em;color:var(--dim);
+}
+
+/* One quiet way back, and one quiet way into settings. */
+.foot{
+  position:absolute;top:650px;width:200px;height:96px;
+  border:1px solid var(--line);background:var(--panel);border-radius:3px;
+  font-size:17px;letter-spacing:.18em;color:var(--dim);
+}
+.foot.left{left:60px}
+.foot.right{right:60px}
+
+/* ---- plan picker --------------------------------------------------------- */
+.mins{position:absolute;left:60px;top:108px;width:1160px;display:flex}
+.mins .card{width:170px;height:96px;margin-right:16px}
+.mins .card .big{position:absolute;left:0;top:28px;width:100%;font-size:30px}
+.mins .card.pick .big{font-weight:400}
+.mins .unit{height:96px;line-height:96px;margin-left:18px;
+            font-size:16px;letter-spacing:.2em;color:var(--dim)}
+.shapes{position:absolute;left:60px;top:290px;width:1160px;display:flex}
+.shapes .card{flex:1;height:300px;margin-right:20px;text-align:left}
+.shapes .card:last-child{margin-right:0}
+.shapes .nm{position:absolute;left:28px;top:28px;font-size:26px;font-weight:300;letter-spacing:.02em}
+.shapes .bl{position:absolute;left:28px;top:66px;width:220px;font-size:16px;line-height:1.5;color:var(--dim)}
+.shapes .card.pick .nm{color:var(--accent)}
+.shapes .card.pick .bl{color:#a89c8c}
+.shapes svg{position:absolute;left:28px;bottom:34px;width:220px;height:110px}
+
+/* ---- the live screen ----------------------------------------------------- */
+.status{position:absolute;top:34px;font-size:15px;letter-spacing:.2em;color:var(--dim)}
+.status.l{left:40px}
+.status.r{right:40px}
+.status.c{left:0;width:1280px;text-align:center;letter-spacing:.26em;color:var(--accent)}
+
+.seghead{position:absolute;left:340px;top:76px;width:600px;text-align:center}
+.seghead .n{font-size:30px;font-weight:300;letter-spacing:.01em}
+.seghead .m{margin-top:8px;font-size:15px;letter-spacing:.14em;color:var(--dim)}
+
+/* The two figures. Thin and very large is what makes these readable across a
+   room; the open tracking is what keeps them from reading as one blob. */
+.gauge{position:absolute;top:196px}
+.gauge.l{left:40px;width:300px}
+.gauge.r{right:40px;width:320px;text-align:right}
+.gauge .v{font-size:152px;font-weight:200;line-height:.92;margin-top:14px;
+          letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.gauge .u{margin-top:10px;font-size:19px;color:var(--dim)}
+.gauge .bar{margin-top:28px;width:200px;height:6px;background:var(--line);position:relative}
+.gauge .bar i{position:absolute;left:0;top:0;height:6px;width:0;background:var(--accent);
+              transition:width .3s ease}
+.gauge .sug{margin-top:22px;font-size:19px;color:var(--accent);min-height:26px}
+
+/* ---- hero: casual lap track ---------------------------------------------- */
+.hero{position:absolute;left:352px;top:142px;width:576px;height:268px;display:none}
+.hero.on{display:block}
+#heroLaps{left:360px;width:560px}
+#heroLaps .sf{position:absolute;left:60px;top:0;font-size:11px;letter-spacing:.2em;color:#5d564e}
+#heroLaps .n{position:absolute;left:0;top:80px;width:560px;text-align:center;
+             font-size:120px;font-weight:200;line-height:1;font-variant-numeric:tabular-nums}
+#heroLaps .k{position:absolute;left:0;top:207px;width:560px;text-align:center;
+             font-size:15px;letter-spacing:.26em;color:var(--dim)}
+
+/* ---- hero: guided elevation profile -------------------------------------- */
+#heroPath .rule{position:absolute;left:0;top:0;width:576px;height:1px;background:#211d19}
+#heroPath .capL{position:absolute;left:0;top:0;width:56px;height:1px;background:var(--faint)}
+#heroPath .capR{position:absolute;right:0;top:0;width:56px;height:1px;background:var(--faint)}
+#heroPath .ax{position:absolute;left:4px;font-size:11px;letter-spacing:.14em;color:var(--faint)}
+#heroPath .ft{position:absolute;left:0;top:252px;width:576px;display:flex;
+              font-size:11px;letter-spacing:.2em;color:#5d564e}
+#heroPath .ft div{flex:1}
+#heroPath .ft .mid{text-align:center;color:#8a7f6f}
+#heroPath .ft .end{text-align:right}
+
+/* ---- hero: warm-up -------------------------------------------------------- */
+#heroWarm{border:1px solid var(--line);background:var(--panel);border-radius:3px}
+#heroWarm .t{position:absolute;left:0;top:40px;width:100%;text-align:center;
+             font-size:16px;letter-spacing:.28em;color:var(--accent)}
+#heroWarm .c{position:absolute;left:0;top:84px;width:100%;text-align:center;
+             font-size:130px;font-weight:200;line-height:1;letter-spacing:-.03em;
+             font-variant-numeric:tabular-nums}
+#heroWarm .n{position:absolute;left:0;top:226px;width:100%;text-align:center;
+             font-size:18px;color:var(--dim)}
+
+/* ---- coach --------------------------------------------------------------- */
+/* Docked in its own band. Never over the hero — that is what it used to do,
+   and what it used to cover was the segment name and the warm-up clock. */
+.coach{
+  position:absolute;left:40px;top:418px;width:1200px;height:86px;
+  background:#191410;border-left:3px solid var(--accent);
+  opacity:0;pointer-events:none;transition:opacity .3s ease;
+}
+.coach.show{opacity:1;pointer-events:auto}
+.coach.down{background:#211a13}
+.coach .w{position:absolute;left:28px;top:18px;font-size:13px;letter-spacing:.24em;color:var(--accent)}
+.coach .x{position:absolute;right:28px;top:18px;font-size:13px;letter-spacing:.22em;color:var(--dim)}
+.coach .t{position:absolute;left:28px;right:28px;top:40px;
+          font-size:26px;font-weight:300;line-height:1.3;overflow:hidden;max-height:44px}
+
+/* ---- telemetry ----------------------------------------------------------- */
+.rule{position:absolute;left:40px;top:514px;width:1200px;height:1px;background:var(--hair)}
+.tele{position:absolute;left:40px;top:526px;width:1200px;display:flex}
+.tele div.cell{flex:1;padding-left:24px;padding-right:24px;border-left:1px solid var(--hair)}
+.tele div.cell:first-child{padding-left:0;border-left:none}
+.tele div.cell:last-child{padding-right:0}
+.tele .k{font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--dim)}
+.tele .v{font-size:46px;font-weight:200;margin-top:10px;letter-spacing:-.02em;
+         font-variant-numeric:tabular-nums}
+/* Only the unit shrinks. Scoped to its own class — a bare `.v span` also
+   caught the value, which quietly rendered the distance at 19px. */
+.tele .v .u{font-size:19px;color:var(--dim)}
+/* Designed absent. The empty state has to read as intentional, not broken —
+   and if a strap ever pairs mid-walk the cell fills without moving the row. */
+.tele .hr .k{color:var(--ghost)}
+.tele .hr .none{font-size:21px;font-weight:300;margin-top:26px;color:var(--ghost)}
+
+/* ---- control row ---------------------------------------------------------
+   One row, pinned. It never reflows between screens, the leftmost key changes
+   its label and never its position, and STOP never moves. STOP is the only
+   saturated colour and the only filled control anywhere on the console. */
+.controls{position:absolute;left:40px;top:664px;width:1200px;display:flex}
+.controls .key{
+  flex:1;height:96px;margin-right:12px;position:relative;
+  border:1px solid var(--line);background:#141210;border-radius:3px;
+}
+.controls .key.down{background:#231e18}
+.controls .key.lead{border-color:#2c2721}
+.controls .key .lab{position:absolute;left:0;top:37px;width:100%;text-align:center;
+                    font-size:19px;letter-spacing:.16em}
+.controls .key .sym{position:absolute;left:0;top:30px;width:100%;text-align:center;
+                    font-size:34px;font-weight:200}
+.controls .key .sub{position:absolute;left:0;bottom:12px;width:100%;text-align:center;
+                    font-size:12px;letter-spacing:.18em;color:var(--dim)}
+.controls .key.fan{margin-right:24px}
+.controls .key.fan .lab{top:26px}
+.controls .key.fan .sub{bottom:14px;font-size:13px}
+.controls .stop{
+  width:212px;height:96px;flex:none;background:var(--alert);border-radius:48px;
+  position:relative;
+}
+.controls .stop.down{background:#c4452f}
+.controls .stop .lab{position:absolute;left:0;top:35px;width:100%;text-align:center;
+                     font-size:23px;font-weight:500;letter-spacing:.18em;color:#140704}
+.controls .key.mute{opacity:.4}
+
+/* ---- paused --------------------------------------------------------------
+   The scrim stops at the control row. STOP stays lit and reachable the whole
+   time — the belt is stopped, but nothing should ever be between a person and
+   that button. */
+.paused{position:absolute;top:0;right:0;bottom:0;left:0;display:none;z-index:40}
+.paused.on{display:block}
+.paused .scrim{position:absolute;left:0;top:0;width:1280px;height:664px;
+               background:rgba(9,8,7,.975)}
+.paused .h{position:absolute;left:0;top:170px;width:1280px;text-align:center;
+           font-size:60px;font-weight:200}
+.paused .s{position:absolute;left:0;top:264px;width:1280px;text-align:center;
+           font-size:20px;color:var(--dim)}
+.paused .row{position:absolute;left:290px;top:360px;width:700px;display:flex}
+.paused .row .card{flex:1;height:130px;margin-right:24px}
+.paused .row .card:last-child{margin-right:0}
+.paused .row .card .lab{position:absolute;left:0;top:50px;width:100%;
+                        font-size:24px;letter-spacing:.18em;color:#a89c8c}
+.paused .row .card.pick .lab{color:var(--accent)}
+
+/* ---- safety key ----------------------------------------------------------
+   The only screen allowed red as a field colour, and the only thing on the
+   console that blinks. It preempts everything, including the setup flow: the
+   key is a hardware interrupt, not a route, and putting it back returns to
+   exactly where you were. */
+.safety{position:absolute;top:0;right:0;bottom:0;left:0;display:none;
+        background:#1b0805;z-index:60}
+.safety.on{display:block}
+.safety .bar{position:absolute;left:0;width:1280px;height:12px;background:var(--alert);
+             animation:flash 1s infinite}
+.safety .bar.t{top:0}
+.safety .bar.b{bottom:0}
+@keyframes flash{0%,100%{opacity:1}50%{opacity:.3}}
+.safety .k{position:absolute;left:0;top:200px;width:1280px;text-align:center;
+           font-size:22px;letter-spacing:.34em;color:var(--alert)}
+.safety .h{position:absolute;left:0;top:262px;width:1280px;text-align:center;
+           font-size:82px;font-weight:200;color:#ffe9e3}
+.safety .s{position:absolute;left:0;top:388px;width:1280px;text-align:center;
+           font-size:24px;color:#c99c92}
+.safety .hold{position:absolute;left:390px;top:520px;width:500px;height:120px;
+              border:2px solid var(--alert);border-radius:3px;overflow:hidden}
+.safety .hold .fill{position:absolute;left:0;top:0;bottom:0;width:0;
+                    background:rgba(224,85,62,.28)}
+.safety .hold .lab{position:absolute;left:0;top:45px;width:100%;text-align:center;
+                   font-size:22px;letter-spacing:.2em;color:var(--alert)}
+
+/* ---- summary ------------------------------------------------------------- */
+.sum .h{position:absolute;left:0;top:150px;width:1280px;text-align:center;
+        font-size:76px;font-weight:200;letter-spacing:-.01em}
+.sum .k{position:absolute;left:0;top:256px;width:1280px;text-align:center;
+        font-size:16px;letter-spacing:.28em;color:var(--accent)}
+.sum .grid{position:absolute;left:100px;top:360px;width:1080px;display:flex;
+           border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.sum .grid div.cell{flex:1;padding:34px 0;text-align:center}
+.sum .grid .kk{font-size:13px;letter-spacing:.22em;color:var(--dim)}
+.sum .grid .vv{font-size:52px;font-weight:200;margin-top:12px;font-variant-numeric:tabular-nums}
+.sum .grid .vv .u{font-size:22px;color:var(--dim);margin-left:3px}
+.sum .note{position:absolute;left:0;top:566px;width:1280px;text-align:center;
+           font-size:19px;color:var(--dim)}
+.sum .done{position:absolute;left:490px;top:640px;width:300px;height:104px;
+           border:1px solid var(--accent);border-radius:52px;background:#1a1510}
+.sum .done.down{background:#241c14}
+.sum .done .lab{position:absolute;left:0;top:38px;width:100%;text-align:center;
+                font-size:21px;letter-spacing:.2em;color:var(--accent)}
+
+/* ---- settings ------------------------------------------------------------ */
+.settings{position:absolute;top:0;right:0;bottom:0;left:0;display:none;
+          background:rgba(11,10,9,.985);z-index:50}
+.settings.on{display:block}
+.settings .h{position:absolute;left:0;top:78px;width:1280px;text-align:center;
+             font-size:44px;font-weight:200}
+.settings .s{position:absolute;left:0;top:146px;width:1280px;text-align:center;
+             font-size:18px;color:var(--dim)}
+.uis{position:absolute;left:60px;top:216px;width:1160px;display:flex}
+.uis .card{flex:1;margin-right:16px;height:auto;padding:14px 14px 20px}
+.uis .card:last-child{margin-right:0}
+.uis .card svg{display:block;width:100%;height:112px;border-radius:2px}
+.uis .nm{margin-top:14px;font-size:18px;letter-spacing:.18em;text-transform:uppercase}
+.uis .bl{margin-top:8px;font-size:13px;color:var(--dim);line-height:1.4;min-height:54px}
+.uis .card.pick .nm{color:var(--accent)}
+.uis .card.soon{opacity:.32}
+.settings .close{position:absolute;left:490px;top:610px;width:300px;height:96px;
+                 border:1px solid var(--accent);border-radius:48px;background:#1a1510}
+.settings .close.down{background:#241c14}
+.settings .close .lab{position:absolute;left:0;top:35px;width:100%;text-align:center;
+                      font-size:19px;letter-spacing:.2em;color:var(--accent)}
+
+/* ---- sleep --------------------------------------------------------------- */
+.sleep{position:absolute;top:0;right:0;bottom:0;left:0;display:none;background:#000;z-index:80}
+.sleep.on{display:block}
+.sleep .t{position:absolute;left:0;top:300px;width:1280px;text-align:center;
+          font-size:112px;font-weight:100;color:#241f1a;font-variant-numeric:tabular-nums}
+.sleep .w{position:absolute;left:0;top:452px;width:1280px;text-align:center;
+          font-size:17px;letter-spacing:.3em;text-transform:uppercase;color:#1a1613}
+</style>
+</head>
+<body>
+
+<!-- ===================== 01–04 · SETUP ================================= -->
+<div class="screen" id="scSetup">
+
+  <div class="step" id="stProfile">
+    <div class="ask">Who&rsquo;s walking?</div>
+    <div class="row4" id="people"></div>
+    <div class="stamp" id="stamp">&mdash;</div>
+    <button class="foot right" id="btnSettings">SETTINGS</button>
+  </div>
+
+  <div class="step gone" id="stMode">
+    <div class="ask" id="askMode">Walk or run?</div>
+    <div class="row2">
+      <button class="card" id="pickWalk">
+        <span class="big">Walk</span><span class="sub">up to 6.5 km/h</span></button>
+      <button class="card" id="pickRun">
+        <span class="big">Run</span><span class="sub">6.5 km/h and up</span></button>
+    </div>
+  </div>
+
+  <div class="step gone" id="stControl">
+    <div class="ask">On your own, or with a plan?</div>
+    <div class="row2">
+      <button class="card" id="pickCasual">
+        <span class="big">Casual</span><span class="sub">Nothing planned. Laps count themselves.</span></button>
+      <button class="card pick" id="pickGuided">
+        <span class="big">Guided</span><span class="sub">A shape of hills, and a voice to walk it with.</span></button>
+    </div>
+  </div>
+
+  <div class="step gone" id="stPlan">
+    <div class="cap" style="position:absolute;left:60px;top:70px">HOW LONG</div>
+    <div class="mins" id="mins"></div>
+    <div class="cap" style="position:absolute;left:60px;top:250px">THE SHAPE OF IT</div>
+    <div class="shapes" id="shapes"></div>
+  </div>
+
+  <button class="foot left gone" id="btnBack">BACK</button>
+</div>
+
+<!-- ===================== 05–09 · LIVE ================================== -->
+<div class="screen" id="scLive">
+  <div class="status l" id="clock">&mdash;</div>
+  <div class="status c" id="modeWord">WALKING</div>
+  <div class="status r" id="who">&mdash;</div>
+
+  <div class="seghead gone" id="seghead">
+    <div class="n" id="segName">&mdash;</div>
+    <div class="m" id="segMeta">&mdash;</div>
+  </div>
+
+  <div class="gauge l">
+    <div class="cap">INCLINE</div>
+    <div class="v" id="incline">0.0</div>
+    <div class="u">% grade &middot; <span id="inclineNote">yours</span></div>
+    <div class="bar"><i id="inclineBar"></i></div>
+  </div>
+
+  <div class="gauge r">
+    <div class="cap">SPEED</div>
+    <div class="v" id="speed">0.0</div>
+    <div class="u">km/h</div>
+    <div class="sug" id="suggest"></div>
+  </div>
+
+  <!-- hero A · the 400 m track, for a casual walk -->
+  <div class="hero" id="heroLaps">
+    <div class="sf">START / FINISH</div>
+    <svg viewBox="0 0 560 268" width="560" height="268">
+      <g id="lapLanes" fill="none" stroke="#1d1915" stroke-width="1"></g>
+      <path id="lapRail" fill="none" stroke="#2a2521" stroke-width="9"/>
+      <path id="lapGlow" fill="none" stroke="rgba(224,164,88,0.18)" stroke-width="16"
+            stroke-linecap="round" pathLength="1000" stroke-dasharray="0 1000"/>
+      <path id="lapArc"  fill="none" stroke="#e0a458" stroke-width="9"
+            stroke-linecap="round" pathLength="1000" stroke-dasharray="0 1000"/>
+      <line id="lapTick" stroke="#f4efe6" stroke-width="2"/>
+    </svg>
+    <div class="n" id="laps">0</div>
+    <div class="k">LAPS OF 400 M</div>
+  </div>
+
+  <!-- hero B · the whole walk as ground, for a guided one -->
+  <div class="hero" id="heroPath">
+    <div class="rule"></div><div class="capL"></div><div class="capR"></div>
+    <svg viewBox="0 0 576 226" width="576" height="226" style="position:absolute;left:0;top:22px">
+      <line id="gridA" x1="0" x2="576" stroke="#191512" stroke-width="1"/>
+      <line id="gridB" x1="0" x2="576" stroke="#191512" stroke-width="1"/>
+      <line id="gridC" x1="0" x2="576" stroke="#2a2521" stroke-width="1" stroke-dasharray="2 6"/>
+      <path id="profFill" fill="rgba(224,164,88,0.055)"/>
+      <path id="profBase" fill="none" stroke="#332d28" stroke-width="4"/>
+      <path id="profGlow" fill="none" stroke="rgba(224,164,88,0.22)" stroke-width="9"
+            pathLength="1000" stroke-dasharray="0 1000"/>
+      <path id="profDone" fill="none" stroke="#e0a458" stroke-width="2.5"
+            pathLength="1000" stroke-dasharray="0 1000"/>
+      <g id="profPins"></g>
+      <circle id="walkHalo" r="13" fill="none" stroke="rgba(244,239,230,0.22)" stroke-width="1"/>
+      <circle id="walkDot"  r="7" fill="#f4efe6"/>
+    </svg>
+    <div class="ax" id="axHi">&mdash;</div>
+    <div class="ax" id="axMid">&mdash;</div>
+    <div class="ax" id="axLo">&mdash;</div>
+    <div class="ft">
+      <div>START</div>
+      <div class="mid" id="ftMid">&mdash;</div>
+      <div class="end" id="ftEnd">&mdash;</div>
+    </div>
+  </div>
+
+  <!-- hero C · warm-up and cool-down -->
+  <div class="hero" id="heroWarm">
+    <div class="t" id="warmTitle">WARM-UP</div>
+    <div class="c" id="warmClock">0:00</div>
+    <div class="n" id="warmNote">&mdash;</div>
+  </div>
+
+  <div class="coach" id="coach">
+    <div class="w">COACH</div>
+    <div class="x">TAP TO DISMISS</div>
+    <div class="t" id="coachText"></div>
+  </div>
+
+  <div class="rule"></div>
+  <div class="tele">
+    <div class="cell"><div class="k">Elapsed</div><div class="v" id="elapsed">0:00</div></div>
+    <div class="cell"><div class="k">Distance</div><div class="v"><span id="dist">0.00</span><span class="u"> km</span></div></div>
+    <div class="cell"><div class="k">Climbed</div><div class="v"><span id="climb">0</span><span class="u"> m</span></div></div>
+    <div class="cell"><div class="k">Calories</div><div class="v" id="cals">0</div></div>
+    <div class="cell hr"><div class="k">Heart rate</div><div class="none" id="pulse">no strap paired</div></div>
+  </div>
+
+  <div class="controls">
+    <button class="key lead" id="btnLead"><span class="lab" id="leadLab">PAUSE</span></button>
+    <button class="key" id="btnSpeedDown"><span class="sym">&minus;</span><span class="sub">SPEED</span></button>
+    <button class="key" id="btnSpeedUp"><span class="sym">+</span><span class="sub">SPEED</span></button>
+    <button class="key" id="btnInclineDown"><span class="sym">&minus;</span><span class="sub">INCLINE</span></button>
+    <button class="key" id="btnInclineUp"><span class="sym">+</span><span class="sub">INCLINE</span></button>
+    <button class="key fan" id="btnFan"><span class="lab">FAN</span><span class="sub" id="fanLab">OFF</span></button>
+    <button class="stop" id="btnStop"><span class="lab">STOP</span></button>
+  </div>
+
+  <!-- 09 · paused. Scrimmed down to the control row and no further. -->
+  <div class="paused" id="paused">
+    <div class="scrim"></div>
+    <div class="h" id="pausedAt">Paused</div>
+    <div class="s" id="pausedWhere">The belt has stopped. Nothing is lost.</div>
+    <div class="row">
+      <button class="card pick" id="btnResume"><span class="lab">RESUME</span></button>
+      <button class="card" id="btnEnd"><span class="lab" id="endLab">END WALK</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 11 · SUMMARY ================================== -->
+<div class="screen sum" id="scSummary">
+  <div class="h" id="sumHead">Nice work</div>
+  <div class="k" id="sumKind">&mdash;</div>
+  <div class="grid">
+    <div class="cell"><div class="kk">TIME</div><div class="vv" id="sumTime">0:00</div></div>
+    <div class="cell"><div class="kk">DISTANCE</div><div class="vv"><span id="sumDist">0.00</span><span class="u">km</span></div></div>
+    <div class="cell"><div class="kk">CALORIES</div><div class="vv" id="sumCals">0</div></div>
+    <div class="cell"><div class="kk">AVG SPEED</div><div class="vv" id="sumAvg">0.0</div></div>
+    <div class="cell"><div class="kk">CLIMBED</div><div class="vv"><span id="sumClimb">0</span><span class="u">m</span></div></div>
+  </div>
+  <div class="note" id="sumNote"></div>
+  <button class="done" id="btnDone"><span class="lab">DONE</span></button>
+</div>
+
+<!-- ===================== 10 · SAFETY KEY =============================== -->
+<div class="safety" id="safety">
+  <div class="bar t"></div>
+  <div class="bar b"></div>
+  <div class="k">SAFETY KEY OUT</div>
+  <div class="h">The belt is stopped</div>
+  <div class="s">Put the key back on the console to carry on.</div>
+  <button class="hold" id="btnKeyBack">
+    <span class="fill" id="keyFill"></span>
+    <span class="lab">HOLD TO CONFIRM KEY IS IN</span>
+  </button>
+</div>
+
+<!-- ===================== SETTINGS ====================================== -->
+<div class="settings" id="settings">
+  <div class="h">Interface</div>
+  <div class="s">Five ways to walk. The treadmill behaves identically in all of them.</div>
+  <div class="uis" id="uis"></div>
+  <button class="close" id="btnUiClose"><span class="lab">CLOSE</span></button>
+</div>
+
+<div class="sleep" id="sleep">
+  <div class="t" id="sleepClock">&mdash;</div>
+  <div class="w">Tap to wake</div>
+</div>
+
+<script src="stride-core.js"></script>
+<script src="stride-settings.js"></script>
+<script>
+/* Kotlin calls window.render(state) at 5 Hz and window.plan(p) once per walk.
+   Everything that is not this UI's look — the track maths, the elevation
+   profile, the setup flow, touch handling — comes from stride-core. */
+const standalone = STRIDE.stub();
+const $ = STRIDE.$, tap = STRIDE.tap, mmss = STRIDE.mmss, nf = STRIDE.nf;
+
+/* ---- the lap track ------------------------------------------------------
+   Ember's oval, at its own size rather than the canonical one: 150px straights
+   and r=120 in a 560x268 box. The arc-length maths does not care which stadium
+   it is given, only that the one it measures is the one being drawn. */
+const TRACK = STRIDE.track({straight:150, radius:120, cx:280, cy:140, squash:1});
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+$('lapRail').setAttribute('d', TRACK.pathD(0));
+$('lapGlow').setAttribute('d', TRACK.pathD(0));
+$('lapArc').setAttribute('d', TRACK.pathD(0));
+[12, 24].forEach(inset => {
+  const p = document.createElementNS(SVGNS, 'path');
+  p.setAttribute('d', TRACK.pathD(inset));
+  $('lapLanes').appendChild(p);
+});
+(() => {
+  // Straddles the rail rather than sitting outside it, as in the design.
+  const p = TRACK.atFraction(0), t = $('lapTick');
+  t.setAttribute('x1', p.x); t.setAttribute('y1', p.y - 12);
+  t.setAttribute('x2', p.x); t.setAttribute('y2', p.y + 12);
+})();
+
+/* ---- the elevation profile ----------------------------------------------- */
+const PROF = {width:576, height:200, headroom:24};
+let prof = null, planName = '', planMinutes = 0, planLoops = false;
+
+window.plan = function(p){
+  const steps = STRIDE.setPlan(p);
+  planName = (p && p.name) || '';
+  planLoops = !!(p && p.loops);
+  prof = STRIDE.profile(steps, PROF);
+  planMinutes = Math.round(prof.total / 60);
+  drawProfile();
+};
+
+/* The static parts: the ground itself, its gridlines and its crest pins. Only
+   redrawn when the plan changes, not at 5 Hz. */
+function drawProfile(){
+  if (!prof || prof.empty) return;
+  $('profFill').setAttribute('d', prof.fill);
+  $('profBase').setAttribute('d', prof.d);
+  $('profGlow').setAttribute('d', prof.d);
+  $('profDone').setAttribute('d', prof.d);
+
+  const mid = (prof.hi + prof.lo) / 2;
+  [['gridA', prof.hi, 'axHi'], ['gridB', mid, 'axMid'], ['gridC', prof.lo, 'axLo']]
+    .forEach(([lineId, v, axId]) => {
+      const y = prof.yFor(v);
+      $(lineId).setAttribute('y1', y.toFixed(1));
+      $(lineId).setAttribute('y2', y.toFixed(1));
+      // +22 puts the label beside its own line: the svg is inset that far.
+      $(axId).style.top = (y + 22 - 6).toFixed(0) + 'px';
+      $(axId).textContent = (Math.round(v * 10) / 10) + '%';
+    });
+
+  const pins = $('profPins');
+  pins.innerHTML = '';
+  prof.pins.forEach(pt => {
+    const c = document.createElementNS(SVGNS, 'circle');
+    c.setAttribute('cx', pt.x.toFixed(1));
+    c.setAttribute('cy', pt.y.toFixed(1));
+    c.setAttribute('r', 3.5);
+    c.setAttribute('fill', '#4a423a');
+    pins.appendChild(c);
+  });
+  // On a circuit the right-hand end of the ground is not the end of the
+  // walk, it is the end of the lap. Say which.
+  $('ftEnd').textContent = planMinutes + (planLoops ? ' MIN LAP' : ' MIN');
+}
+
+/* ---- setup flow ---------------------------------------------------------- */
+const STEPS = {profile:'stProfile', mode:'stMode', control:'stControl', plan:'stPlan'};
+
+const flow = STRIDE.flow((step, f) => {
+  Object.keys(STEPS).forEach(k => $(STEPS[k]).classList.toggle('gone', k !== step));
+  $('btnBack').classList.toggle('gone', step === 'profile');
+  if (step === 'mode') $('askMode').textContent = 'Walk or run, ' + f.profile + '?';
+});
+
+/* Read from Settings, never written here. A name offered on this picker
+   that Settings does not have is a walker who silently gets no coaching
+   and no history — coaching and recording are per person now. Rebuilt
+   whenever settings close, because somebody may have just been added. */
+function buildPeople(){
+  $('people').innerHTML = '';
+  STRIDE.profiles().forEach(name => {
+    const b = document.createElement('button');
+    b.className = 'card';
+    b.innerHTML = '<span class="big">' + name + '</span>';
+    tap(b, () => flow.setProfile(name));
+    $('people').appendChild(b);
+  });
+}
+buildPeople();
+document.addEventListener('stride-settings-closed', buildPeople);
+
+STRIDE.DURATIONS.forEach(m => {
+  const b = document.createElement('button');
+  b.className = 'card' + (m === flow.minutes ? ' pick' : '');
+  b.innerHTML = '<span class="big">' + STRIDE.durationLabel(m) + '</span>';
+  tap(b, () => {
+    flow.setMinutes(m);
+    [].forEach.call($('mins').children, c => c.classList.toggle('pick', c === b));
+  });
+  $('mins').appendChild(b);
+});
+(() => {
+  const u = document.createElement('div');
+  u.className = 'unit';
+  u.textContent = 'MINUTES';
+  $('mins').appendChild(u);
+})();
+
+/* The sparklines are the real segment inclines from Plan.kt, so the card shows
+   the walk you are about to get rather than a decorative squiggle. */
+STRIDE.SHAPES.forEach(s => {
+  const b = document.createElement('button');
+  b.className = 'card' + (s.id === flow.shape ? ' pick' : '');
+  const lo = Math.min.apply(null, s.points), hi = Math.max.apply(null, s.points);
+  const pts = s.points.map((v, i) =>
+    (i / (s.points.length - 1) * 240).toFixed(0) + ',' +
+    (86 - (v - lo) / (hi - lo) * 76).toFixed(0)).join(' ');
+  b.innerHTML =
+    '<span class="nm">' + s.name + '</span>' +
+    '<span class="bl">' + s.blurb + '</span>' +
+    '<svg viewBox="0 0 240 90" preserveAspectRatio="none">' +
+      '<polyline points="' + pts + '" fill="none" stroke="' +
+      (s.id === flow.shape ? '#e0a458' : '#4a443c') + '" stroke-width="2"/></svg>';
+  tap(b, () => { flow.setShape(s.id); flow.commit(); });
+  $('shapes').appendChild(b);
+});
+
+tap($('pickWalk'),   () => flow.setMode('walk'));
+tap($('pickRun'),    () => flow.setMode('run'));
+tap($('pickCasual'), () => flow.setControl('casual'));
+tap($('pickGuided'), () => flow.setControl('guided'));
+tap($('btnBack'),    () => flow.back());
+
+/* ---- settings ------------------------------------------------------------ */
+function buildUis(){
+  const here = STRIDE.currentUi(), built = STRIDE.uiList(), box = $('uis');
+  box.innerHTML = '';
+  STRIDE.UI_META.forEach(u => {
+    const ready = built.indexOf(u.id) >= 0;
+    const b = document.createElement('button');
+    b.className = 'card' + (u.id === here ? ' pick' : '') + (ready ? '' : ' soon');
+    b.innerHTML = '<svg viewBox="0 0 160 100" preserveAspectRatio="none">' + u.sketch + '</svg>' +
+                  '<div class="nm">' + u.name + '</div>' +
+                  '<div class="bl">' + (ready ? u.blurb : 'not in this build yet') + '</div>';
+    if (ready && u.id !== here) tap(b, () => Stride.setUi(u.id));
+    box.appendChild(b);
+  });
+}
+/* The settings screen is shared by all five interfaces — see
+   stride-settings.js. This document keeps the button and nothing else;
+   eight sections of real configuration maintained in five places is how
+   the copy nobody opens stops matching the store. */
+tap($('btnSettings'), () => STRIDE_SETTINGS.open());
+if ($('btnUiClose')) tap($('btnUiClose'), () => STRIDE_SETTINGS.close());
+
+/* ---- controls ------------------------------------------------------------ */
+let shownScreen = null, shownPhase = null;
+
+tap($('btnLead'), () => {
+  switch (shownPhase){
+    case 'warmup':   Stride.skipWarmup();   break;
+    case 'cooldown': Stride.skipCooldown(); break;
+    case 'paused':   Stride.resume();       break;
+    case 'active':   Stride.pause();        break;
+  }
+});
+tap($('btnStop'), () => {
+  if (shownPhase !== 'active' && shownPhase !== 'warmup' && shownPhase !== 'paused') return;
+  // Halt the belt first, ask second. Never the other way round.
+  Stride.pause();
+  $('paused').classList.add('on');
+});
+tap($('btnResume'), () => { $('paused').classList.remove('on'); Stride.resume(); });
+tap($('btnEnd'),    () => { $('paused').classList.remove('on'); Stride.end(); });
+tap($('btnDone'),   () => Stride.home());
+tap($('btnFan'),    () => Stride.fan());
+
+STRIDE.stepper($('btnSpeedUp'),     d => Stride.speed(d),    0.1, 0.5);
+STRIDE.stepper($('btnSpeedDown'),   d => Stride.speed(-d),   0.1, 0.5);
+STRIDE.stepper($('btnInclineUp'),   d => Stride.incline(d),  0.5, 0.5);
+STRIDE.stepper($('btnInclineDown'), d => Stride.incline(-d), 0.5, 0.5);
+
+/* A pulled safety key means the belt cut out from under someone. Clearing that
+   is a deliberate act, so it takes a held press rather than a tap. */
+STRIDE.hold($('btnKeyBack'), 1200, () => Stride.ackDmk(),
+            p => { $('keyFill').style.width = (p * 100) + '%'; });
+
+/* ---- coach --------------------------------------------------------------- */
+let coachTimer = null;
+function dismissCoach(){
+  $('coach').classList.remove('show');
+  clearTimeout(coachTimer);
+  Stride.hushCoach();
+}
+tap($('coach'), dismissCoach);
+
+window.coach = function(c){
+  const line = (c && c.line) || '';
+  if (!line) return;
+  $('coachText').textContent = line;
+  $('coach').classList.add('show');
+  clearTimeout(coachTimer);
+  // Long enough to read at a walking pace, and it goes by itself so nobody has
+  // to reach for it mid-stride.
+  coachTimer = setTimeout(() => $('coach').classList.remove('show'),
+                          Math.min(18000, Math.max(9000, 5000 + line.length * 90)));
+};
+
+/* ---- sleep ---------------------------------------------------------------
+   The console lives in the room. At rest it should be dark, not a glowing
+   slab — which is most of the point of this direction. */
+const SLEEP_AFTER_MS = 5 * 60 * 1000;
+let lastTouch = Date.now(), asleep = false;
+
+$('sleep').addEventListener('touchstart', e => { e.preventDefault(); wake(); }, {passive:false});
+$('sleep').addEventListener('mousedown',  e => { e.preventDefault(); wake(); });
+function wake(){
+  lastTouch = Date.now();
+  if (!asleep) return;
+  asleep = false;
+  STRIDE.suppress(500);
+  $('sleep').classList.remove('on');
+  Stride.dim(false);
+}
+document.addEventListener('touchstart', () => { lastTouch = Date.now(); },
+                          {capture:true, passive:true});
+document.addEventListener('mousedown', () => { lastTouch = Date.now(); }, {capture:true});
+
+setInterval(() => {
+  const restful = shownScreen === 'scSetup' || shownScreen === 'scSummary' || shownScreen === null;
+  if (!asleep && restful && Date.now() - lastTouch > SLEEP_AFTER_MS){
+    asleep = true;
+    $('sleep').classList.add('on');
+    Stride.dim(true);
+  }
+}, 5000);
+
+/* ---- screens ------------------------------------------------------------- */
+function showScreen(id){
+  if (id === shownScreen) return;
+  ['scSetup','scLive','scSummary'].forEach(s => $(s).classList.toggle('on', s === id));
+  if (id === 'scSetup'){
+    flow.reset();
+    STRIDE.resetDerived();
+  }
+  if (id !== 'scSetup') STRIDE_SETTINGS.close();
+  if (id !== 'scLive'){
+    $('paused').classList.remove('on');
+    $('coach').classList.remove('show');
+  }
+  // Changing screen counts as activity, or a finished walk lands on the
+  // summary with half an hour of "idle" already banked and dims before it can
+  // be read.
+  lastTouch = Date.now();
+  shownScreen = id;
+}
+
+/* ---- the frame ----------------------------------------------------------- */
+window.render = function(raw){
+  const s = STRIDE.adapt(raw);
+  const screen = STRIDE.screenFor(s);
+
+  /* The safety key preempts every screen and routes to none of them. Clearing
+     it puts you back exactly where you were with the session intact. */
+  $('safety').classList.toggle('on', s.safetyKey === 'out');
+
+  if (screen === 'welcome'){ showScreen('scSetup'); shownPhase = s.phase; return; }
+  if (screen === 'summary'){ showScreen('scSummary'); renderSummary(s); shownPhase = s.phase; return; }
+
+  showScreen('scLive');
+  shownPhase = s.phase;
+
+  const guided = s.control === 'guided';
+  const timed  = s.phase === 'warmup' || s.phase === 'cooldown';
+
+  $('who').textContent = (s.profile || '').toUpperCase();
+  $('modeWord').textContent =
+      s.phase === 'warmup'   ? 'WARMING UP'
+    : s.phase === 'cooldown' ? 'COOLING DOWN'
+    : s.phase === 'paused'   ? 'PAUSED'
+    : s.ramping === 'resuming' ? 'RESUMING'
+    : s.mode === 'run' ? 'RUNNING' : 'WALKING';
+
+  /* Belt figures, always from the hardware. */
+  $('incline').textContent = s.belt.incline.toFixed(1);
+  $('speed').textContent   = s.belt.speed.toFixed(1);
+  $('inclineNote').textContent = !guided ? 'yours'
+                               : s.targets.inclineAuto ? 'set for you'
+                               : 'yours until the next stretch';
+  $('inclineBar').style.width = Math.max(0, Math.min(200, s.belt.incline / 12 * 200)) + 'px';
+
+  /* Speed is a suggestion and nothing may act on it — the person on the
+     treadmill decides the pace, always. */
+  $('suggest').textContent = (guided && s.targets.suggest > 0 && !timed)
+    ? 'lift to ' + s.targets.suggest.toFixed(1) + ' km/h when you’re ready'
+    : '';
+
+  $('elapsed').textContent = mmss(s.session.elapsed);
+  $('dist').textContent    = STRIDE.km(s.session.distance);
+  $('climb').textContent   = Math.round(s.session.climb);
+  $('cals').textContent    = nf(s.session.calories);
+  $('pulse').textContent   = s.session.pulse ? s.session.pulse + ' bpm' : 'no strap paired';
+
+  $('fanLab').textContent = STRIDE.fanLabel(s.fan);
+  $('leadLab').textContent =
+      s.phase === 'warmup' || s.phase === 'cooldown' ? 'SKIP'
+    : s.phase === 'paused' ? 'RESUME'
+    : 'PAUSE';
+  const moving = s.phase === 'active' || timed;
+  $('btnSpeedUp').classList.toggle('mute', !moving);
+  $('btnSpeedDown').classList.toggle('mute', !moving);
+
+  /* The segment header is live plan state, so it is only up while the plan is
+     actually running. During the warm-up it reads as a preview instead. */
+  $('seghead').classList.toggle('gone', !guided);
+  if (guided){
+    if (timed){
+      const first = s.plan.steps[0];
+      $('segName').textContent = first ? 'Up first: ' + first.label : planName;
+      $('segMeta').textContent =
+        (planName + ' · ' + s.plan.steps.length + ' stretches ahead').toUpperCase();
+    } else {
+      $('segName').textContent = s.segment.name;
+      $('segMeta').textContent = ((s.plan.loops ? 'lap ' + s.plan.lap + ' · ' : '') +
+        planName + ' · ' + s.segment.index + ' of ' + s.segment.count + ' · ' +
+        mmss(s.segment.secondsLeft) + ' left').toUpperCase();
+    }
+  }
+
+  /* One hero at a time. */
+  const hero = timed ? 'heroWarm' : guided ? 'heroPath' : 'heroLaps';
+  ['heroLaps','heroPath','heroWarm'].forEach(h => $(h).classList.toggle('on', h === hero));
+
+  if (hero === 'heroLaps') renderLaps(s);
+  if (hero === 'heroPath') renderPath(s);
+  if (hero === 'heroWarm') renderWarm(s);
+
+  if (s.phase !== 'paused') $('paused').classList.remove('on');
+  if (s.phase === 'paused'){
+    $('paused').classList.add('on');
+    $('pausedAt').textContent = 'Paused at ' + mmss(s.session.elapsed);
+    // It says WALK on a walk and RUN on a run. It used to say WALK always.
+    $('endLab').textContent = s.mode === 'run' ? 'END RUN' : 'END WALK';
+    $('pausedWhere').textContent = guided && s.segment.count
+      ? s.segment.name + ' · ' + s.segment.index + ' of ' + s.segment.count +
+        ' · the belt has stopped. Nothing is lost.'
+      : 'The belt has stopped. Nothing is lost.';
+  }
+};
+
+function renderLaps(s){
+  const d = s.session.distance;
+  $('laps').textContent = TRACK.laps(d);
+  /* Not the plain fraction: stroke-dasharray measures the drawn path, and on a
+     squashed track that is not the same thing as distance run. Identity here
+     because Ember's oval is face-on, but going through the helper is what
+     keeps it honest if it is ever foreshortened. */
+  const dash = TRACK.dash(d).toFixed(1) + ' 1000';
+  $('lapArc').setAttribute('stroke-dasharray', dash);
+  $('lapGlow').setAttribute('stroke-dasharray', dash);
+  // Under a hair of progress the round cap draws a stub that reads as a switch.
+  const on = TRACK.lapFraction(d) > 0.004 ? 1 : 0;
+  $('lapArc').style.opacity = on;
+  $('lapGlow').style.opacity = on;
+}
+
+function renderPath(s){
+  if (!prof || prof.empty) return;
+  /* Plan time, not session time: on an open circuit the ground drawn here
+     is one lap, and Kotlin has already wrapped the clock into it. */
+  const t = s.plan.elapsed;
+  const dash = prof.dashAt(t).toFixed(1) + ' 1000';
+  $('profGlow').setAttribute('stroke-dasharray', dash);
+  $('profDone').setAttribute('stroke-dasharray', dash);
+
+  const p = prof.atSeconds(t);
+  $('walkHalo').setAttribute('cx', p.x.toFixed(1));
+  $('walkHalo').setAttribute('cy', p.y.toFixed(1));
+  $('walkDot').setAttribute('cx', p.x.toFixed(1));
+  $('walkDot').setAttribute('cy', p.y.toFixed(1));
+
+  // Crests light as they are passed, so the ones still to come stay dim.
+  const pins = $('profPins').children;
+  for (let i = 0; i < pins.length; i++){
+    pins[i].setAttribute('fill', prof.pins[i].x <= p.x ? '#e0a458' : '#4a423a');
+  }
+  $('ftMid').textContent = STRIDE.km(s.session.distance) + ' KM IN';
+}
+
+function renderWarm(s){
+  const warm = s.phase === 'warmup';
+  $('warmTitle').textContent = warm ? 'WARM-UP' : 'COOL-DOWN';
+  $('warmClock').textContent = mmss(s.phaseLeft);
+  /* Never live plan state. A warm-up that reports a segment and a countdown is
+     claiming to be a walk that has not started. */
+  $('warmNote').textContent = !warm
+    ? 'Easing down. Skip to finish.'
+    : s.plan.steps.length ? 'Easy for now. The hills start after this.'
+    : 'Easing in. Skip whenever you’re ready.';
+}
+
+function renderSummary(s){
+  $('sumHead').textContent  = 'Nice work, ' + (s.profile || 'you');
+  $('sumKind').textContent  = s.plan.name
+    ? (Math.round(s.session.elapsed / 60) + ' minutes of ' + s.plan.name).toUpperCase()
+    : (s.mode === 'run' ? 'A RUN' : 'A WALK');
+  $('sumTime').textContent  = mmss(s.session.elapsed);
+  $('sumDist').textContent  = STRIDE.km(s.session.distance);
+  $('sumCals').textContent  = nf(s.session.calories);
+  $('sumAvg').textContent   = s.session.avgSpeed.toFixed(1);
+  $('sumClimb').textContent = Math.round(s.session.climb);
+  $('sumNote').textContent  = s.session.climb > 60
+    ? 'That is a real hill’s worth of climbing.' : '';
+}
+
+/* ---- clock ---------------------------------------------------------------- */
+setInterval(() => {
+  const d = new Date();
+  const t = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  $('clock').textContent = t;
+  $('sleepClock').textContent = t;
+  $('stamp').textContent =
+    (t + ' · ' + d.toLocaleDateString([], {weekday:'long'})).toUpperCase();
+}, 1000);
+
+showScreen('scSetup');
+if (standalone) STRIDE.demo();
+</script>
+</body>
+</html>

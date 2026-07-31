@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The field, flat. The icon set's master uses a soft radial from #242220
+         down to #0a0a09, which at launcher size is invisible; a single value
+         renders identically and cannot band on a cheap panel. -->
+    <color name="ic_launcher_background">#141312</color>
+</resources>

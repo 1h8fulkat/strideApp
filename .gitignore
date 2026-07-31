@@ -1,0 +1,23 @@
+# --- local configuration, never committed -----------------------------------
+# Home Assistant URL, token and broker credentials.
+homeassistant/stride.conf
+# Broker credentials injected into the console build.
+console/stride/local.properties
+# This machine's DEVELOPMENT_TEAM. Not a secret — a team id ships inside every
+# app — but committing it makes a project that signs as somebody else.
+ios/Signing.local.xcconfig
+
+# --- build output -----------------------------------------------------------
+console/*/build/
+console/*/app/build/
+console/*/.gradle/
+*.iml
+.idea/
+ios/StrideHealth.xcodeproj/
+ios/build/
+ios/DerivedData/
+
+# --- anything archived out of the public tree -------------------------------
+archive/
+
+.DS_Store

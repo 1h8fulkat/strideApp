@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280,height=800,initial-scale=1">
+<title>STRIDE — Settings (mock)</title>
+<!--
+  A mock of the full settings area, for judging before building.
+
+  Target viewport is exactly 1280x800, the console panel, and the tokens are
+  lifted from assets/ui/original.html so this reads as the same product rather
+  than a wireframe of a different one.
+
+  Everything here is a stand-in: nothing talks to the board, the broker or a
+  strap. The point is the shape — what belongs in settings at all, how it is
+  grouped, and whether it can be driven with a finger while standing on a deck.
+
+  What drove the inventory: an audit of the Kotlin and the UI assets for things
+  that are true of Sam's house and would be wrong for anybody else. The worst
+  of them is not a value but a branch — MainActivity gates the live coach on
+  `walker == "Sam"`, so a second person in the same household silently gets a
+  different product.
+-->
+<style>
+:root{
+  --bg-0:#050b1f; --bg-1:#0a1533;
+  --ink:#eaf0ff; --ink-dim:#7f92c4; --ink-faint:#44548a;
+  --accent:#39e0ff; --accent-warm:#ff9d3c;
+  --good:#5dff9b; --alert:#ff5c7a;
+  --track-line:#1e3068;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  width:1280px;height:800px;overflow:hidden;
+  background:var(--bg-0); color:var(--ink);
+  font-family:"Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased; user-select:none;
+  -webkit-tap-highlight-color:rgba(0,0,0,0);
+}
+*:focus{outline:none}
+button{-webkit-tap-highlight-color:rgba(0,0,0,0);outline:none;font-family:inherit}
+body::before{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(ellipse 900px 520px at 50% 44%,
+    rgba(28,58,140,.55) 0%, rgba(10,21,51,.25) 45%, transparent 72%);
+  pointer-events:none;
+}
+
+/* ---- frame ------------------------------------------------------------- */
+.wrap{position:relative;display:flex;height:800px;z-index:2}
+
+.rail{
+  flex:none;width:302px;height:800px;
+  border-right:1px solid var(--track-line);
+  padding:26px 0 0 0;display:flex;flex-direction:column;
+}
+.rail .title{
+  padding:0 30px 22px;font-size:34px;font-weight:200;letter-spacing:.02em;
+}
+.navs{flex:1;overflow:hidden}
+.nav{
+  display:flex;align-items:center;gap:16px;
+  width:100%;height:66px;padding:0 30px;
+  background:none;border:none;color:var(--ink-dim);
+  font-size:19px;font-weight:300;text-align:left;letter-spacing:.01em;
+  border-left:3px solid transparent;
+}
+.nav .ic{width:26px;height:26px;flex:none;opacity:.75}
+.nav.on{color:var(--ink);border-left-color:var(--accent);background:rgba(57,224,255,.09)}
+.nav.on .ic{opacity:1}
+.nav:active{background:rgba(57,224,255,.14)}
+/* The console's bottom bezel eats a few pixels and a finger needs somewhere to
+   land that is not the edge of the glass. 34px, not 26. */
+.rail .foot{padding:20px 30px 34px}
+.btn-close{
+  width:100%;height:78px;border-radius:20px;
+  background:rgba(57,224,255,.14);border:2px solid var(--accent);
+  color:var(--ink);font-size:19px;letter-spacing:.16em;
+}
+.btn-close:active{transform:scale(.98)}
+
+/* ---- panel ------------------------------------------------------------- */
+.panel{flex:1;height:800px;padding:34px 40px 0 44px;overflow:hidden;position:relative}
+.pane{display:none;height:100%;flex-direction:column}
+.pane.on{display:flex}
+.ph{font-size:38px;font-weight:200;letter-spacing:.01em}
+.psub{margin-top:9px;color:var(--ink-dim);font-size:17px;font-weight:300;line-height:1.45;max-width:820px}
+/* `padding-bottom` rather than a spacer element: it scrolls with the content,
+   so the last row can always be brought clear of the bezel instead of resting
+   under it. 46px is a little over half a row, which is enough to read as an
+   end rather than as a clip. */
+.scroll{margin-top:24px;flex:1;overflow-y:auto;padding-right:14px;padding-bottom:46px}
+.scroll::-webkit-scrollbar{width:8px}
+.scroll::-webkit-scrollbar-thumb{background:var(--track-line);border-radius:4px}
+
+.row{
+  display:flex;align-items:center;gap:20px;
+  min-height:84px;padding:16px 0;
+  border-bottom:1px solid rgba(30,48,104,.6);
+}
+.row .lbl{flex:1;min-width:0}
+.row .lbl .n{font-size:20px;font-weight:300}
+.row .lbl .d{margin-top:5px;font-size:14px;color:var(--ink-faint);line-height:1.4}
+.row .ctl{flex:none}
+.row:last-child{border-bottom:none}
+.group{margin-top:30px}
+.group:first-child{margin-top:4px}
+.gh{
+  font-size:13px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--ink-faint);padding-bottom:6px;
+}
+
+/* toggle */
+.sw{width:96px;height:52px;border-radius:26px;background:rgba(30,48,104,.9);
+   border:2px solid var(--track-line);position:relative;transition:.16s}
+.sw i{position:absolute;top:4px;left:4px;width:40px;height:40px;border-radius:50%;
+   background:var(--ink-faint);transition:.16s}
+.sw.on{background:rgba(57,224,255,.22);border-color:var(--accent)}
+.sw.on i{left:48px;background:var(--accent)}
+
+/* segmented */
+.seg{display:flex;border:2px solid var(--track-line);border-radius:16px;overflow:hidden}
+.seg button{
+  height:56px;padding:0 24px;background:none;border:none;color:var(--ink-dim);
+  font-size:17px;font-weight:300;border-right:1px solid var(--track-line);
+}
+.seg button:last-child{border-right:none}
+.seg button.on{background:rgba(57,224,255,.16);color:var(--ink)}
+
+/* stepper */
+.step{display:flex;align-items:center;gap:4px}
+.step button{
+  width:60px;height:56px;border-radius:14px;background:rgba(22,37,90,.5);
+  border:2px solid var(--track-line);color:var(--ink);font-size:26px;font-weight:200;
+}
+.step button:active{background:rgba(57,224,255,.2)}
+.step .v{min-width:128px;text-align:center;font-size:24px;font-weight:300}
+.step .v small{font-size:15px;color:var(--ink-dim);margin-left:5px}
+
+/* text field */
+.fld{
+  height:56px;min-width:300px;padding:0 18px;border-radius:14px;
+  background:rgba(5,11,31,.7);border:2px solid var(--track-line);
+  color:var(--ink);font-size:18px;font-weight:300;font-family:inherit;
+}
+.fld.short{min-width:132px}
+.fld:focus{border-color:var(--accent)}
+
+/* pill button */
+.pill{
+  height:56px;padding:0 26px;border-radius:16px;
+  background:rgba(22,37,90,.5);border:2px solid var(--track-line);
+  color:var(--ink);font-size:16px;letter-spacing:.1em;
+}
+.pill:active{transform:scale(.98);background:rgba(57,224,255,.2)}
+.pill.go{border-color:var(--accent);background:rgba(57,224,255,.16)}
+.pill.warn{border-color:var(--alert);color:#ffc4cf}
+
+.state{display:inline-flex;align-items:center;gap:9px;font-size:15px;color:var(--ink-dim)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--ink-faint)}
+.dot.ok{background:var(--good);box-shadow:0 0 12px rgba(93,255,155,.7)}
+.dot.bad{background:var(--alert);box-shadow:0 0 12px rgba(255,92,122,.6)}
+.dot.busy{background:var(--accent-warm);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* people */
+.people{display:flex;flex-wrap:wrap;gap:16px;margin-top:6px}
+.person{
+  width:190px;padding:18px 14px 16px;border-radius:22px;text-align:center;
+  background:rgba(22,37,90,.4);border:2px solid var(--track-line);color:var(--ink);
+}
+.person.on{border-color:var(--accent);background:rgba(57,224,255,.14)}
+.person .av{
+  width:64px;height:64px;border-radius:50%;margin:0 auto 12px;
+  background:rgba(57,224,255,.14);border:2px solid var(--track-line);
+  display:flex;align-items:center;justify-content:center;
+  font-size:25px;font-weight:200;color:var(--accent);
+}
+.person .pn{font-size:20px;font-weight:300}
+.person .pd{margin-top:5px;font-size:13px;color:var(--ink-faint);min-height:17px}
+.person.add{border-style:dashed;color:var(--ink-dim)}
+.person.add .av{color:var(--ink-dim);font-size:32px}
+
+/* device list */
+.dev{
+  display:flex;align-items:center;gap:18px;padding:18px 20px;margin-top:12px;
+  border-radius:18px;background:rgba(22,37,90,.36);border:2px solid var(--track-line);
+}
+.dev.on{border-color:var(--accent);background:rgba(57,224,255,.12)}
+.dev .dn{flex:1}
+.dev .dn .n{font-size:19px;font-weight:300}
+.dev .dn .d{margin-top:4px;font-size:13px;color:var(--ink-faint)}
+.bpm{font-size:30px;font-weight:200;color:var(--accent);min-width:96px;text-align:right}
+.bpm small{font-size:13px;color:var(--ink-dim);margin-left:4px}
+.empty{
+  margin-top:14px;padding:26px;border-radius:18px;text-align:center;
+  border:2px dashed var(--track-line);color:var(--ink-faint);font-size:16px;line-height:1.5;
+}
+
+/* interface cards */
+.uis{display:flex;flex-wrap:wrap;gap:14px;margin-top:6px}
+.uicard{
+  width:196px;padding:13px 13px 18px;border-radius:22px;text-align:center;
+  background:rgba(22,37,90,.4);border:2px solid var(--track-line);color:var(--ink);
+}
+.uicard.on{border-color:var(--accent);background:rgba(57,224,255,.14)}
+.uicard .sk{height:104px;border-radius:10px;background:var(--bg-1);
+  border:1px solid var(--track-line);position:relative;overflow:hidden}
+.uicard .un{margin-top:12px;font-size:16px;letter-spacing:.16em;text-transform:uppercase}
+.uicard .ub{margin-top:5px;font-size:12px;color:var(--ink-faint);line-height:1.35;min-height:32px}
+.uicard .tag{
+  position:absolute;top:7px;right:7px;font-size:10px;letter-spacing:.1em;
+  padding:3px 7px;border-radius:6px;background:rgba(255,157,60,.9);color:#241000;
+}
+
+.note{
+  margin-top:20px;padding:18px 20px;border-radius:16px;
+  background:rgba(255,157,60,.09);border-left:3px solid var(--accent-warm);
+  font-size:14px;color:var(--ink-dim);line-height:1.55;
+}
+.note b{color:var(--ink);font-weight:400}
+.ro{font-size:19px;font-weight:300;color:var(--ink-dim)}
+.ro b{color:var(--ink);font-weight:300}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="rail">
+    <div class="title">Settings</div>
+    <div class="navs" id="navs"></div>
+    <div class="foot"><button class="btn-close">CLOSE</button></div>
+  </div>
+
+  <div class="panel" id="panel">
+
+    <!-- ================= WHO WALKS ================= -->
+    <div class="pane on" data-p="people">
+      <div class="ph">Who walks</div>
+      <div class="psub">Everyone who uses this treadmill. Each person keeps their own
+        distance, calories and history, and chooses whether any of it leaves the console.</div>
+      <div class="scroll">
+        <div class="group">
+          <div class="gh">Household</div>
+          <div class="people" id="people"></div>
+        </div>
+        <div class="group">
+          <div class="gh">When nobody chooses</div>
+          <div class="row">
+            <div class="lbl"><div class="n">Start as</div>
+              <div class="d">Who the welcome screen assumes if the belt starts without anyone tapping a name.</div></div>
+            <div class="ctl"><div class="seg" data-seg="default-walker">
+              <button class="on">Sam</button><button>Alex</button><button>Ask every time</button>
+            </div></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Guest walks</div>
+              <div class="d">A one-off walk that is counted on the console but never recorded against a person.</div></div>
+            <div class="ctl"><div class="sw on" data-sw><i></i></div></div>
+          </div>
+        </div>
+        <div class="note">
+          <b>This is the one that matters most.</b> The live coach is currently gated on the
+          walker literally being called Sam — <code>walker == "Sam"</code> in MainActivity —
+          so a second person in the same house silently gets a different product. It should be a
+          per-person setting, which is the <i>Coaching</i> switch on each card above.
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= HEART RATE ================= -->
+    <div class="pane" data-p="hr">
+      <div class="ph">Heart rate</div>
+      <div class="psub">The handlebar grips work but need both hands on the bar. A Bluetooth
+        chest strap reads continuously and is far steadier, especially on hills.</div>
+      <div class="scroll">
+        <div class="group">
+          <div class="gh">Where the pulse comes from</div>
+          <div class="row">
+            <div class="lbl"><div class="n">Source</div>
+              <div class="d">Automatic prefers a paired strap and falls back to the grips when it is out of range or flat.</div></div>
+            <div class="ctl"><div class="seg" data-seg="hr-src">
+              <button class="on">Automatic</button><button>Strap only</button><button>Grips only</button>
+            </div></div>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="gh">Paired strap</div>
+          <div class="dev on" id="paired">
+            <div class="dn">
+              <div class="n">Polar H10 &nbsp;·&nbsp; D4:8A:1C</div>
+              <div class="d">Connected · battery 78% · standard heart rate service</div>
+            </div>
+            <div class="bpm" id="livebpm">— <small>bpm</small></div>
+            <button class="pill warn" id="forget">FORGET</button>
+          </div>
+          <div class="empty" id="none" style="display:none">
+            No strap paired.<br>Put yours in pairing mode and scan.
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="gh">Add a strap</div>
+          <div class="row">
+            <div class="lbl"><div class="n">Scan for straps</div>
+              <div class="d">Any strap that advertises the standard Bluetooth heart rate service — Polar, Garmin, Wahoo, Coospo and most others.</div></div>
+            <div class="ctl"><button class="pill go" id="scan">SCAN</button></div>
+          </div>
+          <div id="found"></div>
+        </div>
+
+        <div class="note">
+          Nothing here today — pulse comes only from the grips via the board's
+          <code>PULSE</code> field. A strap is a separate Bluetooth connection the console
+          makes itself, so it keeps working if Home Assistant is down.
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= HOME ASSISTANT ================= -->
+    <div class="pane" data-p="ha">
+      <div class="ph">Home Assistant</div>
+      <div class="psub">Optional. The treadmill runs perfectly well with none of this set —
+        you lose the history, the dashboards and the talking coach, and nothing else.</div>
+      <div class="scroll">
+        <div class="group">
+          <div class="gh">Connection</div>
+          <div class="row">
+            <div class="lbl"><div class="n">Publish to Home Assistant</div>
+              <div class="d">Everything below is ignored while this is off.</div></div>
+            <div class="ctl"><div class="sw on" data-sw><i></i></div></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">MQTT broker</div>
+              <div class="d">Host or IP of the broker, not of Home Assistant itself.</div></div>
+            <div class="ctl"><input class="fld" value="homeassistant.local"></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Port</div><div class="d">1883 plain, 8883 with TLS.</div></div>
+            <div class="ctl"><input class="fld short" value="1883"></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Username</div></div>
+            <div class="ctl"><input class="fld" value="stride"></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Password</div></div>
+            <div class="ctl"><input class="fld" type="password" value="hunter2hunter2"></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Use TLS</div>
+              <div class="d">Off is reasonable on a home network you control.</div></div>
+            <div class="ctl"><div class="sw" data-sw><i></i></div></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Topic prefix</div>
+              <div class="d">Change only if <code>stride/</code> already means something else on your broker.</div></div>
+            <div class="ctl"><input class="fld" value="stride"></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Test the connection</div>
+              <div class="d">Connects, publishes discovery, disconnects. Changes nothing.</div></div>
+            <div class="ctl" style="display:flex;align-items:center;gap:18px">
+              <span class="state" id="hastate"><i class="dot ok"></i>Connected</span>
+              <button class="pill" id="test">TEST</button>
+            </div>
+          </div>
+        </div>
+        <div class="note">
+          Broker, user and password are compiled in from <code>local.properties</code> today, so
+          a public build either ships someone else's credentials or cannot connect at all.
+          <b>Neither is releasable.</b>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= TREADMILL ================= -->
+    <div class="pane" data-p="deck">
+      <div class="ph">Treadmill</div>
+      <div class="psub">How the console drives the deck. The board's own limits always win —
+        these are preferences within them, never overrides of them.</div>
+      <div class="scroll">
+        <div class="group">
+          <div class="gh">Units</div>
+          <div class="row">
+            <div class="lbl"><div class="n">Distance and speed</div>
+              <div class="d">Everything on every screen, and everything published.</div></div>
+            <div class="ctl"><div class="seg" data-seg="units">
+              <button class="on">Kilometres</button><button>Miles</button>
+            </div></div>
+          </div>
+        </div>
+        <div class="group">
+          <div class="gh">Starting and stopping</div>
+          <div class="row">
+            <div class="lbl"><div class="n">Warm-up</div>
+              <div class="d">Skippable. Set to zero to start every walk at your chosen pace.</div></div>
+            <div class="ctl"><div class="step" data-step="2|0|10|1|min"><button>−</button><div class="v">2<small>min</small></div><button>+</button></div></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Cool-down</div></div>
+            <div class="ctl"><div class="step" data-step="2|0|10|1|min"><button>−</button><div class="v">2<small>min</small></div><button>+</button></div></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Warm-up speed</div>
+              <div class="d">Also the speed a cool-down eases back to.</div></div>
+            <div class="ctl"><div class="step" data-step="2.0|1.0|5.0|0.5|km/h"><button>−</button><div class="v">2.0<small>km/h</small></div><button>+</button></div></div>
+          </div>
+        </div>
+        <div class="group">
+          <div class="gh">Guided walks</div>
+          <div class="row">
+            <div class="lbl"><div class="n">Incline changes</div>
+              <div class="d">How fast the deck is allowed to move during a plan. Slower is gentler underfoot.</div></div>
+            <div class="ctl"><div class="seg" data-seg="incl">
+              <button>Gentle</button><button class="on">Normal</button><button>Quick</button>
+            </div></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Open circuit lap</div>
+              <div class="d">How long one lap is before the ground repeats. Nothing ends an open circuit but STOP.</div></div>
+            <div class="ctl"><div class="step" data-step="20|5|45|5|min"><button>−</button><div class="v">20<small>min</small></div><button>+</button></div></div>
+          </div>
+        </div>
+        <div class="group">
+          <div class="gh">Reported by the board</div>
+          <div class="row">
+            <div class="lbl"><div class="n">Incline range</div>
+              <div class="d">Read from the machine at connect. Plans are clamped to this.</div></div>
+            <div class="ctl"><div class="ro"><b>−3.0</b> to <b>+12.0</b> %</div></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Speed range</div></div>
+            <div class="ctl"><div class="ro"><b>0.8</b> to <b>20.0</b> km/h</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= COACH ================= -->
+    <div class="pane" data-p="coach">
+      <div class="ph">Coach</div>
+      <div class="psub">Marks your kilometres and says something occasionally. It never
+        touches the belt — every pace change is yours.</div>
+      <div class="scroll">
+        <div class="group">
+          <div class="row">
+            <div class="lbl"><div class="n">Coach</div>
+              <div class="d">Off means a silent walk with no ribbon at all.</div></div>
+            <div class="ctl"><div class="sw on" data-sw><i></i></div></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">How much it talks</div>
+              <div class="d">Sparing marks kilometres and little else. Chatty adds pace and rhythm observations.</div></div>
+            <div class="ctl"><div class="seg" data-seg="talk">
+              <button>Sparing</button><button class="on">Normal</button><button>Chatty</button>
+            </div></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Voice</div>
+              <div class="d">Only affects wording, never what it is willing to say.</div></div>
+            <div class="ctl"><div class="seg" data-seg="voice">
+              <button class="on">Supportive</button><button>Drill sergeant</button><button>Data nerd</button><button>Zen</button>
+            </div></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Written by Home Assistant</div>
+              <div class="d">Off keeps every line on the console — the built-in ones, which are shorter and never late.</div></div>
+            <div class="ctl"><div class="sw on" data-sw><i></i></div></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Announce milestones</div>
+              <div class="d">First mark at 500 m, then every kilometre.</div></div>
+            <div class="ctl"><div class="sw on" data-sw><i></i></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= INTERFACE ================= -->
+    <div class="pane" data-p="ui">
+      <div class="ph">Interface</div>
+      <div class="psub">Five ways to walk. The treadmill behaves identically in all of them —
+        these change what the screen is made of, not just its colours.</div>
+      <div class="scroll">
+        <div class="uis" id="uis"></div>
+        <div class="note">
+          This screen already exists and works. It moves in here as one section among
+          several rather than being the whole of settings.
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= DISPLAY ================= -->
+    <div class="pane" data-p="screen">
+      <div class="ph">Display</div>
+      <div class="psub">The console is a screen in a room, on all day. These are about
+        living with it rather than walking on it.</div>
+      <div class="scroll">
+        <div class="group">
+          <div class="row">
+            <div class="lbl"><div class="n">Sleep after</div>
+              <div class="d">Shows a clock. Any tap wakes it; the belt never sleeps mid-walk.</div></div>
+            <div class="ctl"><div class="step" data-step="5|1|60|1|min"><button>−</button><div class="v">5<small>min</small></div><button>+</button></div></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Clock</div></div>
+            <div class="ctl"><div class="seg" data-seg="clock">
+              <button class="on">24 hour</button><button>12 hour</button>
+            </div></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Brightness</div>
+              <div class="d">Dimmer is easier to live with in a dark room and reads fine at arm's length.</div></div>
+            <div class="ctl"><div class="seg" data-seg="bright">
+              <button>Dim</button><button class="on">Normal</button><button>Bright</button>
+            </div></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Keep the screen on while walking</div>
+              <div class="d">Off lets it sleep even mid-walk, which saves the panel on long sessions.</div></div>
+            <div class="ctl"><div class="sw on" data-sw><i></i></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= ABOUT ================= -->
+    <div class="pane" data-p="about">
+      <div class="ph">About</div>
+      <div class="psub">What this is talking to, and what it is.</div>
+      <div class="scroll">
+        <div class="group">
+          <div class="row"><div class="lbl"><div class="n">STRIDE</div></div>
+            <div class="ctl"><div class="ro">0.4 &nbsp;·&nbsp; build 118</div></div></div>
+          <div class="row"><div class="lbl"><div class="n">Treadmill board</div>
+            <div class="d">Detected over USB serial at start-up.</div></div>
+            <div class="ctl"><div class="ro">FitPro &nbsp;·&nbsp; device 0x04</div></div></div>
+          <div class="row"><div class="lbl"><div class="n">Console</div></div>
+            <div class="ctl"><div class="ro">Android 9 &nbsp;·&nbsp; 1280×800</div></div></div>
+        </div>
+        <div class="group">
+          <div class="gh">Starting over</div>
+          <div class="row">
+            <div class="lbl"><div class="n">Reset every setting</div>
+              <div class="d">People, totals and history are kept. Only settings go back to defaults.</div></div>
+            <div class="ctl"><button class="pill warn">RESET</button></div>
+          </div>
+          <div class="row">
+            <div class="lbl"><div class="n">Erase all walk history</div>
+              <div class="d">Everything recorded on this console, for everyone. Cannot be undone.</div></div>
+            <div class="ctl"><button class="pill warn">ERASE</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ---- nav --------------------------------------------------------------- */
+const SECTIONS = [
+  ['people', 'Who walks',      'M12 12a5 5 0 100-10 5 5 0 000 10zm-9 9a9 9 0 0118 0'],
+  ['hr',     'Heart rate',     'M12 21s-8-5.4-8-11a4.5 4.5 0 018-2.8A4.5 4.5 0 0120 10c0 5.6-8 11-8 11z'],
+  ['ha',     'Home Assistant', 'M3 11l9-8 9 8M5 10v10h14V10'],
+  ['deck',   'Treadmill',      'M3 17h18M6 17l3-9h6l3 9M9 8V5h6v3'],
+  ['coach',  'Coach',          'M4 5h16v11H9l-5 4V5z'],
+  ['ui',     'Interface',      'M3 4h18v14H3zM3 9h18M9 9v9'],
+  ['screen', 'Display',        'M3 4h18v12H3zM8 20h8M12 16v4'],
+  ['about',  'About',          'M12 22a10 10 0 100-20 10 10 0 000 20zM12 10v7M12 7h.01'],
+];
+const navs = document.getElementById('navs');
+SECTIONS.forEach(([id, label, d], i) => {
+  const b = document.createElement('button');
+  b.className = 'nav' + (i === 0 ? ' on' : '');
+  b.dataset.go = id;
+  b.innerHTML = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>
+      <span>${label}</span>`;
+  navs.appendChild(b);
+});
+navs.addEventListener('click', e => {
+  const b = e.target.closest('.nav'); if (!b) return;
+  document.querySelectorAll('.nav').forEach(n => n.classList.toggle('on', n === b));
+  document.querySelectorAll('.pane').forEach(p =>
+    p.classList.toggle('on', p.dataset.p === b.dataset.go));
+});
+
+/* ---- people ------------------------------------------------------------ */
+const PEOPLE = [
+  { name: 'Sam',  note: 'Coaching · to Home Assistant' },
+  { name: 'Alex',   note: 'Coaching off · console only' },
+  { name: 'Jo',  note: 'Console only' },
+  { name: 'Robin', note: 'Console only' },
+];
+const people = document.getElementById('people');
+PEOPLE.forEach((p, i) => {
+  const b = document.createElement('button');
+  b.className = 'person' + (i === 0 ? ' on' : '');
+  b.innerHTML = `<div class="av">${p.name[0]}</div>
+                 <div class="pn">${p.name}</div><div class="pd">${p.note}</div>`;
+  people.appendChild(b);
+});
+const add = document.createElement('button');
+add.className = 'person add';
+add.innerHTML = `<div class="av">+</div><div class="pn">Add someone</div><div class="pd"></div>`;
+people.appendChild(add);
+people.addEventListener('click', e => {
+  const b = e.target.closest('.person'); if (!b || b.classList.contains('add')) return;
+  people.querySelectorAll('.person').forEach(p => p.classList.toggle('on', p === b));
+});
+
+/* ---- interface cards --------------------------------------------------- */
+const UIS = [
+  ['Original', 'The oval track and the six tiles.', 1],
+  ['Ember',    'Warm, dark, one number at a time.', 0],
+  ['Cluster',  'Dense instrument panel.', 0],
+  ['Daylight', 'Bright and flat, for a lit room.', 0],
+  ['Pacer',    'Lane-based, built around pace.', 0],
+];
+const uis = document.getElementById('uis');
+UIS.forEach(([n, b, on], i) => {
+  const el = document.createElement('button');
+  el.className = 'uicard' + (on ? ' on' : '');
+  el.innerHTML = `<div class="sk">${i > 0 ? '<div class="tag">NEVER WALKED</div>' : ''}</div>
+                  <div class="un">${n}</div><div class="ub">${b}</div>`;
+  uis.appendChild(el);
+});
+uis.addEventListener('click', e => {
+  const b = e.target.closest('.uicard'); if (!b) return;
+  uis.querySelectorAll('.uicard').forEach(c => c.classList.toggle('on', c === b));
+});
+
+/* ---- generic controls -------------------------------------------------- */
+document.addEventListener('click', e => {
+  const sw = e.target.closest('[data-sw]');
+  if (sw) sw.classList.toggle('on');
+
+  const segBtn = e.target.closest('.seg button');
+  if (segBtn) [...segBtn.parentNode.children].forEach(b =>
+    b.classList.toggle('on', b === segBtn));
+
+  const stepBtn = e.target.closest('.step button');
+  if (stepBtn) {
+    const step = stepBtn.parentNode;
+    const [start, min, max, inc, unit] = step.dataset.step.split('|');
+    const v = step.querySelector('.v');
+    const dp = String(inc).includes('.') ? 1 : 0;
+    let cur = parseFloat(v.textContent);
+    cur += (stepBtn.textContent === '+' ? 1 : -1) * parseFloat(inc);
+    cur = Math.min(parseFloat(max), Math.max(parseFloat(min), cur));
+    v.innerHTML = `${cur.toFixed(dp)}<small>${unit}</small>`;
+  }
+});
+
+/* ---- heart rate: a plausible scan -------------------------------------- */
+const found = document.getElementById('found');
+document.getElementById('scan').addEventListener('click', function () {
+  this.textContent = 'SCANNING';
+  found.innerHTML = `<div class="empty"><span class="state">
+    <i class="dot busy"></i>Looking for straps…</span></div>`;
+  setTimeout(() => {
+    found.innerHTML = `
+      <div class="dev"><div class="dn"><div class="n">Wahoo TICKR · F1:20:9B</div>
+        <div class="d">Heart rate service · −67 dBm</div></div>
+        <button class="pill go">PAIR</button></div>
+      <div class="dev"><div class="dn"><div class="n">Garmin HRM-Dual · 8C:3E:22</div>
+        <div class="d">Heart rate service · −81 dBm</div></div>
+        <button class="pill go">PAIR</button></div>`;
+    this.textContent = 'SCAN AGAIN';
+  }, 1800);
+});
+document.getElementById('forget').addEventListener('click', () => {
+  document.getElementById('paired').style.display = 'none';
+  document.getElementById('none').style.display = 'block';
+});
+// A believable resting pulse on the paired strap.
+setInterval(() => {
+  const el = document.getElementById('livebpm');
+  if (el) el.innerHTML = (61 + Math.floor(Math.random() * 5)) + ' <small>bpm</small>';
+}, 1400);
+
+/* ---- HA test ----------------------------------------------------------- */
+document.getElementById('test').addEventListener('click', function () {
+  const s = document.getElementById('hastate');
+  s.innerHTML = '<i class="dot busy"></i>Connecting…';
+  this.textContent = 'TESTING';
+  setTimeout(() => {
+    s.innerHTML = '<i class="dot ok"></i>Connected · 8 sensors published';
+    this.textContent = 'TEST';
+  }, 1500);
+});
+</script>
+</body>
+</html>

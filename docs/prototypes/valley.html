@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280,height=800,initial-scale=1">
+<title>STRIDE — rolling valley spike</title>
+<style>
+/* ---------------------------------------------------------------------------
+   SPIKE 2 — the reference valley, recreated and made to move.
+
+   Brief: the river is the path; we walk through rolling hills towards mountains
+   we never reach. Hills roll towards us at whatever speed the belt is doing.
+   Lateral movement along the meander parallaxes the backdrop.
+
+   The architecture follows that brief literally, and it is why this is cheaper
+   and more controllable than spike 1's single noise field:
+
+     sky        one gradient, never moves
+     mountains  fixed distance ahead, parallax laterally only — unreachable
+     clouds     fixed distance, own slow drift
+     hills      a scrolling heightfield with the river carved into it
+     river      the v=0 channel floor of that same heightfield
+
+   Chromium 83 rules throughout: explicit top/right/bottom/left, no flex gap,
+   no :has(), no aspect-ratio, no nesting, no external resources.
+--------------------------------------------------------------------------- */
+:root{
+  --ink:#eaf0ff;
+  --ink-dim:#7f92c4;
+  --ink-faint:#44548a;
+  --accent:#39e0ff;
+  --accent-warm:#ff9d3c;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  background:#02060f;color:var(--ink);
+  font-family:"Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  user-select:none;
+}
+.frame{
+  position:relative;width:1280px;height:800px;margin:0 auto;
+  background:#050b1f;overflow:hidden;
+}
+.stage{position:absolute;top:88px;left:274px;width:732px;height:452px}
+#cv{position:absolute;top:0;left:0;width:732px;height:452px}
+
+.hud{position:absolute;top:0;right:0;bottom:0;left:0;pointer-events:none}
+.hud.off{display:none}
+.big{position:absolute;font-weight:200;letter-spacing:-.02em;line-height:1;
+     text-shadow:0 2px 12px rgba(0,0,0,.55)}
+.big .u{font-size:22px;font-weight:400;letter-spacing:.06em;opacity:.75}
+.spd{top:6px;left:6px;font-size:84px}
+.dst{top:6px;right:6px;font-size:84px;text-align:right}
+.inc{bottom:6px;left:6px;font-size:50px;color:var(--accent-warm)}
+.tme{bottom:6px;right:6px;font-size:50px;text-align:right;opacity:.85}
+.lbl{position:absolute;top:-52px;left:0;right:0;text-align:center;
+     color:var(--ink-faint);font-size:14px;letter-spacing:.18em}
+
+.panel{
+  position:absolute;top:566px;left:24px;right:24px;bottom:14px;
+  background:rgba(6,14,36,.72);border:1px solid #14224e;border-radius:12px;
+  padding:13px 18px;font-size:12px;color:var(--ink-dim);overflow:hidden;
+}
+.row{display:flex;align-items:center;margin-bottom:9px}
+.row:last-child{margin-bottom:0}
+.cell{width:186px;margin-right:10px;display:flex;align-items:center}
+.cell span.k{width:70px;color:var(--ink-faint);letter-spacing:.04em}
+.cell span.v{width:32px;color:var(--ink);text-align:right;margin-left:5px}
+input[type=range]{width:76px;margin:0}
+select,button{
+  background:#0d1836;color:var(--ink);border:1px solid #1c3269;
+  border-radius:6px;padding:4px 9px;font-size:12px;font-family:inherit;
+}
+button{cursor:pointer}
+button.on{background:#16255a;border-color:var(--accent);color:var(--accent)}
+.stat{position:absolute;top:13px;right:18px;text-align:right;
+      font-size:11px;line-height:1.55;color:var(--ink-faint)}
+.stat b{color:var(--accent);font-weight:400}
+.note{position:absolute;bottom:12px;left:18px;right:180px;
+      font-size:11px;color:#33406e;line-height:1.5}
+</style>
+</head>
+<body>
+
+<div class="frame">
+  <div class="stage">
+    <canvas id="cv" width="732" height="452"></canvas>
+    <div class="hud off" id="hud">
+      <div class="lbl">ROLLING HILLS &middot; SEGMENT 2 OF 6</div>
+      <div class="big spd"><span id="oSpd">5.4</span><span class="u"> km/h</span></div>
+      <div class="big dst"><span id="oDst">1.82</span><span class="u"> km</span></div>
+      <div class="big inc"><span id="oInc">3.0</span><span class="u"> %</span></div>
+      <div class="big tme"><span id="oTme">20:14</span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="stat">
+      <div>triangles <b id="sTri">0</b></div>
+      <div>ms / frame <b id="sMs">0</b> of 200</div>
+    </div>
+
+    <div class="row">
+      <div class="cell"><span class="k">theme dim</span>
+        <input type="range" id="cDim" min="0" max="100" value="0">
+        <span class="v" id="vDim">0</span></div>
+      <div class="cell"><span class="k">facet size</span>
+        <input type="range" id="cFacet" min="5" max="26" value="14">
+        <span class="v" id="vFacet">14</span></div>
+      <div class="cell"><span class="k">jitter</span>
+        <input type="range" id="cJit" min="0" max="100" value="42">
+        <span class="v" id="vJit">42</span></div>
+      <div class="cell"><span class="k">relief</span>
+        <input type="range" id="cRel" min="0" max="200" value="100">
+        <span class="v" id="vRel">100</span></div>
+      <div class="cell"><span class="k">meander</span>
+        <input type="range" id="cMea" min="0" max="200" value="100">
+        <span class="v" id="vMea">100</span></div>
+    </div>
+
+    <div class="row">
+      <div class="cell"><span class="k">cam height</span>
+        <input type="range" id="cCamH" min="2" max="40" value="15">
+        <span class="v" id="vCamH">15</span></div>
+      <div class="cell"><span class="k">horizon</span>
+        <input type="range" id="cHzn" min="28" max="66" value="50">
+        <span class="v" id="vHzn">50</span></div>
+      <div class="cell"><span class="k">speed km/h</span>
+        <input type="range" id="cSpeed" min="0" max="140" value="54">
+        <span class="v" id="vSpeed">5.4</span></div>
+      <div class="cell"><span class="k">trees</span>
+        <input type="range" id="cTrees" min="0" max="40" value="18">
+        <span class="v" id="vTrees">18</span></div>
+      <div class="cell"><span class="k">parallax</span>
+        <input type="range" id="cPar" min="0" max="300" value="100">
+        <span class="v" id="vPar">100</span></div>
+    </div>
+
+    <div class="row">
+      <button id="bPlay" class="on">pause</button>&nbsp;
+      <button id="bWire">wireframe</button>&nbsp;
+      <button id="bMtn" class="on">mountains</button>&nbsp;
+      <button id="bCld" class="on">clouds</button>&nbsp;
+      <button id="bHud">HUD numbers</button>&nbsp;
+      <button id="bReset">reset</button>
+    </div>
+
+    <div class="note">
+      Desktop Chrome is far faster than the console's 2016 MT8163 — read ms/frame
+      as a relative cost between settings, not as a device measurement.
+      &ldquo;theme dim&rdquo; pulls the whole palette towards the STRIDE blues for the 6am case.
+    </div>
+  </div>
+</div>
+
+<script>
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const PW = 732, PH = 452;
+
+/* ===========================================================================
+   Camera — elevated, no yaw.
+
+   Elevated because the reference is: from eye level a meander compresses into
+   nothing, and from 15 m it reads as a snaking river across rolling ground.
+
+   No yaw, deliberately. Spike 1 turned the camera to follow the path heading,
+   which keeps the path centred but swings the whole world — and swinging the
+   world destroys the backdrop parallax this brief asks for. Here the camera
+   only *translates* sideways as the river meanders, so the mountains slide
+   against each other at their own rates. That lateral drift is the parallax.
+=========================================================================== */
+let CAM_H = 15;
+const FOCAL = 600;
+const CX = PW / 2, CY = PH / 2;
+let pitch = 0, sinP = 0, cosP = 1;
+function setHorizon(frac){
+  pitch = Math.atan((CY - PH * frac) / FOCAL);
+  sinP = Math.sin(pitch); cosP = Math.cos(pitch);
+}
+function horizonY(){ return CY - FOCAL * Math.tan(pitch); }
+
+/* Project: u metres ahead of the camera, wv absolute lateral metres, h metres
+   of height. camLat/camRise are where the camera is. */
+function project(u, wv, h, camLat, camRise){
+  const X = wv - camLat;
+  const Y = (h - camRise) - CAM_H;
+  const Z = u;
+  const z = Z * cosP - Y * sinP;
+  if (z < 0.5) return null;
+  const y = Y * cosP + Z * sinP;
+  return { x: CX + FOCAL * X / z, y: CY - FOCAL * y / z, d: z };
+}
+
+/* ===========================================================================
+   The world
+=========================================================================== */
+function hash2(x, y){
+  const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+function vnoise(x, y){
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const a = hash2(xi, yi),     b = hash2(xi + 1, yi);
+  const c = hash2(xi, yi + 1), d = hash2(xi + 1, yi + 1);
+  return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+}
+
+let meanderK = 1, reliefK = 1;
+
+/* Where the river is, laterally, at world distance wu. Two waves again so it
+   never reads as a sine test pattern. */
+function riverX(wu){
+  return (Math.sin(wu / 96) * 17 + Math.sin(wu / 237) * 25) * meanderK;
+}
+/* The river bed's own longitudinal profile — gentle, and independent of the
+   hills, so water never appears to run uphill. */
+function riverBed(wu){
+  return (vnoise(wu * 0.0022, 991) - 0.5) * 13 - 2.4;
+}
+/* Broad rolling hills. Two octaves only: the reference's facets are enormous,
+   and a third octave just makes them noisy. */
+function hillH(wu, wv){
+  return (vnoise(wu * 0.0046, wv * 0.0046) - 0.5) * 30 * reliefK
+       + (vnoise(wu * 0.0135, wv * 0.0135) - 0.5) * 10 * reliefK;
+}
+/* The ground: hills everywhere, blended down into the river channel. The
+   smoothstep is the visible bank in the reference image. */
+function groundH(wu, wv){
+  const d = Math.abs(wv - riverX(wu));
+  const t = d < 8.5 ? 0 : Math.min(1, (d - 8.5) / 15);
+  const s = t * t * (3 - 2 * t);
+  const bed = riverBed(wu);
+  return bed + (hillH(wu, wv) - bed) * s;
+}
+
+/* ===========================================================================
+   Palette — the reference, faithfully, with a dial back to the STRIDE blues.
+=========================================================================== */
+function mix(a, b, t){
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+function css(c){ return 'rgb(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ')'; }
+
+let dim = 0;
+/* The 6am dial. Collapses a colour towards the interface hue while dropping its
+   overall level, so the same geometry can be judged as the reference and as
+   something that will not be the brightest object in a dark room. */
+const DIM_TARGET = [18, 34, 78];
+function P(c){
+  if (dim <= 0) return css(c);
+  const l = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+  const blue = [l * 0.34, l * 0.56, Math.min(255, l * 1.22)];
+  return css(mix(mix(c, blue, Math.min(1, dim * 1.15)), DIM_TARGET, dim * 0.55));
+}
+
+const SKY = [
+  [0.00, [104, 124, 178]],
+  [0.44, [186, 150, 180]],
+  [0.74, [240, 192, 168]],
+  [1.00, [250, 222, 188]]
+];
+/* Hills. Lit and shaded ends of a green ramp; the facet jitter picks between. */
+const HILL_LIT  = [186, 220, 138];
+const HILL_DARK = [104, 156, 74];
+/* Mountains, per band, already carrying their aerial perspective. */
+const MTN = [
+  { lit: [172, 188, 188], dark: [138, 158, 164], mid: [156, 174, 176] },
+  { lit: [142, 164, 168], dark: [104, 130, 140], mid: [124, 148, 154] },
+  { lit: [116, 144, 150], dark: [ 78, 106, 118], mid: [ 98, 126, 134] }
+];
+const RIVER_LIT  = [126, 166, 208];
+const RIVER_DARK = [ 84, 122, 172];
+const TREE_LIT   = [ 74, 118,  72];
+const TREE_DARK  = [ 42,  78,  48];
+const TRUNK      = [104,  72,  44];
+const CLOUD_LIT  = [255, 255, 255];
+const CLOUD_DARK = [208, 220, 228];
+
+/* Light from over the left shoulder, high. World axes are (u ahead, v lateral,
+   h up), so this vector is written in that frame. */
+const L = [0.30, -0.44, 0.85];
+
+/* ===========================================================================
+   Mesh — a fan, so facets are of roughly even screen size
+=========================================================================== */
+let US = [], COLS = [];
+const SEE = 900;
+let facet = 14;
+
+/* Columns are a hybrid, and they have to be.
+
+   The channel is a fixed ~8.5 m of water with a 15 m bank, at every distance.
+   A purely proportional fan puts its columns further apart the further out it
+   goes, so past 40 m the bank falls between columns and alternating triangles
+   catch alternate sides of it — which is exactly the row of green teeth along
+   the water in the first attempt.
+
+   So: columns pinned to absolute metre offsets across the channel and its
+   banks, and proportional columns beyond them for the flanks, clamped outside
+   the pinned set so the ordering can never invert. */
+const PINNED = [0, 4.2, 8.5, 12, 16, 23.5, 33, 46, 64, 90, 125];
+const PROP   = [1.00, 1.36, 1.80, 2.30];
+const PIN_EDGE = PINNED[PINNED.length - 1];
+const WATER = 8.5;                       // channel half-width, metres
+
+function buildMesh(f){
+  US = [];
+  const growth = 1 + f * 0.019, seed = f * 0.30;
+  let u = 5;
+  while (u < SEE){ US.push(u); u = u * growth + seed; }
+  US.push(SEE);
+
+  COLS = [];
+  for (let i = PROP.length - 1; i >= 0; i--)   COLS.push({ f: -PROP[i] });
+  for (let i = PINNED.length - 1; i >= 1; i--) COLS.push({ p: -PINNED[i] });
+  for (let i = 0; i < PINNED.length; i++)      COLS.push({ p:  PINNED[i] });
+  for (let i = 0; i < PROP.length; i++)        COLS.push({ f:  PROP[i] });
+}
+function spread(u){ return 9 + u * 0.60; }
+/* Lateral offset of column c at depth u, in metres from the river centreline. */
+function colOffset(c, u){
+  if (c.p !== undefined) return c.p;
+  const v = c.f * spread(u);
+  const s = c.f < 0 ? -1 : 1;
+  return s * Math.max(Math.abs(v), PIN_EDGE + 12);
+}
+
+/* ===========================================================================
+   State
+=========================================================================== */
+let world = 0, elapsed = 0, speed = 5.4;
+let jitter = 0.42, trees = 18, parK = 1.0;
+let playing = true, wire = false, showMtn = true, showCld = true, hudOn = false;
+let triCount = 0, msAvg = 0;
+
+function tri(ax, ay, bx, by, cx2, cy2, fill){
+  ctx.beginPath();
+  ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(cx2, cy2);
+  ctx.closePath();
+  if (wire){
+    ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.lineWidth = 0.6; ctx.stroke();
+  } else {
+    ctx.fillStyle = fill; ctx.fill();
+    /* Adjacent antialiased fills leave hairline seams; stroking the same path
+       in the same colour closes them far cheaper than a second fill. */
+    ctx.strokeStyle = fill; ctx.lineWidth = 1; ctx.stroke();
+  }
+  triCount++;
+}
+
+/* --- sky ---------------------------------------------------------------- */
+function drawSky(){
+  const g = ctx.createLinearGradient(0, 0, 0, PH);
+  for (let i = 0; i < SKY.length; i++) g.addColorStop(SKY[i][0], P(SKY[i][1]));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, PW, PH);
+}
+
+/* --- mountains ----------------------------------------------------------
+   Three bands at fixed distances ahead of the camera, so they never get closer
+   however far you walk — the brief's "we never meet the mountains", enforced by
+   construction rather than by tuning.
+
+   Their lateral positions are absolute world metres, so as the river meanders
+   the camera slides sideways beneath them and each band shifts by FOCAL*dx/dist
+   — near bands more than far ones. That difference *is* the parallax. A very
+   slow drift with distance walked keeps the range from being a frozen photo. */
+const BANDS = [
+  { dist: 2500, n: 15, spacing: 400, h: [200, 520], w: [170, 380], drift: 0.008 },
+  { dist: 1650, n: 12, spacing: 370, h: [150, 400], w: [140, 330], drift: 0.016 },
+  { dist: 1050, n: 10, spacing: 350, h: [ 90, 265], w: [120, 285], drift: 0.026 }
+];
+function drawMountains(camLat, camRise){
+  for (let b = 0; b < BANDS.length; b++){
+    const band = BANDS[b], pal = MTN[b];
+    const drift = -world * band.drift * parK;
+    for (let n = 0; n < band.n; n++){
+      const h1 = hash2(n * 7.3 + b * 31.1, 3.7);
+      const h2 = hash2(n * 4.1 + b * 17.9, 9.1);
+      const h3 = hash2(n * 9.7 + b * 23.3, 5.3);
+      const lat = (n - band.n / 2) * band.spacing + h1 * band.spacing * 0.8 + drift;
+      const pk  = band.h[0] + h2 * (band.h[1] - band.h[0]);
+      const hw  = band.w[0] + h3 * (band.w[1] - band.w[0]);
+
+      /* Base sits on nominal ground level; the camera's own rise is subtracted
+         so climbing a hill lifts the horizon relative to the range. */
+      const apex = project(band.dist, lat + (h2 - 0.5) * hw * 0.3, pk, camLat, camRise);
+      const bl   = project(band.dist, lat - hw, 0, camLat, camRise);
+      const br   = project(band.dist, lat + hw, 0, camLat, camRise);
+      /* A ridge foot pulled towards the viewer gives the third face that makes
+         a pyramid read as a mountain rather than a triangle. */
+      const bm   = project(band.dist - hw * 0.55, lat + (h1 - 0.5) * hw * 0.5, 0,
+                           camLat, camRise);
+      if (!apex || !bl || !br || !bm) continue;
+      if (Math.max(bl.x, br.x) < -20 || Math.min(bl.x, br.x) > PW + 20) continue;
+
+      tri(apex.x, apex.y, bl.x, bl.y, bm.x, bm.y, P(pal.lit));
+      tri(apex.x, apex.y, bm.x, bm.y, br.x, br.y, P(pal.dark));
+      /* A facet near the summit — the thing that actually sells low-poly. */
+      const sx = apex.x, sy = apex.y;
+      const fw = (br.x - bl.x) * 0.10, fh = (bl.y - apex.y) * 0.26;
+      tri(sx, sy, sx - fw, sy + fh, sx + fw * 1.15, sy + fh * 0.86, P(pal.mid));
+    }
+  }
+}
+
+/* --- clouds -------------------------------------------------------------
+   Faceted blobs at a fixed distance with their own slow wind, so the sky is
+   not static while the ground moves. */
+function poly(pts, fill){
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.closePath();
+  if (wire){
+    ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.lineWidth = 0.6; ctx.stroke();
+  } else {
+    ctx.fillStyle = fill; ctx.fill();
+    ctx.strokeStyle = fill; ctx.lineWidth = 1; ctx.stroke();
+  }
+  triCount++;
+}
+
+/* One puff: a jittered dome over a flat base, in two tones. Faceted because the
+   vertices are jittered and joined straight — a circle here would read as a
+   cartoon cloud rather than a low-poly one. Three overlapping puffs per cloud,
+   which is what the reference is doing. */
+function puff(x, y, r, seed){
+  const N = 7, dome = [];
+  for (let i = 0; i <= N; i++){
+    const a = Math.PI + Math.PI * (i / N);
+    const rr = r * (0.80 + hash2(seed + i * 2.7, 3.3) * 0.40);
+    dome.push([x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.86]);
+  }
+  poly(dome.concat([[x + r * 0.92, y], [x - r * 0.92, y]]), P(CLOUD_LIT));
+  /* The flat underside, a shade down, which is what gives them weight. */
+  poly([[x - r * 0.92, y], [x + r * 0.92, y],
+        [x + r * 0.62, y + r * 0.20], [x - r * 0.66, y + r * 0.18]], P(CLOUD_DARK));
+}
+
+function drawClouds(camLat, camRise){
+  const N = 7, DIST = 1400;
+  for (let n = 0; n < N; n++){
+    const h1 = hash2(n * 5.7, 13.1), h2 = hash2(n * 8.3, 4.9), h3 = hash2(n * 3.3, 21.7);
+    const lat = (n - N / 2) * 520 + h1 * 380 - world * 0.010 * parK - elapsed * 0.9;
+    const alt = 190 + h2 * 210;
+    const c = project(DIST, lat, alt, camLat, camRise);
+    if (!c) continue;
+    const sc = 22 + h3 * 22;
+    if (c.x < -160 || c.x > PW + 160) continue;
+    /* Draw the flanking puffs first so the tallest sits in front. */
+    puff(c.x - sc * 0.80, c.y + sc * 0.10, sc * 0.66, n * 3 + 1);
+    puff(c.x + sc * 0.82, c.y + sc * 0.14, sc * 0.58, n * 3 + 2);
+    puff(c.x, c.y, sc, n * 3);
+  }
+}
+
+/* The far ground, from the horizon down, drawn before the mountains.
+
+   Without it the sky shows through between mountains, wherever the mesh's far
+   edge at 900 m falls below the horizon line — the pink sliver in the first
+   attempt. Tinted towards the sky at the horizon, which is the aerial
+   perspective the reference gets from its haze. */
+function drawFarBand(){
+  const hy = horizonY();
+  const far = mix(mix(HILL_DARK, HILL_LIT, 0.72), SKY[3][1], 0.42);
+  const near = mix(HILL_DARK, HILL_LIT, 0.62);
+  const g = ctx.createLinearGradient(0, hy - 2, 0, hy + 56);
+  g.addColorStop(0, P(far));
+  g.addColorStop(1, P(near));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, hy - 2, PW, PH - hy + 4);
+}
+
+/* --- trees --------------------------------------------------------------
+   Bucketed by mesh ring so they can be drawn interleaved with the ground and
+   get correct occlusion behind nearer hills — cheaper than sorting, and the
+   only way a tree on a far hilltop does not float over a near one.
+   Never inside the river channel. */
+function treesInRing(u0, u1, camLat, camRise){
+  const SP = 17;
+  const first = Math.floor((world + u0) / SP) - 1, last = Math.ceil((world + u1) / SP) + 1;
+  for (let n = first; n <= last; n++){
+    const h1 = hash2(n * 3.1, 7.7), h2 = hash2(n * 5.3, 11.3), h3 = hash2(n * 9.1, 2.9);
+    if (h1 > trees / 40) continue;                 // density dial
+    const wu = n * SP + h2 * SP;
+    const u = wu - world;
+    if (u < u0 || u >= u1 || u < 8 || u > 420) continue;
+    /* Clustered: a cheap way to get the reference's little stands of conifers
+       rather than an even sprinkle. */
+    const side = h3 < 0.5 ? -1 : 1;
+    const wv = riverX(wu) + side * (16 + hash2(n * 2.7, 6.1) * 120);
+    if (Math.abs(wv - riverX(wu)) < 13) continue;  // never in the channel
+    const gh = groundH(wu, wv);
+    const base = project(u, wv, gh, camLat, camRise);
+    const treeM = 6.5 + h1 * 40 * 0.11;
+    const top = project(u, wv, gh + treeM, camLat, camRise);
+    if (!base || !top) continue;
+    if (base.x < -30 || base.x > PW + 30) continue;
+    const size = base.y - top.y;
+    if (size < 5) continue;
+
+    const tw = size * 0.30;
+    ctx.fillStyle = P(TRUNK);
+    ctx.fillRect(base.x - Math.max(0.7, size * 0.035), base.y - size * 0.10,
+                 Math.max(1.4, size * 0.07), size * 0.13);
+    for (let tier = 0; tier < 4; tier++){
+      const ty = base.y - tier * size * 0.24 - size * 0.06;
+      const w = tw * (1 - tier * 0.18);
+      const apex = ty - size * 0.42;
+      tri(base.x, apex, base.x - w, ty, base.x, ty, P(TREE_DARK));
+      tri(base.x, apex, base.x, ty, base.x + w, ty, P(TREE_LIT));
+    }
+  }
+}
+
+/* --- the ground + the river -------------------------------------------- */
+function drawGround(camLat, camRise){
+  const NI = US.length, NJ = COLS.length, N = NI * NJ;
+  const gx = new Float32Array(N), gy = new Float32Array(N);
+  const wU = new Float32Array(N), wV = new Float32Array(N), wH = new Float32Array(N);
+  const ok = new Uint8Array(N);
+
+  for (let i = 0; i < NI; i++){
+    const u = US[i], wu = world + u;
+    const rv = riverX(wu);
+    for (let j = 0; j < NJ; j++){
+      /* Columns are centred on the river, so the channel always has mesh
+         columns straddling it and its banks stay crisp at any distance. */
+      const wv = rv + colOffset(COLS[j], u);
+      const h = groundH(wu, wv);
+      const pr = project(u, wv, h, camLat, camRise);
+      const k = i * NJ + j;
+      if (!pr){ ok[k] = 0; continue; }
+      ok[k] = 1;
+      gx[k] = pr.x; gy[k] = pr.y;
+      wU[k] = wu; wV[k] = wv; wH[k] = h;
+    }
+  }
+
+  /* Far to near, ring by ring, with that ring's trees drawn straight after it
+     so hills occlude the trees behind them. */
+  for (let i = NI - 2; i >= 0; i--){
+    for (let j = 0; j < NJ - 1; j++){
+      const a = i * NJ + j, b = i * NJ + j + 1;
+      const c = (i + 1) * NJ + j, d = (i + 1) * NJ + j + 1;
+      if (!(ok[a] && ok[b] && ok[c] && ok[d])) continue;
+      if (Math.min(gx[a], gx[b], gx[c], gx[d]) > PW + 8) continue;
+      if (Math.max(gx[a], gx[b], gx[c], gx[d]) < -8) continue;
+      if (Math.min(gy[a], gy[b], gy[c], gy[d]) > PH + 8) continue;
+
+      shadeFace(a, b, c, gx, gy, wU, wV, wH);
+      shadeFace(b, d, c, gx, gy, wU, wV, wH);
+    }
+    if (trees > 0) treesInRing(US[i], US[i + 1], camLat, camRise);
+  }
+
+  drawRiver(camLat, camRise);
+}
+
+/* Flat shading from the face's own world normal, plus a deterministic per-facet
+   jitter. The jitter is not decoration: the reference's ground is visibly made
+   of slightly different flat greens, and without it a smooth heightfield reads
+   as a smooth surface no matter how few triangles it has. */
+function shadeFace(ka, kb, kc, gx, gy, wU, wV, wH){
+  const ax = wU[kb] - wU[ka], ay = wV[kb] - wV[ka], az = wH[kb] - wH[ka];
+  const bx = wU[kc] - wU[ka], by = wV[kc] - wV[ka], bz = wH[kc] - wH[ka];
+  let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+  const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+  nx /= len; ny /= len; nz /= len;
+  if (nz < 0){ nx = -nx; ny = -ny; nz = -nz; }
+  let nd = nx * L[0] + ny * L[1] + nz * L[2];
+  if (nd < 0) nd = 0;
+  let t = 0.22 + 0.78 * nd;
+  /* Anchored in world space so a facet keeps its shade as it approaches — a
+     jitter keyed to the mesh index would shimmer as rings scroll. */
+  const j = hash2(Math.floor(wU[ka] * 0.35), Math.floor(wV[ka] * 0.35)) - 0.5;
+  t = Math.max(0, Math.min(1, t + j * jitter * 0.55));
+
+  /* Water or land, from the face's *centroid*.
+
+     Taking it from one vertex is what produced the row of green teeth along the
+     bank: a face straddling the water's edge was painted entirely blue or
+     entirely green depending on which corner happened to be first, so the edge
+     alternated. The centroid gives every face one unambiguous answer, and
+     because WATER is also a pinned column no face straddles the boundary. */
+  const cu = (wU[ka] + wU[kb] + wU[kc]) / 3;
+  const cvv = (wV[ka] + wV[kb] + wV[kc]) / 3;
+  const wet = Math.abs(cvv - riverX(cu)) < WATER;
+  const col = wet ? mix(RIVER_DARK, RIVER_LIT, t * 0.7 + 0.3)
+                  : mix(HILL_DARK, HILL_LIT, t);
+  tri(gx[ka], gy[ka], gx[kb], gy[kb], gx[kc], gy[kc], P(col));
+}
+
+/* The path. It is the channel floor of the same heightfield, so it cannot float
+   above the horizon, and a faint glow keeps it the brightest thing in frame the
+   way the river leads the eye in the reference. */
+function drawRiver(camLat, camRise){
+  const pts = [];
+  for (let u = 2; u < 420; u = u < 10 ? u + 2 : u * 1.07){
+    const wu = world + u, rv = riverX(wu), bed = riverBed(wu) + 0.35;
+    const c = project(u, rv, bed, camLat, camRise);
+    const l = project(u, rv - 8.5, bed, camLat, camRise);
+    const r = project(u, rv + 8.5, bed, camLat, camRise);
+    if (!c || !l || !r) continue;
+    pts.push({ x: c.x, y: c.y, lx: l.x, ly: l.y, rx: r.x, ry: r.y });
+  }
+  const n = pts.length;
+  if (n < 2) return;
+  if (wire) return;
+
+  /* No solid fill here: the water is now faceted mesh, drawn by shadeFace, so
+     a flat polygon over the top would erase exactly the facets the reference
+     shows in its river. All this adds is the glow down the centreline.
+
+     Three cheap passes instead of shadowBlur, which this 2016 GPU does not
+     enjoy at 5 Hz. Subtle at dim 0, and the thing that makes the path legible
+     as *the path* once the palette is pulled back to the interface blues. */
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const PASSES = [[6.0, 0.05], [3.0, 0.10], [1.2, 0.34]];
+  for (let k = 0; k < PASSES.length; k++){
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < n; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.lineWidth = PASSES[k][0];
+    ctx.strokeStyle = 'rgba(' + (dim > 0.3 ? '57,224,255,' : '235,250,255,')
+                    + (PASSES[k][1] * (0.5 + dim)).toFixed(3) + ')';
+    ctx.stroke();
+  }
+}
+
+/* ===========================================================================
+   Frame
+=========================================================================== */
+function draw(){
+  const t0 = performance.now();
+  triCount = 0;
+
+  /* The camera walks along the river: lateral position is the river's, which is
+     what makes the backdrop parallax without any extra machinery. */
+  const camLat = riverX(world);
+  const camRise = riverBed(world);
+
+  drawSky();
+  if (showCld) drawClouds(camLat, camRise);
+  drawFarBand();
+  if (showMtn) drawMountains(camLat, camRise);
+  drawGround(camLat, camRise);
+
+  const ms = performance.now() - t0;
+  msAvg = msAvg ? msAvg * 0.85 + ms * 0.15 : ms;
+}
+
+/* ===========================================================================
+   Controls and the 5 Hz loop
+=========================================================================== */
+function $(id){ return document.getElementById(id); }
+function bindRange(id, vid, fn, fmt){
+  const el = $(id);
+  el.addEventListener('input', function(){
+    const v = parseFloat(el.value);
+    fn(v);
+    $(vid).textContent = fmt ? fmt(v) : el.value;
+  });
+}
+bindRange('cDim',   'vDim',   function(v){ dim = v / 100; });
+bindRange('cJit',   'vJit',   function(v){ jitter = v / 100; });
+bindRange('cRel',   'vRel',   function(v){ reliefK = v / 100; });
+bindRange('cMea',   'vMea',   function(v){ meanderK = v / 100; });
+bindRange('cTrees', 'vTrees', function(v){ trees = v; });
+bindRange('cPar',   'vPar',   function(v){ parK = v / 100; });
+bindRange('cCamH',  'vCamH',  function(v){ CAM_H = v; });
+bindRange('cHzn',   'vHzn',   function(v){ setHorizon(v / 100); });
+bindRange('cFacet', 'vFacet', function(v){ facet = v; buildMesh(facet); });
+bindRange('cSpeed', 'vSpeed', function(v){ speed = v / 10; },
+                              function(v){ return (v / 10).toFixed(1); });
+
+function toggle(id, get, set){
+  const el = $(id);
+  el.addEventListener('click', function(){
+    set(!get());
+    el.className = get() ? 'on' : '';
+  });
+}
+toggle('bPlay', function(){ return playing; }, function(v){
+  playing = v; $('bPlay').textContent = v ? 'pause' : 'play';
+});
+toggle('bWire', function(){ return wire;    }, function(v){ wire = v; });
+toggle('bMtn',  function(){ return showMtn; }, function(v){ showMtn = v; });
+toggle('bCld',  function(){ return showCld; }, function(v){ showCld = v; });
+toggle('bHud',  function(){ return hudOn;   }, function(v){
+  hudOn = v; $('hud').className = v ? 'hud' : 'hud off';
+});
+$('bReset').addEventListener('click', function(){ world = 0; elapsed = 0; });
+
+/* 5 Hz, matching the console. A spike at 60 fps would flatter the motion and
+   hide whether the hills roll acceptably at the rate the device can manage. */
+const HZ = 5, DT = 1 / HZ;
+setInterval(function(){
+  if (playing){ world += (speed / 3.6) * DT; elapsed += DT; }
+  draw();
+  $('sTri').textContent = triCount;
+  $('sMs').textContent = msAvg.toFixed(1);
+  $('oSpd').textContent = speed.toFixed(1);
+  $('oDst').textContent = (world / 1000).toFixed(2);
+  $('oInc').textContent = (2.6 + 3.2 * Math.sin(world / 118)).toFixed(1);
+  const m = Math.floor(elapsed / 60), s = Math.floor(elapsed % 60);
+  $('oTme').textContent = m + ':' + (s < 10 ? '0' : '') + s;
+}, 1000 / HZ);
+
+/* Any slider can be set from the query string — ?dim=70&speed=90&world=400 —
+   so a particular look can be linked to rather than described. */
+(function(){
+  const q = window.location.search.replace(/^\?/, '');
+  if (!q) return;
+  const parts = q.split('&');
+  const map = {
+    dim: 'cDim', jitter: 'cJit', relief: 'cRel', meander: 'cMea',
+    trees: 'cTrees', parallax: 'cPar', camh: 'cCamH', horizon: 'cHzn',
+    facet: 'cFacet', speed: 'cSpeed'
+  };
+  for (let i = 0; i < parts.length; i++){
+    const kv = parts[i].split('=');
+    const k = kv[0], v = kv[1];
+    if (k === 'world'){ world = parseFloat(v) || 0; continue; }
+    if (!map[k]) continue;
+    const el = document.getElementById(map[k]);
+    el.value = v;
+    /* Reuse the listeners rather than duplicating every assignment. */
+    el.dispatchEvent(new Event('input'));
+  }
+})();
+
+setHorizon(parseFloat($('cHzn').value) / 100);
+buildMesh(facet);
+draw();
+</script>
+</body>
+</html>

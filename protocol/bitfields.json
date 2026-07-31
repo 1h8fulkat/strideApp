@@ -1,0 +1,596 @@
+[
+  {
+    "id": 0,
+    "name": "Kph",
+    "converter": "SpeedConverter",
+    "readOnly": false
+  },
+  {
+    "id": 1,
+    "name": "Grade",
+    "converter": "GradeConverter",
+    "readOnly": false
+  },
+  {
+    "id": 2,
+    "name": "Resistance",
+    "converter": "ResistanceConverter",
+    "readOnly": false
+  },
+  {
+    "id": 3,
+    "name": "Watts",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 4,
+    "name": "CurrentDistance",
+    "converter": "IntConverter",
+    "readOnly": true
+  },
+  {
+    "id": 5,
+    "name": "Rpm",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 6,
+    "name": "Distance",
+    "converter": "IntConverter",
+    "readOnly": true
+  },
+  {
+    "id": 7,
+    "name": "KeyObject",
+    "converter": "KeyObjConverter",
+    "readOnly": true
+  },
+  {
+    "id": 8,
+    "name": "FanSpeed",
+    "converter": "ByteConverter",
+    "readOnly": false
+  },
+  {
+    "id": 9,
+    "name": "Volume",
+    "converter": "ByteConverter",
+    "readOnly": false
+  },
+  {
+    "id": 10,
+    "name": "Pulse",
+    "converter": "PulseConverter",
+    "readOnly": false
+  },
+  {
+    "id": 11,
+    "name": "RunningTime",
+    "converter": "IntConverter",
+    "readOnly": true
+  },
+  {
+    "id": 12,
+    "name": "WorkoutMode",
+    "converter": "ModeConverter",
+    "readOnly": false
+  },
+  {
+    "id": 13,
+    "name": "Calories",
+    "converter": "CaloriesConverter",
+    "readOnly": true
+  },
+  {
+    "id": 14,
+    "name": "AudioSource",
+    "converter": "AudioSourceConverter",
+    "readOnly": false
+  },
+  {
+    "id": 15,
+    "name": "LapTime",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 16,
+    "name": "ActualKph",
+    "converter": "SpeedConverter",
+    "readOnly": true
+  },
+  {
+    "id": 17,
+    "name": "ActualIncline",
+    "converter": "GradeConverter",
+    "readOnly": true
+  },
+  {
+    "id": 18,
+    "name": "ActualResistance",
+    "converter": "ResistanceConverter",
+    "readOnly": true
+  },
+  {
+    "id": 19,
+    "name": "ActualDistance",
+    "converter": "IntConverter",
+    "readOnly": true
+  },
+  {
+    "id": 20,
+    "name": "CurrentTime",
+    "converter": "IntConverter",
+    "readOnly": true
+  },
+  {
+    "id": 21,
+    "name": "CurrentCalories",
+    "converter": "CaloriesConverter",
+    "readOnly": true
+  },
+  {
+    "id": 22,
+    "name": "GoalTime",
+    "converter": "IntConverter",
+    "readOnly": false
+  },
+  {
+    "id": 23,
+    "name": "IntervalKph",
+    "converter": "IntervalDoubleConverter",
+    "readOnly": true
+  },
+  {
+    "id": 24,
+    "name": "Age",
+    "converter": "ByteConverter",
+    "readOnly": false
+  },
+  {
+    "id": 25,
+    "name": "Weight",
+    "converter": "DoubleConverter",
+    "readOnly": false
+  },
+  {
+    "id": 26,
+    "name": "Gear",
+    "converter": "GearConverter",
+    "readOnly": false
+  },
+  {
+    "id": 27,
+    "name": "MaxGrade",
+    "converter": "GradeConverter",
+    "readOnly": true
+  },
+  {
+    "id": 28,
+    "name": "MinGrade",
+    "converter": "GradeConverter",
+    "readOnly": true
+  },
+  {
+    "id": 29,
+    "name": "TransMax",
+    "converter": "ShortConverter",
+    "readOnly": false
+  },
+  {
+    "id": 30,
+    "name": "MaxKph",
+    "converter": "SpeedConverter",
+    "readOnly": true
+  },
+  {
+    "id": 31,
+    "name": "MinKph",
+    "converter": "SpeedConverter",
+    "readOnly": true
+  },
+  {
+    "id": 34,
+    "name": "IdleTimeout",
+    "converter": "ShortConverter",
+    "readOnly": false
+  },
+  {
+    "id": 35,
+    "name": "PauseTimeout",
+    "converter": "ShortConverter",
+    "readOnly": false
+  },
+  {
+    "id": 36,
+    "name": "SystemUnits",
+    "converter": "BoolConverter",
+    "readOnly": false
+  },
+  {
+    "id": 37,
+    "name": "Gender",
+    "converter": "BoolConverter",
+    "readOnly": false
+  },
+  {
+    "id": 38,
+    "name": "FirstName",
+    "converter": "StringConverter",
+    "readOnly": false
+  },
+  {
+    "id": 39,
+    "name": "LastName",
+    "converter": "StringConverter",
+    "readOnly": false
+  },
+  {
+    "id": 40,
+    "name": "UserName",
+    "converter": "StringConverter",
+    "readOnly": false
+  },
+  {
+    "id": 41,
+    "name": "Height",
+    "converter": "ShortConverter",
+    "readOnly": false
+  },
+  {
+    "id": 42,
+    "name": "MaxResistanceLevel",
+    "converter": "ByteConverter",
+    "readOnly": true
+  },
+  {
+    "id": 43,
+    "name": "MaxWeight",
+    "converter": "DoubleConverter",
+    "readOnly": true
+  },
+  {
+    "id": 44,
+    "name": "WarmupDistance",
+    "converter": "IntConverter",
+    "readOnly": true
+  },
+  {
+    "id": 45,
+    "name": "WarmupTime",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 46,
+    "name": "WarmupTimeout",
+    "converter": "ShortConverter",
+    "readOnly": false
+  },
+  {
+    "id": 47,
+    "name": "WarmupCalories",
+    "converter": "CaloriesConverter",
+    "readOnly": true
+  },
+  {
+    "id": 48,
+    "name": "IntervalGrade",
+    "converter": "DoubleConverter",
+    "readOnly": true
+  },
+  {
+    "id": 49,
+    "name": "MaxPulse",
+    "converter": "ByteConverter",
+    "readOnly": true
+  },
+  {
+    "id": 51,
+    "name": "WtMaxKph",
+    "converter": "SpeedConverter",
+    "readOnly": true
+  },
+  {
+    "id": 52,
+    "name": "AverageGrade",
+    "converter": "GradeConverter",
+    "readOnly": true
+  },
+  {
+    "id": 53,
+    "name": "WtMaxGrade",
+    "converter": "GradeConverter",
+    "readOnly": true
+  },
+  {
+    "id": 54,
+    "name": "AverageWatts",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 55,
+    "name": "MaxWatts",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 56,
+    "name": "AverageRpm",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 57,
+    "name": "MaxRpm",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 58,
+    "name": "KphGoal",
+    "converter": "SpeedConverter",
+    "readOnly": false
+  },
+  {
+    "id": 59,
+    "name": "GradeGoal",
+    "converter": "GradeConverter",
+    "readOnly": false
+  },
+  {
+    "id": 60,
+    "name": "ResistanceGoal",
+    "converter": "ResistanceConverter",
+    "readOnly": false
+  },
+  {
+    "id": 61,
+    "name": "WattGoal",
+    "converter": "ShortConverter",
+    "readOnly": false
+  },
+  {
+    "id": 63,
+    "name": "RpmGoal",
+    "converter": "ShortConverter",
+    "readOnly": false
+  },
+  {
+    "id": 64,
+    "name": "DistanceGoal",
+    "converter": "IntConverter",
+    "readOnly": false
+  },
+  {
+    "id": 65,
+    "name": "PulseGoal",
+    "converter": "ByteConverter",
+    "readOnly": false
+  },
+  {
+    "id": 66,
+    "name": "StartUpTime",
+    "converter": "IntConverter",
+    "readOnly": true
+  },
+  {
+    "id": 67,
+    "name": "BeltTotalTime",
+    "converter": "IntConverter",
+    "readOnly": true
+  },
+  {
+    "id": 68,
+    "name": "BeltTotalMeters",
+    "converter": "IntConverter",
+    "readOnly": true
+  },
+  {
+    "id": 69,
+    "name": "MotorTotalDistance",
+    "converter": "IntConverter",
+    "readOnly": true
+  },
+  {
+    "id": 70,
+    "name": "TotalTime",
+    "converter": "IntConverter",
+    "readOnly": true
+  },
+  {
+    "id": 71,
+    "name": "CoolDownTimeout",
+    "converter": "ShortConverter",
+    "readOnly": false
+  },
+  {
+    "id": 72,
+    "name": "CoolDownTime",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 73,
+    "name": "CoolDownDistance",
+    "converter": "IntConverter",
+    "readOnly": true
+  },
+  {
+    "id": 74,
+    "name": "CoolDownCalories",
+    "converter": "CaloriesConverter",
+    "readOnly": true
+  },
+  {
+    "id": 75,
+    "name": "VerticalMeterNet",
+    "converter": "VerticalMeterConverter",
+    "readOnly": true
+  },
+  {
+    "id": 76,
+    "name": "VerticalMeterGain",
+    "converter": "VerticalMeterConverter",
+    "readOnly": true
+  },
+  {
+    "id": 77,
+    "name": "Reps",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 78,
+    "name": "LeftReps",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 79,
+    "name": "RightReps",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 80,
+    "name": "RepLength",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 81,
+    "name": "RepLeftLength",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 82,
+    "name": "RepRightLength",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 83,
+    "name": "BurnRate",
+    "converter": "BurnRateConverter",
+    "readOnly": false
+  },
+  {
+    "id": 84,
+    "name": "AvgBurnRate",
+    "converter": "BurnRateConverter",
+    "readOnly": true
+  },
+  {
+    "id": 85,
+    "name": "MaxBurnRate",
+    "converter": "BurnRateConverter",
+    "readOnly": true
+  },
+  {
+    "id": 86,
+    "name": "IntervalRpm",
+    "converter": "IntervalIntConverter",
+    "readOnly": true
+  },
+  {
+    "id": 87,
+    "name": "IntervalResistance",
+    "converter": "IntervalIntConverter",
+    "readOnly": true
+  },
+  {
+    "id": 94,
+    "name": "GoalCalories",
+    "converter": "CaloriesConverter",
+    "readOnly": false
+  },
+  {
+    "id": 95,
+    "name": "IdleModeLockout",
+    "converter": "BoolConverter",
+    "readOnly": false
+  },
+  {
+    "id": 96,
+    "name": "StartRequested",
+    "converter": "BoolConverter",
+    "readOnly": true
+  },
+  {
+    "id": 98,
+    "name": "FanState",
+    "converter": "FanStateConverter",
+    "readOnly": false
+  },
+  {
+    "id": 100,
+    "name": "ActivationLock",
+    "converter": "ByteConverter",
+    "readOnly": false
+  },
+  {
+    "id": 103,
+    "name": "PausedTime",
+    "converter": "IntConverter",
+    "readOnly": true
+  },
+  {
+    "id": 107,
+    "name": "SleepTimerState",
+    "converter": "BoolConverter",
+    "readOnly": false
+  },
+  {
+    "id": 108,
+    "name": "RequireStartRequested",
+    "converter": "BoolConverter",
+    "readOnly": false
+  },
+  {
+    "id": 109,
+    "name": "Strokes",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 110,
+    "name": "StrokesPerMin",
+    "converter": "ByteConverter",
+    "readOnly": true
+  },
+  {
+    "id": 111,
+    "name": "FiveHundredSplit",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 112,
+    "name": "AvgFiveHundredSplit",
+    "converter": "ShortConverter",
+    "readOnly": true
+  },
+  {
+    "id": 115,
+    "name": "IsClubUnit",
+    "converter": "BoolConverter",
+    "readOnly": true
+  },
+  {
+    "id": 116,
+    "name": "IsReadyToDisconnect",
+    "converter": "BoolConverter",
+    "readOnly": true
+  },
+  {
+    "id": 119,
+    "name": "IsConstantWattsMode",
+    "converter": "BoolConverter",
+    "readOnly": false
+  }
+]

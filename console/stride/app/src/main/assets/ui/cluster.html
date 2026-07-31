@@ -1,0 +1,870 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280,height=800,initial-scale=1">
+<title>STRIDE · Cluster</title>
+<style>
+/* ---------------------------------------------------------------------------
+   STRIDE · CLUSTER
+
+   A machined instrument cluster. Ported from
+   claudeDesign/design_handoff_stride_console/designs/STRIDE 2 Cluster.dc.html.
+
+   Graphite, two 300px dials flanking a centre bay, and every figure set in a
+   monospace face — which is the whole idea. Proportional digits shuffle
+   sideways as they change and a treadmill readout changes five times a second;
+   mono digits sit still and only the glyph swaps. This is the direction for
+   someone who wants to read instruments rather than be encouraged.
+
+   It is also the only one of the four handoff directions that left a real
+   band for the coach — telemetry at 444, coach at 552, controls at 660, none
+   of them touching. The other three had to be squeezed to make room.
+
+   Vertical budget, fixed:
+
+        0 –  66   chrome bar
+      104 – 420   dials and centre bay
+      444 – 532   telemetry strip
+      552 – 640   coach, docked. Empty band when the coach is silent.
+      660 – 764   control row
+
+   Chromium 83: no `inset`, no flexbox `gap`, no `:has()`, no CSS nesting.
+--------------------------------------------------------------------------- */
+:root{
+  --bg:#0d0f10;
+  --bay:#121517;
+  --panel:#141719;
+  --chrome:#101315;
+  --line:#23282b;
+  --hair:#1b1f22;
+  --ink:#eef3f5;
+  --soft:#c3cdd1;
+  --dim:#8b969b;
+  --ghost:#454d51;
+  --accent:#6fd0e0;
+  --warn:#e5b567;
+  --alert:#d92d20;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  width:1280px;height:800px;overflow:hidden;
+  background:var(--bg);
+  background-image:linear-gradient(180deg,#131618 0%,#0b0d0e 55%,#0d0f10 100%);
+  color:var(--ink);
+  font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;
+  font-weight:300;
+  -webkit-font-smoothing:antialiased;
+  user-select:none;
+  -webkit-tap-highlight-color:rgba(0,0,0,0);
+}
+*:focus{outline:none}
+button{font-family:inherit;color:inherit;background:none;border:none;text-align:left;
+       -webkit-tap-highlight-color:rgba(0,0,0,0);outline:none;touch-action:manipulation}
+
+/* Every figure on the console. Mono so the digits do not dance. */
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+      font-variant-numeric:tabular-nums}
+
+.screen{position:absolute;top:0;right:0;bottom:0;left:0;display:none}
+.screen.on{display:block}
+.gone{display:none !important}
+
+.bay{position:relative;display:block;background:var(--panel);
+     border:1px solid var(--line);border-radius:12px}
+.bay.down{background:#0f1214}
+.bay.pick{background:#182226;border-color:var(--accent)}
+
+/* ---- chrome bar ----------------------------------------------------------- */
+.chrome{position:absolute;left:0;top:0;width:1280px;height:66px;
+        background:var(--chrome);border-bottom:1px solid var(--line)}
+.ch{position:absolute;top:25px;font-size:14px;letter-spacing:.22em}
+.ch.clock{top:24px;left:34px;font-size:17px;letter-spacing:.08em;color:var(--dim)}
+.ch.mode{left:150px;letter-spacing:.26em;color:var(--accent)}
+.ch.mid{left:0;width:1280px;text-align:center;color:var(--soft)}
+.ch.who{right:34px;color:var(--dim)}
+
+/* ===================== setup ============================================== */
+.title{position:absolute;left:0;top:150px;width:1280px;text-align:center;
+       font-size:15px;letter-spacing:.34em;color:var(--dim)}
+
+.row4{position:absolute;left:70px;top:230px;width:1140px;display:flex}
+.row4 .bay{flex:1;height:320px;margin-right:20px}
+.row4 .bay:last-child{margin-right:0}
+.row4 .nm{position:absolute;left:0;top:120px;width:100%;text-align:center;
+          font-size:40px;font-weight:300}
+.row4 .sub{position:absolute;left:0;top:186px;width:100%;text-align:center;
+           font-size:14px;color:var(--dim)}
+
+.row2{position:absolute;left:180px;top:230px;width:920px;display:flex}
+.row2 .bay{flex:1;height:340px;margin-right:28px}
+.row2 .bay:last-child{margin-right:0}
+.row2 .nm{position:absolute;left:0;top:128px;width:100%;text-align:center;
+          font-size:52px;font-weight:300}
+.row2 .sub{position:absolute;left:40px;top:206px;width:calc(100% - 80px);text-align:center;
+           font-size:17px;line-height:1.5;color:var(--dim)}
+.row2 .bay.pick .nm{color:var(--accent)}
+.row2 .bay.pick .sub{color:#a9c4c9}
+
+.cap{position:absolute;left:34px;font-size:13px;letter-spacing:.3em;color:var(--dim)}
+.mins{position:absolute;left:34px;top:134px;width:1212px;display:flex}
+.mins .bay{flex:1;height:100px;margin-right:12px;border-radius:8px}
+.mins .bay:last-child{margin-right:0}
+.mins .nm{position:absolute;left:0;top:30px;width:100%;text-align:center;font-size:32px}
+.mins .bay.pick .nm{color:var(--accent)}
+.shapes{position:absolute;left:34px;top:308px;width:1212px;display:flex}
+.shapes .bay{flex:1;height:280px;margin-right:16px;border-radius:10px}
+.shapes .bay:last-child{margin-right:0}
+.shapes .nm{position:absolute;left:24px;top:24px;font-size:22px;letter-spacing:.06em}
+.shapes .sub{position:absolute;left:24px;top:58px;font-size:13px;color:var(--dim)}
+.shapes .bay.pick .nm{color:var(--accent)}
+.shapes .bay.pick .sub{color:#a9c4c9}
+.shapes svg{position:absolute;left:24px;bottom:26px;width:230px;height:100px}
+
+.key2{position:absolute;width:220px;height:100px;background:#1b2023;
+      border:1px solid #2c3337;border-radius:6px}
+.key2.down{background:#0f1214}
+.key2 .lab{position:absolute;left:0;top:38px;width:100%;text-align:center;
+           font-size:17px;letter-spacing:.2em;color:var(--soft)}
+#btnBack{left:34px;top:660px}
+#btnSettings{right:34px;top:660px}
+
+/* ===================== live =============================================== */
+/* The dials. A 12px ring on a 1px dotted bezel, exactly as machined as the
+   panel can manage at this pixel density. */
+.dial{position:absolute;top:104px;width:300px;height:300px;border-radius:150px;
+      background:var(--panel);border:1px solid var(--line)}
+.dial.l{left:48px}
+.dial.r{right:48px}
+.dial svg{position:absolute;left:0;top:0;width:300px;height:300px}
+.dial .k{position:absolute;left:0;top:64px;width:300px;text-align:center;
+         font-size:13px;letter-spacing:.28em;color:var(--dim)}
+.dial .v{position:absolute;left:0;top:96px;width:300px;text-align:center;
+         font-size:86px;font-weight:500;letter-spacing:-.03em;line-height:1}
+.dial .n{position:absolute;left:0;top:196px;width:300px;text-align:center;
+         font-size:15px;letter-spacing:.06em}
+.dial.l .n{color:var(--accent)}
+.dial.r .n{color:var(--warn)}
+
+.centre{position:absolute;left:400px;top:88px;width:480px;height:332px;
+        border-radius:24px;background:var(--bay);border:1px solid var(--line)}
+.centre .k{position:absolute;left:0;top:22px;width:480px;text-align:center;
+           font-size:13px;letter-spacing:.3em;color:var(--dim)}
+.hero{display:none}
+.hero.on{display:block}
+
+#heroLaps svg{position:absolute;left:0;top:56px;width:480px;height:240px}
+#heroLaps .n{position:absolute;left:0;top:130px;width:480px;text-align:center;
+             font-size:96px;font-weight:500;line-height:1}
+#heroLaps .c{position:absolute;left:0;top:246px;width:480px;text-align:center;
+             font-size:13px;letter-spacing:.24em;color:var(--dim)}
+
+#heroPath svg{position:absolute;left:20px;top:60px;width:440px;height:190px}
+#heroPath .ft{position:absolute;left:20px;top:258px;width:440px;display:flex;
+              font-size:14px;letter-spacing:.04em;color:var(--dim)}
+#heroPath .ft div{flex:1}
+#heroPath .ft .mid{text-align:center;color:var(--ink)}
+#heroPath .ft .end{text-align:right}
+
+#heroWarm .c{position:absolute;left:0;top:110px;width:480px;text-align:center;
+             font-size:118px;font-weight:500;line-height:1;letter-spacing:-.03em}
+#heroWarm .n{position:absolute;left:0;top:258px;width:480px;text-align:center;
+             font-size:15px;color:var(--dim)}
+
+/* ---- telemetry ------------------------------------------------------------ */
+.tele{position:absolute;left:34px;top:444px;width:1212px;height:88px;
+      background:var(--chrome);border-top:1px solid var(--line);
+      border-bottom:1px solid var(--line);display:flex}
+.tele .cell{flex:1;position:relative;border-right:1px solid var(--hair)}
+.tele .cell:last-child{border-right:none}
+.tele .k{position:absolute;left:26px;top:16px;font-size:12px;letter-spacing:.24em;color:var(--dim)}
+.tele .v{position:absolute;left:26px;top:40px;font-size:34px;font-weight:500}
+.tele .v .u{font-size:16px;color:var(--dim)}
+.tele .hr .k{color:var(--ghost)}
+.tele .hr .v{color:var(--ghost)}
+
+/* ---- coach ---------------------------------------------------------------- */
+/* Its own band, below the telemetry strip. Covers nothing at any time. */
+.coach{position:absolute;left:34px;top:552px;width:1212px;height:88px;
+       background:#14191b;border:1px solid #2c383c;border-radius:6px;
+       opacity:0;pointer-events:none;transition:opacity .3s ease}
+.coach.show{opacity:1;pointer-events:auto}
+.coach.down{background:#1c2326}
+.coach .w{position:absolute;left:22px;top:30px;width:96px;height:28px;line-height:28px;
+          text-align:center;background:var(--accent);color:#08161a;
+          font-size:12px;letter-spacing:.22em;border-radius:3px}
+.coach .x{position:absolute;right:22px;top:34px;font-size:12px;letter-spacing:.2em;color:var(--dim)}
+.coach .t{position:absolute;left:142px;top:22px;width:860px;font-size:23px;font-weight:300;
+          line-height:1.35;overflow:hidden;max-height:62px}
+
+/* ---- control row ---------------------------------------------------------- */
+/* A lit top edge on every key: these are meant to read as machined buttons in
+   a bezel, and the highlight is what sells the bevel at this size. */
+.controls{position:absolute;left:34px;top:660px;width:1212px;display:flex}
+.controls .key{flex:1;height:104px;margin-right:10px;position:relative;
+               background:#1b2023;border:1px solid #2c3337;border-top:1px solid #3b444a;
+               border-radius:6px}
+.controls .key.down{background:#0f1214}
+.controls .key .lab{position:absolute;left:0;top:40px;width:100%;text-align:center;
+                    font-size:18px;letter-spacing:.16em}
+.controls .key .sym{position:absolute;left:0;top:24px;width:100%;text-align:center;
+                    font-size:36px;font-weight:300}
+.controls .key .sub{position:absolute;left:0;bottom:14px;width:100%;text-align:center;
+                    font-size:12px;letter-spacing:.2em;color:var(--dim)}
+.controls .key.fan{margin-right:22px}
+.controls .key.fan .lab{top:28px}
+.controls .key.fan .sub{bottom:16px;font-size:13px;letter-spacing:0;color:var(--accent)}
+.controls .stop{width:216px;flex:none;height:104px;background:var(--alert);
+                border:1px solid #ff6a5c;border-radius:12px;position:relative}
+.controls .stop.down{background:#a8221a}
+.controls .stop .lab{position:absolute;left:0;top:38px;width:100%;text-align:center;
+                     font-size:24px;font-weight:600;letter-spacing:.2em;color:#fff}
+.controls .key.mute{opacity:.45}
+
+/* ---- paused ---------------------------------------------------------------- */
+.paused{position:absolute;top:0;right:0;bottom:0;left:0;display:none;z-index:40}
+.paused.on{display:block}
+.paused .scrim{position:absolute;left:0;top:0;width:1280px;height:648px;
+               background:rgba(8,10,11,.975)}
+.paused .k{position:absolute;left:0;top:180px;width:1280px;text-align:center;
+           font-size:15px;letter-spacing:.34em;color:var(--accent)}
+.paused .h{position:absolute;left:0;top:230px;width:1280px;text-align:center;
+           font-size:112px;font-weight:500;letter-spacing:-.03em}
+.paused .s{position:absolute;left:0;top:360px;width:1280px;text-align:center;
+           font-size:16px;letter-spacing:.06em;color:var(--dim)}
+.paused .row{position:absolute;left:300px;top:400px;width:680px;display:flex}
+.paused .row .b{flex:1;height:136px;margin-right:20px;position:relative;
+                background:#1b2023;border:1px solid #2c3337;border-radius:8px}
+.paused .row .b:last-child{margin-right:0}
+.paused .row .b.down{background:#0f1214}
+.paused .row .b.go{background:#173238;border-color:var(--accent)}
+.paused .row .lab{position:absolute;left:0;top:54px;width:100%;text-align:center;
+                  font-size:23px;letter-spacing:.2em;color:var(--soft)}
+.paused .row .b.go .lab{color:var(--accent)}
+
+/* ---- safety key ------------------------------------------------------------ */
+.safety{position:absolute;top:0;right:0;bottom:0;left:0;display:none;
+        background:#160604;z-index:60}
+.safety.on{display:block}
+.safety .frame{position:absolute;left:0;top:0;width:1280px;height:800px;
+               border:14px solid var(--alert);animation:flash 1.1s infinite}
+@keyframes flash{0%,100%{opacity:1}50%{opacity:.3}}
+.safety .k{position:absolute;left:0;top:170px;width:1280px;text-align:center;
+           font-size:20px;letter-spacing:.36em;color:#ff8a7d}
+.safety .h{position:absolute;left:0;top:224px;width:1280px;text-align:center;
+           font-size:96px;font-weight:600;letter-spacing:-.02em;color:#fff}
+.safety .s{position:absolute;left:0;top:376px;width:1280px;text-align:center;
+           font-size:24px;color:#e0aaa2}
+.safety .hold{position:absolute;left:390px;top:508px;width:500px;height:130px;
+              border:3px solid var(--alert);border-radius:10px;overflow:hidden}
+.safety .hold .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(217,45,32,.32)}
+.safety .hold .lab{position:absolute;left:0;top:50px;width:100%;text-align:center;
+                   font-size:21px;letter-spacing:.2em;color:#ff8a7d}
+
+/* ---- summary ---------------------------------------------------------------- */
+.sum .k{position:absolute;left:0;top:140px;width:1280px;text-align:center;
+        font-size:14px;letter-spacing:.34em;color:var(--accent)}
+.sum .h{position:absolute;left:0;top:196px;width:1280px;text-align:center;
+        font-size:64px;font-weight:200}
+.sum .grid{position:absolute;left:70px;top:320px;width:1140px;display:flex;flex-wrap:wrap}
+.sum .grid .cell{width:360px;height:130px;margin:0 30px 20px 0;position:relative;
+                 background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.sum .grid .cell.last{margin-right:0}
+.sum .grid .kk{position:absolute;left:24px;top:20px;font-size:12px;letter-spacing:.24em;color:var(--dim)}
+.sum .grid .vv{position:absolute;left:24px;top:52px;font-size:52px;font-weight:500}
+.sum .grid .vv .u{font-size:22px;color:var(--dim)}
+.sum .done{position:absolute;left:490px;top:660px;width:300px;height:100px;
+           background:#173238;border:1px solid var(--accent);border-radius:8px}
+.sum .done.down{background:#0f2126}
+.sum .done .lab{position:absolute;left:0;top:38px;width:100%;text-align:center;
+                font-size:20px;letter-spacing:.2em;color:var(--accent)}
+
+/* ---- settings ---------------------------------------------------------------- */
+.settings{position:absolute;top:0;right:0;bottom:0;left:0;display:none;
+          background:rgba(13,15,16,.985);z-index:50}
+.settings.on{display:block}
+.settings .k{position:absolute;left:0;top:96px;width:1280px;text-align:center;
+             font-size:14px;letter-spacing:.34em;color:var(--dim)}
+.settings .h{position:absolute;left:0;top:132px;width:1280px;text-align:center;
+             font-size:48px;font-weight:200}
+.uis{position:absolute;left:34px;top:230px;width:1212px;display:flex}
+.uis .bay{flex:1;margin-right:16px;padding:14px 14px 20px;border-radius:10px}
+.uis .bay:last-child{margin-right:0}
+.uis .bay svg{display:block;width:100%;height:112px;border-radius:4px}
+.uis .nm{margin-top:14px;font-size:17px;letter-spacing:.16em;text-transform:uppercase;
+         text-align:center}
+.uis .bl{margin-top:8px;font-size:13px;color:var(--dim);line-height:1.4;
+         min-height:54px;text-align:center}
+.uis .bay.pick .nm{color:var(--accent)}
+.uis .bay.soon{opacity:.34}
+.settings .close{position:absolute;left:490px;top:626px;width:300px;height:100px;
+                 background:#173238;border:1px solid var(--accent);border-radius:8px}
+.settings .close.down{background:#0f2126}
+.settings .close .lab{position:absolute;left:0;top:38px;width:100%;text-align:center;
+                      font-size:19px;letter-spacing:.2em;color:var(--accent)}
+
+/* ---- sleep --------------------------------------------------------------- */
+.sleep{position:absolute;top:0;right:0;bottom:0;left:0;display:none;background:#000;z-index:80}
+.sleep.on{display:block}
+.sleep .t{position:absolute;left:0;top:300px;width:1280px;text-align:center;
+          font-size:112px;font-weight:200;color:#1c2225}
+.sleep .w{position:absolute;left:0;top:452px;width:1280px;text-align:center;
+          font-size:17px;letter-spacing:.3em;text-transform:uppercase;color:#161b1d}
+</style>
+</head>
+<body>
+
+<div class="chrome"></div>
+<div class="ch clock mono" id="clock">&mdash;</div>
+<div class="ch mode" id="modeWord">READY</div>
+<div class="ch mid" id="topLine">STRIDE</div>
+<div class="ch who" id="who">&mdash;</div>
+
+<!-- ===================== 01–04 · SETUP ================================= -->
+<div class="screen" id="scSetup">
+  <div class="step" id="stProfile">
+    <div class="title">SELECT PROFILE</div>
+    <div class="row4" id="people"></div>
+    <button class="key2" id="btnSettings"><span class="lab">SETTINGS</span></button>
+  </div>
+
+  <div class="step gone" id="stMode">
+    <div class="title">SESSION TYPE</div>
+    <div class="row2">
+      <button class="bay" id="pickWalk">
+        <span class="nm">WALK</span><span class="sub mono">CEILING 6.5 KM/H</span></button>
+      <button class="bay" id="pickRun">
+        <span class="nm">RUN</span><span class="sub mono">CEILING 19 KM/H</span></button>
+    </div>
+  </div>
+
+  <div class="step gone" id="stControl">
+    <div class="title">CONTROL MODE</div>
+    <div class="row2">
+      <button class="bay" id="pickCasual">
+        <span class="nm">MANUAL</span>
+        <span class="sub">You hold speed and incline. Laps counted.</span></button>
+      <button class="bay pick" id="pickGuided">
+        <span class="nm">GUIDED</span>
+        <span class="sub">Incline follows a profile. Speed stays yours.</span></button>
+    </div>
+  </div>
+
+  <div class="step gone" id="stPlan">
+    <div class="cap" style="top:100px">DURATION</div>
+    <div class="mins" id="mins"></div>
+    <div class="cap" style="top:274px">INCLINE PROFILE</div>
+    <div class="shapes" id="shapes"></div>
+  </div>
+
+  <button class="key2 gone" id="btnBack"><span class="lab">BACK</span></button>
+</div>
+
+<!-- ===================== 05–09 · LIVE ================================== -->
+<div class="screen" id="scLive">
+  <div class="dial l">
+    <svg viewBox="0 0 300 300">
+      <circle cx="150" cy="150" r="136" fill="none" stroke="#1e2225" stroke-width="1" stroke-dasharray="2 11"/>
+      <circle cx="150" cy="150" r="120" fill="none" stroke="#20262a" stroke-width="12"/>
+      <circle id="incArc" cx="150" cy="150" r="120" fill="none" stroke="#6fd0e0" stroke-width="12"
+              pathLength="1000" stroke-dasharray="0 1000" transform="rotate(-90 150 150)"/>
+    </svg>
+    <div class="k">INCLINE %</div>
+    <div class="v mono" id="incline">0.0</div>
+    <div class="n mono" id="inclineNote">MANUAL</div>
+  </div>
+
+  <div class="dial r">
+    <svg viewBox="0 0 300 300">
+      <circle cx="150" cy="150" r="136" fill="none" stroke="#1e2225" stroke-width="1" stroke-dasharray="2 11"/>
+      <circle cx="150" cy="150" r="120" fill="none" stroke="#20262a" stroke-width="12"/>
+      <circle id="spdArc" cx="150" cy="150" r="120" fill="none" stroke="#eef3f5" stroke-width="12"
+              pathLength="1000" stroke-dasharray="0 1000" transform="rotate(-90 150 150)"/>
+      <!-- The plan's suggestion, as a tick on the bezel. It is never applied. -->
+      <circle id="spdTick" cx="150" cy="150" r="120" fill="none" stroke="#e5b567" stroke-width="12"
+              pathLength="1000" stroke-dasharray="0 1000" transform="rotate(-90 150 150)"/>
+    </svg>
+    <div class="k">SPEED KM/H</div>
+    <div class="v mono" id="speed">0.0</div>
+    <div class="n mono" id="suggest"></div>
+  </div>
+
+  <div class="centre">
+    <div class="k" id="centreLabel">&mdash;</div>
+
+    <div class="hero" id="heroLaps">
+      <svg viewBox="0 0 480 240">
+        <path id="lapRail" fill="none" stroke="#20262a" stroke-width="9"/>
+        <path id="lapArc"  fill="none" stroke="#6fd0e0" stroke-width="9" stroke-linecap="round"
+              pathLength="1000" stroke-dasharray="0 1000"/>
+        <line id="lapTick" stroke="#c3cdd1" stroke-width="2"/>
+      </svg>
+      <div class="n mono" id="laps">0</div>
+      <div class="c">LAPS &middot; 400 M EACH</div>
+    </div>
+
+    <div class="hero" id="heroPath">
+      <svg viewBox="0 0 440 190">
+        <line id="gridC" x1="0" x2="440" stroke="#2c3236" stroke-width="1" stroke-dasharray="3 6"/>
+        <line id="gridB" x1="0" x2="440" stroke="#1c2124" stroke-width="1"/>
+        <line id="gridA" x1="0" x2="440" stroke="#1c2124" stroke-width="1"/>
+        <path id="profBase" fill="none" stroke="#3a4145" stroke-width="3"/>
+        <path id="profDone" fill="none" stroke="#6fd0e0" stroke-width="3"
+              pathLength="1000" stroke-dasharray="0 1000"/>
+        <circle id="walkDot" r="7" fill="#eef3f5"/>
+      </svg>
+      <div class="ft mono">
+        <div id="ftSeg">SEG &mdash;</div>
+        <div class="mid" id="ftName">&mdash;</div>
+        <div class="end" id="ftLeft">&mdash;</div>
+      </div>
+    </div>
+
+    <div class="hero" id="heroWarm">
+      <div class="c mono" id="warmClock">0:00</div>
+      <div class="n" id="warmNote">&mdash;</div>
+    </div>
+  </div>
+
+  <div class="tele">
+    <div class="cell"><div class="k">ELAPSED</div><div class="v mono" id="elapsed">0:00</div></div>
+    <div class="cell"><div class="k">DISTANCE</div><div class="v mono"><span id="dist">0.00</span><span class="u"> KM</span></div></div>
+    <div class="cell"><div class="k">CALORIES</div><div class="v mono" id="cals">0</div></div>
+    <div class="cell"><div class="k">CLIMBED</div><div class="v mono"><span id="climb">0</span><span class="u"> M</span></div></div>
+    <div class="cell hr"><div class="k">HEART RATE</div><div class="v mono" id="pulse">&mdash;&mdash;</div></div>
+  </div>
+
+  <div class="coach" id="coach">
+    <div class="w">COACH</div>
+    <div class="x">TAP TO DISMISS</div>
+    <div class="t" id="coachText"></div>
+  </div>
+
+  <div class="controls">
+    <button class="key" id="btnLead"><span class="lab" id="leadLab">PAUSE</span></button>
+    <button class="key" id="btnSpeedDown"><span class="sym">&minus;</span><span class="sub">SPEED</span></button>
+    <button class="key" id="btnSpeedUp"><span class="sym">+</span><span class="sub">SPEED</span></button>
+    <button class="key" id="btnInclineDown"><span class="sym">&minus;</span><span class="sub">INCLINE</span></button>
+    <button class="key" id="btnInclineUp"><span class="sym">+</span><span class="sub">INCLINE</span></button>
+    <button class="key fan" id="btnFan"><span class="lab">FAN</span><span class="sub mono" id="fanLab">0/4</span></button>
+    <button class="stop" id="btnStop"><span class="lab">STOP</span></button>
+  </div>
+
+  <div class="paused" id="paused">
+    <div class="scrim"></div>
+    <div class="k">BELT STOPPED &middot; SESSION HELD</div>
+    <div class="h mono" id="pausedAt">0:00</div>
+    <div class="s mono" id="pausedWhere">&mdash;</div>
+    <div class="row">
+      <button class="b go" id="btnResume"><span class="lab">RESUME</span></button>
+      <button class="b" id="btnEnd"><span class="lab">END &amp; SAVE</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 11 · SUMMARY ================================== -->
+<div class="screen sum" id="scSummary">
+  <div class="k" id="sumKind">SESSION COMPLETE</div>
+  <div class="h" id="sumHead">Nice work</div>
+  <div class="grid">
+    <div class="cell"><div class="kk">TIME</div><div class="vv mono" id="sumTime">0:00</div></div>
+    <div class="cell"><div class="kk">DISTANCE</div><div class="vv mono"><span id="sumDist">0.00</span><span class="u"> KM</span></div></div>
+    <div class="cell last"><div class="kk">CALORIES</div><div class="vv mono" id="sumCals">0</div></div>
+    <div class="cell"><div class="kk">AVG SPEED</div><div class="vv mono"><span id="sumAvg">0.0</span><span class="u"> KM/H</span></div></div>
+    <div class="cell"><div class="kk">MAX SPEED</div><div class="vv mono"><span id="sumMax">0.0</span><span class="u"> KM/H</span></div></div>
+    <div class="cell last"><div class="kk">CLIMBED</div><div class="vv mono"><span id="sumClimb">0</span><span class="u"> M</span></div></div>
+  </div>
+  <button class="done" id="btnDone"><span class="lab">DONE</span></button>
+</div>
+
+<!-- ===================== 10 · SAFETY KEY =============================== -->
+<div class="safety" id="safety">
+  <div class="frame"></div>
+  <div class="k">SAFETY KEY REMOVED</div>
+  <div class="h mono">BELT STOPPED</div>
+  <div class="s">Clip the key back onto the console, then hold below.</div>
+  <button class="hold" id="btnKeyBack">
+    <span class="fill" id="keyFill"></span>
+    <span class="lab">HOLD 2 s TO CLEAR</span>
+  </button>
+</div>
+
+<!-- ===================== SETTINGS ====================================== -->
+<div class="settings" id="settings">
+  <div class="k">CONSOLE</div>
+  <div class="h">Interface</div>
+  <div class="uis" id="uis"></div>
+  <button class="close" id="btnUiClose"><span class="lab">CLOSE</span></button>
+</div>
+
+<div class="sleep" id="sleep">
+  <div class="t mono" id="sleepClock">&mdash;</div>
+  <div class="w">Tap to wake</div>
+</div>
+
+<script src="stride-core.js"></script>
+<script src="stride-settings.js"></script>
+<script>
+const standalone = STRIDE.stub();
+const $ = STRIDE.$, tap = STRIDE.tap, mmss = STRIDE.mmss, nf = STRIDE.nf;
+
+/* Dial ranges. Fixed rather than adaptive: a gauge whose full scale moves is
+   not a gauge, and half the point of a dial is learning where 6 km/h sits. */
+const SPEED_FULL = 20, INCLINE_FULL = 12;
+
+/* ---- the lap track -------------------------------------------------------
+   Cluster's oval: 140px straights and r=96, inside the 480x240 centre bay. */
+const TRACK = STRIDE.track({straight:140, radius:96, cx:240, cy:120, squash:1});
+$('lapRail').setAttribute('d', TRACK.pathD(0));
+$('lapArc').setAttribute('d', TRACK.pathD(0));
+(() => {
+  const p = TRACK.atFraction(0), t = $('lapTick');
+  t.setAttribute('x1', p.x); t.setAttribute('y1', p.y - 10);
+  t.setAttribute('x2', p.x); t.setAttribute('y2', p.y + 10);
+})();
+
+/* ---- the incline profile -------------------------------------------------- */
+const PROF = {width:440, height:150, headroom:30};
+let prof = null, planName = '', planMinutes = 0;
+
+window.plan = function(p){
+  const steps = STRIDE.setPlan(p);
+  planName = (p && p.name) || '';
+  prof = STRIDE.profile(steps, PROF);
+  planMinutes = Math.round(prof.total / 60);
+  $('profBase').setAttribute('d', prof.d);
+  $('profDone').setAttribute('d', prof.d);
+  const mid = (prof.hi + prof.lo) / 2;
+  [['gridA', prof.hi], ['gridB', mid], ['gridC', 0]].forEach(([id, v]) => {
+    const y = prof.yFor(v).toFixed(1);
+    $(id).setAttribute('y1', y); $(id).setAttribute('y2', y);
+  });
+};
+
+/* ---- setup ---------------------------------------------------------------- */
+const STEPS = {profile:'stProfile', mode:'stMode', control:'stControl', plan:'stPlan'};
+const flow = STRIDE.flow(step => {
+  Object.keys(STEPS).forEach(k => $(STEPS[k]).classList.toggle('gone', k !== step));
+  $('btnBack').classList.toggle('gone', step === 'profile');
+});
+
+/* Read from Settings, never written here. A name offered on this picker
+   that Settings does not have is a walker who silently gets no coaching
+   and no history — coaching and recording are per person now. Rebuilt
+   whenever settings close, because somebody may have just been added. */
+function buildPeople(){
+  $('people').innerHTML = '';
+  STRIDE.profiles().forEach(name => {
+    const b = document.createElement('button');
+    b.className = 'bay';
+    b.innerHTML = '<span class="nm">' + name + '</span>' +
+                  '<span class="sub mono">READY</span>';
+    tap(b, () => flow.setProfile(name));
+    $('people').appendChild(b);
+  });
+}
+buildPeople();
+document.addEventListener('stride-settings-closed', buildPeople);
+
+STRIDE.DURATIONS.forEach(m => {
+  const b = document.createElement('button');
+  b.className = 'bay' + (m === flow.minutes ? ' pick' : '');
+  // Zero-padded: this is the direction where a column of figures should line up.
+  b.innerHTML = '<span class="nm mono">' +
+                (m <= 0 ? 'OPEN' : m < 10 ? '0' + m : m) + '</span>';
+  tap(b, () => {
+    flow.setMinutes(m);
+    [].forEach.call($('mins').children, c => c.classList.toggle('pick', c === b));
+  });
+  $('mins').appendChild(b);
+});
+
+/* Peak and gain rather than a blurb — the instrument reading of a template.
+   Gain assumes a 5 km/h walk, which is what the numbers are for: comparing
+   the four, not predicting the day. */
+STRIDE.SHAPES.forEach(s => {
+  const chosen = s.id === flow.shape;
+  const lo = Math.min.apply(null, s.points), hi = Math.max.apply(null, s.points);
+  const pts = s.points.map((v, i) =>
+    (i / (s.points.length - 1) * 250).toFixed(0) + ',' +
+    (92 - (v - lo) / (hi - lo) * 78).toFixed(0)).join(' ');
+  // 30 minutes at 5 km/h is 2500 m of run; mean grade over that is the gain.
+  const mean = s.points.reduce((a, v) => a + v, 0) / s.points.length;
+  const gain = Math.round(2500 * mean / 100);
+  const b = document.createElement('button');
+  b.className = 'bay' + (chosen ? ' pick' : '');
+  b.innerHTML =
+    '<span class="nm">' + s.name.toUpperCase() + '</span>' +
+    '<span class="sub mono">PEAK ' + hi.toFixed(1) + '% · GAIN ' + gain + ' M</span>' +
+    '<svg viewBox="0 0 250 100" preserveAspectRatio="none"><polyline points="' + pts +
+      '" fill="none" stroke="' + (chosen ? '#6fd0e0' : '#4a5257') + '" stroke-width="2"/></svg>';
+  tap(b, () => { flow.setShape(s.id); flow.commit(); });
+  $('shapes').appendChild(b);
+});
+
+tap($('pickWalk'),   () => flow.setMode('walk'));
+tap($('pickRun'),    () => flow.setMode('run'));
+tap($('pickCasual'), () => flow.setControl('casual'));
+tap($('pickGuided'), () => flow.setControl('guided'));
+tap($('btnBack'),    () => flow.back());
+
+/* ---- settings -------------------------------------------------------------- */
+function buildUis(){
+  const here = STRIDE.currentUi(), built = STRIDE.uiList(), box = $('uis');
+  box.innerHTML = '';
+  STRIDE.UI_META.forEach(u => {
+    const ready = built.indexOf(u.id) >= 0;
+    const b = document.createElement('button');
+    b.className = 'bay' + (u.id === here ? ' pick' : '') + (ready ? '' : ' soon');
+    b.innerHTML = '<svg viewBox="0 0 160 100" preserveAspectRatio="none">' + u.sketch + '</svg>' +
+                  '<div class="nm">' + u.name + '</div>' +
+                  '<div class="bl">' + (ready ? u.blurb : 'not in this build yet') + '</div>';
+    if (ready && u.id !== here) tap(b, () => Stride.setUi(u.id));
+    box.appendChild(b);
+  });
+}
+/* The settings screen is shared by all five interfaces — see
+   stride-settings.js. This document keeps the button and nothing else;
+   eight sections of real configuration maintained in five places is how
+   the copy nobody opens stops matching the store. */
+tap($('btnSettings'), () => STRIDE_SETTINGS.open());
+if ($('btnUiClose')) tap($('btnUiClose'), () => STRIDE_SETTINGS.close());
+
+/* ---- controls -------------------------------------------------------------- */
+let shownScreen = null, shownPhase = null;
+
+tap($('btnLead'), () => {
+  switch (shownPhase){
+    case 'warmup':   Stride.skipWarmup();   break;
+    case 'cooldown': Stride.skipCooldown(); break;
+    case 'paused':   Stride.resume();       break;
+    case 'active':   Stride.pause();        break;
+  }
+});
+tap($('btnStop'), () => {
+  if (shownPhase !== 'active' && shownPhase !== 'warmup' && shownPhase !== 'paused') return;
+  Stride.pause();
+  $('paused').classList.add('on');
+});
+tap($('btnResume'), () => { $('paused').classList.remove('on'); Stride.resume(); });
+tap($('btnEnd'),    () => { $('paused').classList.remove('on'); Stride.end(); });
+tap($('btnDone'),   () => Stride.home());
+tap($('btnFan'),    () => Stride.fan());
+
+STRIDE.stepper($('btnSpeedUp'),     d => Stride.speed(d),    0.1, 0.5);
+STRIDE.stepper($('btnSpeedDown'),   d => Stride.speed(-d),   0.1, 0.5);
+STRIDE.stepper($('btnInclineUp'),   d => Stride.incline(d),  0.5, 0.5);
+STRIDE.stepper($('btnInclineDown'), d => Stride.incline(-d), 0.5, 0.5);
+STRIDE.hold($('btnKeyBack'), 2000, () => Stride.ackDmk(),
+            p => { $('keyFill').style.width = (p * 100) + '%'; });
+
+/* ---- coach ----------------------------------------------------------------- */
+let coachTimer = null;
+tap($('coach'), () => {
+  $('coach').classList.remove('show');
+  clearTimeout(coachTimer);
+  Stride.hushCoach();
+});
+window.coach = function(c){
+  const line = (c && c.line) || '';
+  if (!line) return;
+  $('coachText').textContent = line;
+  $('coach').classList.add('show');
+  clearTimeout(coachTimer);
+  coachTimer = setTimeout(() => $('coach').classList.remove('show'),
+                          Math.min(18000, Math.max(9000, 5000 + line.length * 90)));
+};
+
+/* ---- sleep ----------------------------------------------------------------- */
+const SLEEP_AFTER_MS = 5 * 60 * 1000;
+let lastTouch = Date.now(), asleep = false;
+$('sleep').addEventListener('touchstart', e => { e.preventDefault(); wake(); }, {passive:false});
+$('sleep').addEventListener('mousedown',  e => { e.preventDefault(); wake(); });
+function wake(){
+  lastTouch = Date.now();
+  if (!asleep) return;
+  asleep = false;
+  STRIDE.suppress(500);
+  $('sleep').classList.remove('on');
+  Stride.dim(false);
+}
+document.addEventListener('touchstart', () => { lastTouch = Date.now(); }, {capture:true, passive:true});
+document.addEventListener('mousedown',  () => { lastTouch = Date.now(); }, {capture:true});
+setInterval(() => {
+  const restful = shownScreen === 'scSetup' || shownScreen === 'scSummary' || shownScreen === null;
+  if (!asleep && restful && Date.now() - lastTouch > SLEEP_AFTER_MS){
+    asleep = true;
+    $('sleep').classList.add('on');
+    Stride.dim(true);
+  }
+}, 5000);
+
+/* ---- screens --------------------------------------------------------------- */
+function showScreen(id){
+  if (id === shownScreen) return;
+  ['scSetup','scLive','scSummary'].forEach(s => $(s).classList.toggle('on', s === id));
+  if (id === 'scSetup'){ flow.reset(); STRIDE.resetDerived(); }
+  if (id !== 'scSetup') STRIDE_SETTINGS.close();
+  if (id !== 'scLive'){ $('paused').classList.remove('on'); $('coach').classList.remove('show'); }
+  lastTouch = Date.now();
+  shownScreen = id;
+}
+
+window.render = function(raw){
+  const s = STRIDE.adapt(raw);
+  const screen = STRIDE.screenFor(s);
+
+  $('safety').classList.toggle('on', s.safetyKey === 'out');
+  $('who').textContent = (s.profile || '').toUpperCase() + ' · HR ' +
+                         (s.session.pulse ? s.session.pulse : '——');
+
+  if (screen === 'welcome'){
+    showScreen('scSetup');
+    shownPhase = s.phase;
+    $('modeWord').textContent = 'READY';
+    $('topLine').textContent = 'STRIDE';
+    return;
+  }
+  if (screen === 'summary'){
+    showScreen('scSummary'); renderSummary(s); shownPhase = s.phase;
+    $('modeWord').textContent = 'COMPLETE';
+    $('topLine').textContent = 'SESSION COMPLETE';
+    return;
+  }
+
+  showScreen('scLive');
+  shownPhase = s.phase;
+  const guided = s.control === 'guided';
+  const timed  = s.phase === 'warmup' || s.phase === 'cooldown';
+
+  $('modeWord').textContent =
+      s.phase === 'warmup'   ? 'WARMING UP'
+    : s.phase === 'cooldown' ? 'COOLING DOWN'
+    : s.phase === 'paused'   ? 'HELD'
+    : s.ramping === 'resuming' ? 'RESUMING'
+    : s.mode === 'run' ? 'RUNNING' : 'WALKING';
+  $('topLine').textContent = guided
+    ? (planName + ' · ' + (s.plan.loops
+        ? 'OPEN · LAP ' + s.plan.lap
+        : planMinutes + ' MIN')).toUpperCase()
+    : (s.mode === 'run' ? 'MANUAL RUN' : 'MANUAL WALK');
+
+  /* Both needles come off the belt controller, never off the setpoint. */
+  $('incline').textContent = s.belt.incline.toFixed(1);
+  $('speed').textContent   = s.belt.speed.toFixed(1);
+  $('incArc').setAttribute('stroke-dasharray',
+    dash(s.belt.incline / INCLINE_FULL));
+  $('spdArc').setAttribute('stroke-dasharray',
+    dash(s.belt.speed / SPEED_FULL));
+
+  $('inclineNote').textContent = !guided ? 'MANUAL'
+                               : s.targets.inclineAuto ? 'PROFILE' : 'MANUAL OVERRIDE';
+
+  /* The suggestion is a bezel tick and a caption, not a needle. Nothing on the
+     console may act on it — the pace belongs to whoever is on the belt. */
+  const suggesting = guided && s.targets.suggest > 0 && !timed;
+  $('suggest').textContent = suggesting ? 'TGT ' + s.targets.suggest.toFixed(1) : '';
+  $('spdTick').setAttribute('stroke-dasharray',
+    suggesting ? tick(s.targets.suggest / SPEED_FULL) : '0 1000');
+
+  $('elapsed').textContent = mmss(s.session.elapsed);
+  $('dist').textContent    = STRIDE.km(s.session.distance);
+  $('cals').textContent    = nf(s.session.calories);
+  $('climb').textContent   = Math.round(s.session.climb);
+  $('pulse').textContent   = s.session.pulse ? s.session.pulse : '——';
+
+  $('fanLab').textContent  = s.fan + '/4';
+  $('leadLab').textContent = timed ? 'SKIP' : s.phase === 'paused' ? 'RESUME' : 'PAUSE';
+  const moving = s.phase === 'active' || timed;
+  $('btnSpeedUp').classList.toggle('mute', !moving);
+  $('btnSpeedDown').classList.toggle('mute', !moving);
+
+  const hero = timed ? 'heroWarm' : guided ? 'heroPath' : 'heroLaps';
+  ['heroLaps','heroPath','heroWarm'].forEach(h => $(h).classList.toggle('on', h === hero));
+  $('centreLabel').textContent =
+      timed  ? (s.phase === 'warmup' ? 'WARM-UP' : 'COOL-DOWN')
+    : guided ? 'INCLINE PROFILE'
+    : 'LAP COUNTER';
+
+  if (hero === 'heroLaps') renderLaps(s);
+  if (hero === 'heroPath') renderPath(s);
+  if (hero === 'heroWarm') renderWarm(s);
+
+  if (s.phase !== 'paused') $('paused').classList.remove('on');
+  if (s.phase === 'paused'){
+    $('paused').classList.add('on');
+    $('pausedAt').textContent = mmss(s.session.elapsed);
+    $('pausedWhere').textContent = guided && s.segment.count
+      ? 'SEG ' + s.segment.index + '/' + s.segment.count + ' · ' +
+        STRIDE.km(s.session.distance) + ' KM'
+      : STRIDE.km(s.session.distance) + ' KM';
+  }
+};
+
+/** A ring arc, clamped to the dial's scale. */
+function dash(f){
+  return (Math.max(0, Math.min(1, f)) * 1000).toFixed(1) + ' 1000';
+}
+/** A 6-unit mark at f, drawn as a gap-then-dash so it needs no dashoffset —
+ *  Chromium 83 animates dashoffset unevenly on a rotated circle. */
+function tick(f){
+  const at = Math.max(0, Math.min(0.99, f)) * 1000;
+  return '0 ' + at.toFixed(1) + ' 6 ' + Math.max(0, 994 - at).toFixed(1);
+}
+
+function renderLaps(s){
+  const d = s.session.distance;
+  $('laps').textContent = TRACK.laps(d);
+  $('lapArc').setAttribute('stroke-dasharray', TRACK.dash(d).toFixed(1) + ' 1000');
+  $('lapArc').style.opacity = TRACK.lapFraction(d) > 0.004 ? 1 : 0;
+}
+
+function renderPath(s){
+  if (!prof || prof.empty) return;
+  // Plan time: one lap of ground, and Kotlin wraps the clock into it.
+  const t = s.plan.elapsed;
+  $('profDone').setAttribute('stroke-dasharray', prof.dashAt(t).toFixed(1) + ' 1000');
+  const p = prof.atSeconds(t);
+  $('walkDot').setAttribute('cx', p.x.toFixed(1));
+  $('walkDot').setAttribute('cy', p.y.toFixed(1));
+  $('ftSeg').textContent  = 'SEG ' + s.segment.index + '/' + s.segment.count;
+  $('ftName').textContent = s.segment.name.toUpperCase();
+  $('ftLeft').textContent = '−' + mmss(s.segment.secondsLeft);
+}
+
+function renderWarm(s){
+  $('warmClock').textContent = mmss(s.phaseLeft);
+  /* A statement about what happens next, not a report on a plan that has not
+     started. No segment number, no plan clock. */
+  $('warmNote').textContent = s.phase !== 'warmup'
+    ? 'Easing down. Skip to finish.'
+    : s.plan.steps.length
+      ? 'Easy pace. The profile begins after the warm-up.'
+      : 'Easy pace. Skip whenever you are ready.';
+}
+
+function renderSummary(s){
+  $('sumKind').textContent = ('SESSION COMPLETE · ' +
+    (s.plan.name || (s.mode === 'run' ? 'MANUAL RUN' : 'MANUAL WALK')) +
+    ' ' + Math.round(s.session.elapsed / 60)).toUpperCase();
+  $('sumHead').textContent  = 'Nice work, ' + (s.profile || 'you');
+  $('sumTime').textContent  = mmss(s.session.elapsed);
+  $('sumDist').textContent  = STRIDE.km(s.session.distance);
+  $('sumCals').textContent  = nf(s.session.calories);
+  $('sumAvg').textContent   = s.session.avgSpeed.toFixed(1);
+  $('sumMax').textContent   = s.session.maxSpeed.toFixed(1);
+  $('sumClimb').textContent = Math.round(s.session.climb);
+}
+
+/* ---- clock ------------------------------------------------------------------ */
+setInterval(() => {
+  const t = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  $('clock').textContent = t;
+  $('sleepClock').textContent = t;
+}, 1000);
+
+showScreen('scSetup');
+if (standalone) STRIDE.demo();
+</script>
+</body>
+</html>

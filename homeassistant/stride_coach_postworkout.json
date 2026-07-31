@@ -1,0 +1,54 @@
+{
+  "alias": "STRIDE — post-workout reflection (rules)",
+  "description": "Fires the moment a workout reaches the summary screen. Deterministic, instant and offline: this is the layer that must never wait on an API. The LLM layer writes a richer follow-up separately.",
+  "mode": "single",
+  "triggers": [
+    {
+      "trigger": "state",
+      "entity_id": "sensor.treadmill_treadmill_mode",
+      "to": "summary"
+    }
+  ],
+  "conditions": [
+    {
+      "condition": "numeric_state",
+      "entity_id": "sensor.treadmill_treadmill_distance",
+      "above": 100
+    }
+  ],
+  "variables": {
+    "dist_m": "{{ states('sensor.treadmill_treadmill_distance') | float(0) }}",
+    "secs": "{{ states('sensor.treadmill_treadmill_elapsed') | float(0) }}",
+    "kcal": "{{ states('sensor.treadmill_treadmill_calories') | float(0) }}",
+    "kind": "{{ states('sensor.treadmill_treadmill_workout') }}",
+    "week_km": "{{ (states('sensor.treadmill_distance_weekly') | float(0)) / 1000 }}",
+    "week_n": "{{ states('sensor.treadmill_workouts_this_week') }}",
+    "km": "{{ (dist_m / 1000) | round(2) }}",
+    "mins": "{{ (secs / 60) | round(0) | int }}",
+    "pace": "{{ (dist_m / secs * 3.6) | round(1) if secs > 0 else 0 }}",
+    "headline": "{{ km }} km {{ kind }} in {{ mins }} min",
+    "body": "{{ kcal | round(0) | int }} kcal at {{ pace }} km/h average. That's {{ week_km | round(1) }} km across {{ week_n }} session(s) this week."
+  },
+  "actions": [
+    {
+      "action": "mqtt.publish",
+      "data": {
+        "topic": "stride/coach/message",
+        "retain": true,
+        "payload": "{{ {'headline': headline, 'body': body, 'kind': 'post_workout', 'source': 'rules', 'km': km, 'mins': mins, 'kcal': kcal | round(0) | int, 'pace': pace} | to_json }}"
+      }
+    },
+    {
+      "action": "notify.mobile_app_kerans_iphone",
+      "data": {
+        "title": "{{ headline }}",
+        "message": "{{ body }}",
+        "data": {
+          "group": "stride-coach",
+          "tag": "stride-post-workout",
+          "url": "/keran-workout/0"
+        }
+      }
+    }
+  ]
+}

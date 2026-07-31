@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ICON Fitness "ICON Generic HID" — the treadmill control board.
+         0x213c = 8508, 0x0002 = 2 (the filter wants decimal). -->
+    <usb-device vendor-id="8508" product-id="2" />
+</resources>

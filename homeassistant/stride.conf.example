@@ -1,0 +1,29 @@
+# STRIDE — Home Assistant side configuration.
+#
+# Copy to `stride.conf` (which git ignores) and fill in. Every script in this
+# directory reads it.
+#
+# Nothing here is optional-by-politeness: without a token the scripts cannot
+# install anything, and without the broker they cannot publish. The treadmill
+# console itself needs none of this — it talks to MQTT directly and registers
+# itself through discovery.
+
+# Where Home Assistant lives, as the scripts will reach it.
+ha_url: http://homeassistant.local:8123
+
+# A long-lived access token: Profile -> Security -> Long-lived access tokens.
+ha_api_token: paste-yours-here
+
+# The MQTT broker Home Assistant uses. Host only, or tcp://host:port.
+mqtt_broker: tcp://homeassistant.local:1883
+mqtt_user: stride
+mqtt_pass: change-me
+
+# Externally reachable base URL, used to print the Apple Health webhook.
+# Only needed if you use the iOS companion app.
+ha_external_url: https://your-home-assistant.example.com
+
+# The webhook id the iOS app posts to. Generate 30 random characters:
+#   python3 -c "import secrets;print(secrets.token_urlsafe(22)[:30])"
+# This is the ONLY thing protecting that endpoint - see stride_health_webhook.py
+stride_webhook_id: generate-your-own

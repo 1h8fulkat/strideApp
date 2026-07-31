@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Was Theme.Black.NoTitleBar.Fullscreen, which is kept as the parent so
+        the fullscreen and no-title behaviour is unchanged. The only addition
+        is the window background.
+
+        There is no dismiss code anywhere, and there should not be: this is not
+        a splash *activity*, it is the wallpaper behind the one real activity.
+        It stops being visible the moment the WebView paints over it, which is
+        exactly the right lifetime and impossible to get wrong.
+    -->
+    <style name="Stride" parent="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+        <item name="android:windowBackground">@drawable/launch_window</item>
+    </style>
+</resources>

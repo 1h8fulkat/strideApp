@@ -1,0 +1,1076 @@
+/* ===========================================================================
+   STRIDE core — the part every UI shares.
+
+   The console runs one HTML document at a time (see MainActivity: the chosen
+   UI is loaded into the WebView by asset name). Each document owns its whole
+   look — its own DOM, its own CSS, no shared stylesheet, because a shared
+   stylesheet is how five deliberately different interfaces start leaking into
+   each other. What they *do* share is everything that is not a look:
+
+     * the 400 m track maths, which is fiddly and easy to get subtly wrong;
+     * the state contract, so one Kotlin snapshot reads the same everywhere;
+     * the setup flow (who / what / how / which), which is behaviour, not style;
+     * touch handling, which took real tuning to feel right mid-stride.
+
+   Loaded with a plain <script src="stride-core.js"> from a sibling file in
+   assets/. That is local, not remote — the "no external resources" rule is
+   about the network, and this ships inside the APK.
+
+   Chromium 83 (2020). No optional catch binding beyond what shipped then, no
+   `String.replaceAll`, no `Array.prototype.at`, no `:has()`, no `inset`.
+   =========================================================================== */
+(function (global) {
+'use strict';
+
+/* ===========================================================================
+   1. THE 400 m TRACK
+   ---------------------------------------------------------------------------
+   A running track is a *stadium*, not an ellipse: two parallel straights
+   closed by two exact semicircles. Position along it is closed form, so there
+   is no reason to ask the browser — and two reasons not to. `getPointAtLength`
+   is unreliable on this WebView and is outright broken on <rect>, and an
+   ellipse approximation puts the head dot off the rail, visibly, on the bends.
+
+   THE OBLIQUE TRAP, which is the whole reason this is one function and not
+   four copies:
+
+       Arc-length is not preserved under a non-uniform scale.
+
+   Squash the oval first and then measure along it and the dot drifts off the
+   rail — worst at the ends, where the squash bites hardest. So the ordering is
+   fixed and not negotiable:
+
+       1. walk the arc-length in TRUE track space, where the maths is clean;
+       2. THEN apply the squash to the resulting point.
+
+   The dot then stays welded to the rail, and its screen speed varies round the
+   loop — quicker along the straights, slower round the ends. That is not a
+   bug; that is what a foreshortened track looks like.
+
+   The same trap catches the progress arc. `stroke-dasharray` measures the
+   *drawn* path, which is the squashed one, so a dash fraction taken from true
+   arc-length would not end underneath the dot. `dashFraction()` maps between
+   the two through a table built once at construction.
+
+   Geometry is a parameter, not a constant. The handoff's canonical track is
+   two 248 px straights and r = 158 semicircles and that is the default, but a
+   UI that draws the oval smaller passes its own numbers and gets arc-length
+   along the stadium it actually drew.
+   =========================================================================== */
+
+/**
+ * @param opts.straight  length of ONE straight, px (default 248)
+ * @param opts.radius    semicircle radius, px (default 158)
+ * @param opts.cx,cy     centre of the oval in screen coords
+ * @param opts.squash    vertical scale; 1 is face-on, ~0.5 is a shallow oblique
+ * @param opts.lapMetres real-world lap, m (default 400)
+ * @param opts.samples   resolution of the true→screen length table
+ */
+function track(opts) {
+  opts = opts || {};
+  var straight  = opts.straight  == null ? 248 : opts.straight;
+  var radius    = opts.radius    == null ? 158 : opts.radius;
+  var cx        = opts.cx        == null ? 0   : opts.cx;
+  var cy        = opts.cy        == null ? 0   : opts.cy;
+  var squash    = opts.squash    == null ? 1   : opts.squash;
+  var lapMetres = opts.lapMetres || 400;
+  var samples   = opts.samples   || 720;
+
+  var half      = straight / 2;
+  var bend      = Math.PI * radius;          // one semicircle
+  var perimeter = 2 * straight + 2 * bend;
+
+  /* Distance zero is the left end of the top straight, running clockwise, so
+     it lines up with where an SVG path written `M left,top H right A…` starts
+     drawing. Keeping those two in step is what lets a dash and a dot describe
+     the same position. */
+  function trueAt(d) {
+    d = d % perimeter;
+    if (d < 0) d += perimeter;
+    var th;
+    if (d <= straight) {                                    // top straight, →
+      return { x: -half + d, y: -radius, tx: 1, ty: 0 };
+    }
+    if (d <= straight + bend) {                             // right bend, ↓
+      th = (d - straight) / radius;
+      return { x: half + radius * Math.sin(th), y: -radius * Math.cos(th),
+               tx: Math.cos(th), ty: Math.sin(th) };
+    }
+    if (d <= 2 * straight + bend) {                         // bottom straight, ←
+      return { x: half - (d - straight - bend), y: radius, tx: -1, ty: 0 };
+    }
+    th = (d - 2 * straight - bend) / radius;                // left bend, ↑
+    return { x: -half - radius * Math.sin(th), y: radius * Math.cos(th),
+             tx: -Math.cos(th), ty: -Math.sin(th) };
+  }
+
+  /* True space → screen. The squash lands here and nowhere else. */
+  function toScreen(p) {
+    var tx = p.tx, ty = p.ty * squash;
+    var tl = Math.sqrt(tx * tx + ty * ty) || 1;
+    /* Outward normal is the tangent turned a quarter clockwise: on the top
+       straight that is (0,-1), which points off the track, as it should. */
+    var nx = ty / tl, ny = -tx / tl;
+    return {
+      x: cx + p.x,
+      y: cy + p.y * squash,
+      tx: tx / tl, ty: ty / tl,
+      nx: nx, ny: ny,
+      angle: Math.atan2(ty, tx) * 180 / Math.PI
+    };
+  }
+
+  /* Cumulative *screen* length at each sample of true arc-length. Built once;
+     720 samples of hypot is nothing, and it is the only honest way to convert
+     a true-space distance into a dash offset on a squashed path. */
+  var cum = new Array(samples + 1);
+  cum[0] = 0;
+  var prev = toScreen(trueAt(0));
+  for (var i = 1; i <= samples; i++) {
+    var pt = toScreen(trueAt(i / samples * perimeter));
+    var dx = pt.x - prev.x, dy = pt.y - prev.y;
+    cum[i] = cum[i - 1] + Math.sqrt(dx * dx + dy * dy);
+    prev = pt;
+  }
+  var screenLength = cum[samples];
+
+  function wrap(f) {
+    f = f % 1;
+    if (f < 0) f += 1;
+    return f;
+  }
+
+  function r2(n) { return Math.round(n * 100) / 100; }
+
+  return {
+    straight: straight, radius: radius, squash: squash,
+    cx: cx, cy: cy,
+    perimeter: perimeter,
+    screenLength: screenLength,
+    lapMetres: lapMetres,
+
+    /**
+     * SVG `d` for the rail. `inset` pulls it inwards, which is how concentric
+     * lanes are drawn: a stadium offset inwards keeps its straights and loses
+     * radius, so the lanes stay parallel the whole way round.
+     *
+     * Under squash the semicircles become half-ellipses — still one path, still
+     * a constant stroke width. True perspective (near straight wider than far)
+     * would need a tapering stroke, which means filling a polygon instead of
+     * stroking a path: a lot of work for a subtle gain. Not done.
+     */
+    pathD: function (inset) {
+      var r = radius - (inset || 0), ry = r * squash;
+      var l = r2(cx - half), rt = r2(cx + half);
+      var t = r2(cy - ry), b = r2(cy + ry);
+      r = r2(r); ry = r2(ry);
+      return 'M ' + l + ' ' + t + ' H ' + rt +
+             ' A ' + r + ' ' + ry + ' 0 0 1 ' + rt + ' ' + b +
+             ' H ' + l +
+             ' A ' + r + ' ' + ry + ' 0 0 1 ' + l + ' ' + t + ' Z';
+    },
+
+    /** Screen point + tangent + outward normal at a fraction of one lap. */
+    atFraction: function (f) { return toScreen(trueAt(wrap(f) * perimeter)); },
+
+    /** Same, from metres run. Laps beyond the first simply wrap. */
+    at: function (metres) { return this.atFraction((metres || 0) / lapMetres); },
+
+    /**
+     * Dash length for a path carrying `pathLength="1000"`, such that the arc
+     * ends exactly under `atFraction(f)`. See the oblique trap above.
+     */
+    dashFraction: function (f) {
+      var x = wrap(f) * samples;
+      var i = Math.floor(x);
+      var s = i >= samples ? cum[samples]
+                           : cum[i] + (cum[i + 1] - cum[i]) * (x - i);
+      return 1000 * s / screenLength;
+    },
+    dash: function (metres) { return this.dashFraction((metres || 0) / lapMetres); },
+
+    laps:        function (metres) { return Math.floor((metres || 0) / lapMetres); },
+    lapFraction: function (metres) { return wrap((metres || 0) / lapMetres); }
+  };
+}
+
+/* ===========================================================================
+   1b. THE ELEVATION PROFILE
+   ---------------------------------------------------------------------------
+   The guided hero in three of the four directions is the same idea: the whole
+   walk drawn end to end as ground, with the part already covered picked out
+   bright and a marker showing where you are on it.
+
+   THE LINE IS THE DECK. Not an impression of it — the actual thing the motor
+   is going to do, plotted against the same clock.
+
+   This was got wrong once, in a way worth writing down. The first version drew
+   a vertex at the *middle* of each segment and joined those up, which makes a
+   handsome rolling landscape and is a lie: it slopes continuously while the
+   deck is holding dead flat, and it agrees with the machine at exactly two
+   instants per segment. Walking on it, the line rises under your marker while
+   the deck does nothing, then flattens out just as the deck starts to climb.
+   Reported from the belt within minutes, and quite right.
+
+   What the deck actually does — see MainActivity.driveIncline — is hold, move,
+   hold. At a segment boundary it starts stepping [INCLINE_STEP] percent every
+   [INCLINE_EVERY_MS], so a flat-to-six-and-a-half change takes about twenty
+   seconds, and then it sits there for the rest of the segment. So that is what
+   gets drawn: a flat run, a ramp of the real duration, a flat run. Every slope
+   on screen is a slope the motor is making, and every flat is a flat.
+
+   The same arc-length trap as the track applies, for the same reason: progress
+   along the *time* axis is not progress along the drawn line, because a ramp
+   covers more path per second than a flat. So `dashAt` walks the real polyline
+   rather than assuming the two are proportional, and the bright line ends
+   underneath the marker instead of somewhere near it. The staircase makes this
+   matter more, not less — the risers are nearly vertical and eat drawn length
+   without eating any clock.
+   =========================================================================== */
+
+/**
+ * Seconds the deck takes per percent of grade change.
+ *
+ * MainActivity moves it one percent at a time, no oftener than every three
+ * seconds. If either of those constants changes there, change this — a drawing
+ * that claims to be the machine has to be kept honest by hand.
+ */
+var DECK_SEC_PER_PCT = 3;
+
+/**
+ * @param steps  plan steps as Kotlin sends them: {start, end, incline, label}
+ * @param opts.width, opts.height   the drawing box, px
+ * @param opts.headroom             px kept clear at the top for the marker
+ * @param opts.startIncline         grade the deck is on at t=0; chooseGuided
+ *                                  writes zero, so that is the default
+ */
+function profile(steps, opts) {
+  opts = opts || {};
+  var W = opts.width || 576;
+  var H = opts.height || 200;
+  var headroom = opts.headroom == null ? 24 : opts.headroom;
+
+  steps = steps || [];
+  if (!steps.length) {
+    return { empty: true, d: '', fill: '', pins: [], total: 0, hi: 0, lo: 0,
+             length: 0, yFor: function () { return H; },
+             atSeconds: function () { return { x: 0, y: H }; },
+             dashAt: function () { return 0; } };
+  }
+
+  var total = steps[steps.length - 1].end || 1;
+  var i;
+
+  /* ---- what the deck actually does ------------------------------------
+     Hold, move, hold. At each segment boundary the deck starts stepping
+     towards the new grade at DECK_SEC_PER_PCT per percent, and then it sits.
+
+     Crucially it does not always get there. A segment can end before the deck
+     has finished travelling — on a five-minute walk the segments are fifteen
+     to thirty-five seconds and a jump to nine and a half percent needs nearly
+     thirty, so the deck spends the whole walk chasing targets it never
+     reaches. Drawing the plan's intent there would be drawing a hill nobody
+     climbs. Each segment therefore starts from wherever the deck genuinely got
+     to in the last one, and the line shows the shortfall.
+
+     A short plan consequently looks much flatter than its template. That is
+     not the drawing being timid; it is what a five-minute rolling-hills walk
+     is. */
+  var reach = [];
+  var here = opts.startIncline == null ? 0 : opts.startIncline;
+  var from = here;
+  for (i = 0; i < steps.length; i++) {
+    var seconds = steps[i].end - steps[i].start;
+    var delta = steps[i].incline - here;
+    var most = seconds / DECK_SEC_PER_PCT;         // percent it can travel
+    var got = Math.abs(delta) <= most ? steps[i].incline
+                                      : here + (delta > 0 ? most : -most);
+    reach.push({ from: here, to: got,
+                 ramp: Math.abs(got - here) * DECK_SEC_PER_PCT });
+    here = got;
+  }
+
+  /* The axis comes off the grades that get drawn, not the ones that were
+     asked for — an axis topped at 9.5% over a line that only reaches 6 is
+     three separate lies in one label. */
+  var hi = 4, lo = 0;
+  for (i = 0; i < reach.length; i++) {
+    if (reach[i].to > hi) hi = reach[i].to;
+    if (reach[i].to < lo) lo = reach[i].to;
+  }
+  hi = Math.ceil(hi * 2) / 2;                 // to the nearest half percent
+
+  function yFor(v) {
+    return H - ((v - lo) / (hi - lo)) * (H - headroom);
+  }
+  function xFor(t) { return Math.max(0, Math.min(1, t / total)) * W; }
+
+  function vertex(t, v, label) {
+    return { t: t, v: v, x: xFor(t), y: yFor(v), label: label };
+  }
+
+  var pts = [vertex(0, from)];
+  var crests = [];
+  for (i = 0; i < steps.length; i++) {
+    var r = reach[i];
+    var arrive = vertex(steps[i].start + r.ramp, r.to, steps[i].label);
+    // A zero-length ramp would put two vertices on the same spot; skip it.
+    if (r.ramp > 0) pts.push(arrive);
+    crests.push(arrive);
+    if (steps[i].start + r.ramp < steps[i].end) {
+      pts.push(vertex(steps[i].end, r.to, steps[i].label));
+    }
+  }
+
+  var d = 'M ' + pts.map(function (p) {
+    return p.x.toFixed(1) + ' ' + p.y.toFixed(1);
+  }).join(' L ');
+
+  /* Cumulative drawn length, so a time can be turned into a dash offset. */
+  var cum = [0];
+  for (i = 1; i < pts.length; i++) {
+    var dx = pts[i].x - pts[i - 1].x, dy = pts[i].y - pts[i - 1].y;
+    cum.push(cum[i - 1] + Math.sqrt(dx * dx + dy * dy));
+  }
+  var length = cum[cum.length - 1] || 1;
+
+  /** Where the marker goes at `t` seconds in. */
+  function atSeconds(t) {
+    t = Math.max(0, Math.min(total, t || 0));
+    for (var j = 1; j < pts.length; j++) {
+      if (t <= pts[j].t) {
+        var span = pts[j].t - pts[j - 1].t || 1;
+        var f = (t - pts[j - 1].t) / span;
+        return { x: pts[j - 1].x + (pts[j].x - pts[j - 1].x) * f,
+                 y: pts[j - 1].y + (pts[j].y - pts[j - 1].y) * f,
+                 seg: j - 1, f: f };
+      }
+    }
+    var e = pts[pts.length - 1];
+    return { x: e.x, y: e.y, seg: pts.length - 2, f: 1 };
+  }
+
+  /** Dash length for a path carrying pathLength="1000". */
+  function dashAt(t) {
+    var p = atSeconds(t);
+    var base = cum[p.seg];
+    var segLen = cum[p.seg + 1] - cum[p.seg];
+    return 1000 * (base + segLen * p.f) / length;
+  }
+
+  return {
+    empty: false,
+    total: total, hi: hi, lo: lo, width: W, height: H, length: length,
+    d: d,
+    fill: d + ' L ' + W + ' ' + H.toFixed(1) + ' L 0 ' + H.toFixed(1) + ' Z',
+    /**
+     * One per segment, at the moment the deck finishes arriving at that
+     * segment's grade — which is a real event you can feel, unlike a vertex
+     * that only exists because the polyline needed a corner.
+     */
+    pins: crests,
+    yFor: yFor, xFor: xFor,
+    atSeconds: atSeconds,
+    dashAt: dashAt
+  };
+}
+
+
+/* ===========================================================================
+   2. THE STATE CONTRACT
+   ---------------------------------------------------------------------------
+   Kotlin pushes one flat Snapshot at 5 Hz (Session.kt: Snapshot.toJson). The
+   handoff assumes something richer and nested. Rather than churn the Kotlin —
+   which is the part that is proven on hardware and has no business changing
+   for a repaint — the flat frame is adapted here, once, into the documented
+   shape. Every UI then reads the same object and none of them re-derive laps
+   or climb five separate ways.
+
+   Two things are derived rather than received:
+
+   * `session.climb` — metres ascended. Kotlin does not track it; integrating
+     Δdistance × grade on this side is accurate enough for a number displayed
+     to the nearest metre, and costs nothing.
+   * `control` — casual or guided, which is simply whether a plan was resolved.
+
+   `phase` deliberately does NOT become 'fault' when the safety key is out.
+   Pulling the key is an interrupt, not a route: it preempts whatever is on
+   screen, and putting the key back returns to exactly where the user was with
+   the session intact. A UI reads `safetyKey` and paints over the top.
+   =========================================================================== */
+
+var climbM = 0;
+var lastDistance = 0;
+
+/** New walk, or the odometer went backwards: start the climb count again. */
+function resetDerived() { climbM = 0; lastDistance = 0; }
+
+function adapt(raw) {
+  raw = raw || {};
+  var distance = raw.distance || 0;
+  var incline  = raw.incline  || 0;
+  var mode     = (raw.mode || 'welcome').toLowerCase();
+
+  if (distance < lastDistance - 1 || mode === 'welcome') {
+    resetDerived();
+  } else if (distance > lastDistance) {
+    /* Grade is a percentage, so rise = run × grade/100. At walking speeds the
+       difference between that and the true sine is under half a percent, well
+       inside the noise on a whole-metre odometer. */
+    climbM += (distance - lastDistance) * incline / 100;
+  }
+  lastDistance = distance;
+
+  var segments = raw.segments || 0;
+  var laps = Math.floor(distance / 400);
+
+  return {
+    profile:  raw.who || '',
+    mode:     raw.workout === 'run' ? 'run' : 'walk',
+    control:  segments > 0 ? 'guided' : 'casual',
+
+    /* welcome | warmup | active | paused | cooldown | summary.
+       'active' rather than Kotlin's 'running' because the handoff says active
+       and a run is a mode, not a phase — 'running' meant both. */
+    phase:    mode === 'running' ? 'active' : mode,
+
+    /* From the belt controller. Never optimistic local state: the readout has
+       to be what the machine is doing, not what it was asked to do. */
+    belt:     { speed: raw.speed || 0, incline: incline },
+
+    /* Guided owns incline only. `speed` here is a suggestion the user is free
+       to ignore, and nothing may apply it to the belt. */
+    targets:  { speed: raw.targetSpeed || 0,
+                incline: raw.targetIncline || 0,
+                suggest: raw.suggestPace || 0,
+                inclineAuto: !!raw.inclineAuto },
+
+    /* `elapsed` here is *plan* time — wrapped into the current lap when the
+       route is a circuit, so a hero drawing one lap of ground can use it
+       directly and never has to know about looping. `session.elapsed` is still
+       the whole walk. */
+    plan:     { name: raw.plan || '', steps: planSteps,
+                loops: !!raw.planLoops,
+                lap: raw.planLap || 1,
+                elapsed: raw.planElapsed == null ? (raw.elapsed || 0) : raw.planElapsed },
+
+    segment:  { index: raw.segment || 0, count: segments,
+                name: raw.segmentLabel || '',
+                secondsLeft: raw.segmentLeft || 0 },
+
+    session:  { elapsed: raw.elapsed || 0,
+                distance: distance,
+                calories: raw.calories || 0,
+                climb: climbM,
+                laps: laps,
+                lapFraction: (distance % 400) / 400,
+                pulse: raw.pulse || 0,
+                avgSpeed: raw.avgSpeed || 0, maxSpeed: raw.maxSpeed || 0,
+                avgIncline: raw.avgIncline || 0, maxIncline: raw.maxIncline || 0 },
+
+    safetyKey: raw.dmk ? 'out' : 'in',
+    fan:       raw.fan || 0,
+
+    /* Seconds left in a timed phase, and which ramp is in flight ("warmup",
+       "resuming", "cooldown", "stopping" or ""). */
+    phaseLeft: raw.phaseLeft || 0,
+    ramping:   raw.ramping || '',
+
+    raw: raw
+  };
+}
+
+/* The path ahead, sent once per walk by window.plan(), not per frame. */
+var planSteps = [];
+function setPlan(p) {
+  planSteps = (p && p.steps) || [];
+  return planSteps;
+}
+
+/**
+ * Which of the eleven screens the live side is showing.
+ *
+ * Only the live screens — 01-04 are the setup flow, which the page owns before
+ * Kotlin knows a walk exists, and 07/10 are overlays rather than screens.
+ * Returns 'welcome' when the setup flow should be driving.
+ */
+function screenFor(state) {
+  switch (state.phase) {
+    case 'warmup':   return 'warmup';                     // 08
+    case 'cooldown': return 'cooldown';
+    case 'paused':   return 'paused';                     // 09
+    case 'summary':  return 'summary';                    // 11
+    case 'active':   return state.control === 'guided'
+                            ? 'live-guided'               // 06
+                            : 'live-casual';              // 05
+    default:         return 'welcome';                    // 01-04
+  }
+}
+
+/* ===========================================================================
+   3. THE SETUP FLOW — who / what / how / which
+   ---------------------------------------------------------------------------
+   Screens 01-04. Entirely client side: nothing reaches Kotlin and the belt
+   cannot move until the last step commits, because on this machine choosing a
+   workout *is* starting it.
+   =========================================================================== */
+
+/**
+ * Who the setup flow offers, read from Settings on every call.
+ *
+ * This was a literal of four names — one household, in the file that all five
+ * interfaces share, so fixing `original.html` alone fixed one screen out of
+ * five and left Ember, Cluster, Daylight and Pacer still offering strangers.
+ *
+ * It matters more than it looks now that coaching and recording are per person:
+ * a name offered here that Settings does not have is a walker who silently gets
+ * neither. The picker and the store have to be one list.
+ */
+function profiles() {
+  var names = people().map(function (p) { return p.name; });
+
+  /* Guest sits alongside the household rather than instead of it: somebody
+     else's turn on the belt is common, and it should not mean picking a name
+     that is not yours. It is never coached and never published, because a
+     guest has not agreed to anything — Settings.coachedFor / publishFor return
+     false for any name that is not in the people list, so "Guest" needs no
+     special case in Kotlin.
+
+     With nobody set up at all, Guest is the only option and the treadmill
+     still works, which beats refusing to start until a form is filled in. */
+  if (!names.length) return ['Guest'];
+  if (allowGuest()) names.push('Guest');
+  return names;
+}
+
+/**
+ * Walk lengths. 5 is a bench test — every segment in about thirty seconds.
+ *
+ * **0 means open**: no end, and the route becomes a circuit that comes round
+ * again rather than running out. Kotlin resolves it at OPEN_LOOP_MIN and
+ * reports which lap you are on; nothing but STOP finishes the walk.
+ */
+var DURATIONS = [5, 15, 20, 30, 45, 0];
+function durationLabel(m) { return m > 0 ? String(m) : 'OPEN'; }
+
+/* The four templates, mirroring Plan.kt. `points` are the real segment
+   inclines from that file, so a sparkline on the picker is the walk you are
+   about to get rather than a decorative squiggle. */
+var SHAPES = [
+  { id: 'steady',  name: 'Steady',        blurb: 'One long hill, honestly earned',
+    points: [0, 2, 3.5, 5, 3, 1.5, 0] },
+  { id: 'rolling', name: 'Rolling hills', blurb: 'Uneven ground, no two the same',
+    points: [0, 4, -1, 6.5, 1, 9.5, 2, 5.5, -1.5, 3, 0] },
+  { id: 'pyramid', name: 'Pyramid',       blurb: 'Up in steps, down in steps',
+    points: [0, 2.5, 5, 7.5, 10, 11.5, 7, 4, 1.5, 0] },
+  { id: 'climb',   name: 'The long climb', blurb: 'One ascent, with a sting near the top',
+    points: [0, 3, 5.5, 4.5, 7.5, 11, 6, 2.5, 0] }
+];
+
+/**
+ * @param onStep  called with (stepId, flow) whenever the step changes, so the
+ *                UI can show the right card. Steps: profile | mode | control | plan.
+ */
+function flow(onStep) {
+  var f = {
+    step: 'profile',
+    profile: defaultWalker() || profiles()[0],
+    mode: 'walk',
+    control: 'guided',   // the accented, recommended card on screen 03
+    minutes: 30,
+    shape: 'rolling',
+
+    go: function (step) {
+      f.step = step;
+      if (onStep) onStep(step, f);
+      return f;
+    },
+
+    reset: function () { return f.go('profile'); },
+
+    setProfile: function (name) {
+      f.profile = name;
+      global.Stride.setWalker(name);
+      return f.go('mode');
+    },
+
+    /* A guided run is a different problem and nobody has asked for it —
+       Plan.kt is walk-only and chooseGuided() records the workout as a walk.
+       So run skips the casual/guided question rather than offering a choice
+       that would quietly become a walk. */
+    setMode: function (m) {
+      f.mode = m;
+      if (m === 'run') { f.control = 'casual'; return f.commit(); }
+      return f.go('control');
+    },
+
+    setControl: function (c) {
+      f.control = c;
+      if (c === 'casual') return f.commit();
+      return f.go('plan');
+    },
+
+    setMinutes: function (m) { f.minutes = m; return f; },
+    setShape:   function (s) { f.shape = s;   return f; },
+
+    /** The one call that arms the belt. */
+    commit: function () {
+      if (f.control === 'guided') global.Stride.chooseGuided(f.shape, f.minutes);
+      else global.Stride.choose(f.mode);
+      return f;
+    },
+
+    back: function () {
+      if (f.step === 'plan')    return f.go('control');
+      if (f.step === 'control') return f.go('mode');
+      if (f.step === 'mode')    return f.go('profile');
+      return f;
+    }
+  };
+  return f;
+}
+
+/* ===========================================================================
+   3b. THE FIVE INTERFACES
+   ---------------------------------------------------------------------------
+   Every UI carries a settings screen that can reach the other four, so the
+   list of what exists — and what each one looks like — is shared rather than
+   copied five times.
+
+   The sketches are 160×100 inline SVG, each drawn in its own palette. Inline
+   because the console may boot offline and there is nowhere to fetch an image
+   from; SVG rather than a screenshot because a thumbnail of a layout only has
+   to say "big dials" or "one bright pill", and 300 bytes says that fine.
+   =========================================================================== */
+
+var UI_META = [
+  /* The arcs below are drawn on the *same* stadium as the rail under them —
+     top straight plus the right bend, which is exactly half the perimeter. An
+     approximate arc reads as a mistake at this size, because the eye has the
+     rail sitting right there to compare it against. */
+  { id: 'original', name: 'Original', blurb: 'Oval track, big flanking numbers. The one it has been walked on.',
+    sketch:
+      '<rect width="160" height="100" fill="#0a1533"/>' +
+      '<rect x="54" y="24" width="52" height="34" rx="17" fill="none" stroke="#16255a" stroke-width="1.5"/>' +
+      '<path d="M71 24 H89 A17 17 0 0 1 89 58" fill="none" stroke="#39e0ff" stroke-width="2.5" stroke-linecap="round"/>' +
+      '<circle cx="89" cy="58" r="2.5" fill="#eaf0ff"/>' +
+      '<rect x="12" y="30" width="26" height="12" rx="2" fill="#eaf0ff" opacity=".85"/>' +
+      '<rect x="122" y="30" width="26" height="12" rx="2" fill="#eaf0ff" opacity=".85"/>' +
+      '<rect x="12" y="66" width="136" height="1" fill="#16255a"/>' +
+      '<g fill="#16255a"><rect x="12" y="82" width="20" height="10" rx="5"/><rect x="36" y="82" width="20" height="10" rx="5"/>' +
+      '<rect x="60" y="82" width="20" height="10" rx="5"/><rect x="84" y="82" width="20" height="10" rx="5"/>' +
+      '<rect x="108" y="82" width="20" height="10" rx="5"/></g>' +
+      '<rect x="132" y="82" width="16" height="10" rx="5" fill="#ff5c7a" opacity=".6"/>' },
+
+  { id: 'ember', name: 'Ember', blurb: 'Warm near-black, hairlines, one amber light. Built for 6am.',
+    sketch:
+      '<rect width="160" height="100" fill="#0b0a09"/>' +
+      '<rect x="54" y="22" width="52" height="36" rx="18" fill="none" stroke="#221f1c" stroke-width="1"/>' +
+      '<path d="M62 22 H98 A18 18 0 0 1 106 40" fill="none" stroke="#e0a458" stroke-width="2" stroke-linecap="round"/>' +
+      '<rect x="14" y="12" width="18" height="3" fill="#7c756b" opacity=".5"/>' +
+      '<rect x="14" y="64" width="132" height="1" fill="#1c1917"/>' +
+      '<g fill="#f4efe6" opacity=".7"><rect x="14" y="72" width="20" height="7"/><rect x="46" y="72" width="20" height="7"/>' +
+      '<rect x="78" y="72" width="20" height="7"/><rect x="110" y="72" width="20" height="7"/></g>' +
+      '<g fill="none" stroke="#2a2521"><rect x="14" y="86" width="26" height="9"/><rect x="44" y="86" width="20" height="9"/>' +
+      '<rect x="68" y="86" width="20" height="9"/><rect x="92" y="86" width="20" height="9"/></g>' +
+      '<rect x="120" y="86" width="26" height="9" fill="#e0553e"/>' },
+
+  { id: 'cluster', name: 'Cluster', blurb: 'Machined dials and mono figures. An instrument cluster.',
+    sketch:
+      '<rect width="160" height="100" fill="#0d0f10"/>' +
+      '<circle cx="46" cy="40" r="21" fill="none" stroke="#23282b" stroke-width="5"/>' +
+      '<path d="M46 19 A21 21 0 0 1 63 51" fill="none" stroke="#6fd0e0" stroke-width="5" stroke-linecap="round"/>' +
+      '<circle cx="114" cy="40" r="21" fill="none" stroke="#23282b" stroke-width="5"/>' +
+      '<path d="M114 19 A21 21 0 0 1 130 30" fill="none" stroke="#e5b567" stroke-width="5" stroke-linecap="round"/>' +
+      '<g fill="#141719"><rect x="12" y="74" width="32" height="16" rx="3"/><rect x="48" y="74" width="32" height="16" rx="3"/>' +
+      '<rect x="84" y="74" width="32" height="16" rx="3"/></g>' +
+      '<rect x="120" y="74" width="28" height="16" rx="3" fill="#d92d20"/>' },
+
+  /* No oval on this one, because there isn't one: Daylight's casual hero is a
+     lap count set enormous with a progress bar under it. A thumbnail showing a
+     ring would be advertising the wrong interface. What it shows instead is
+     what actually distinguishes it — paper, ink borders, editorial left-align,
+     one big figure. */
+  { id: 'daylight', name: 'Daylight', blurb: 'Warm paper and ink. The light one — bright rooms, older eyes.',
+    sketch:
+      '<rect width="160" height="100" fill="#eae6dc"/>' +
+      '<rect x="11" y="12" width="138" height="2" fill="#1b1a17"/>' +
+      '<text x="11" y="52" font-family="Helvetica,Arial,sans-serif" font-size="38" font-weight="700" fill="#1b1a17">2</text>' +
+      '<rect x="11" y="60" width="88" height="7" fill="#dcd7c9"/>' +
+      '<rect x="11" y="60" width="62" height="7" fill="#3d6b4a"/>' +
+      '<rect x="112" y="22" width="37" height="18" rx="3" fill="#f6f3ea" stroke="#1b1a17" stroke-width="2"/>' +
+      '<rect x="112" y="46" width="37" height="18" rx="3" fill="#f6f3ea" stroke="#1b1a17" stroke-width="2"/>' +
+      '<g fill="#f6f3ea" stroke="#1b1a17" stroke-width="2"><rect x="11" y="78" width="30" height="14" rx="3"/>' +
+      '<rect x="47" y="78" width="26" height="14" rx="3"/><rect x="79" y="78" width="26" height="14" rx="3"/></g>' +
+      '<rect x="111" y="78" width="38" height="14" rx="3" fill="#c02b1d" stroke="#1b1a17" stroke-width="2"/>' },
+
+  { id: 'pacer', name: 'Pacer', blurb: 'Violet and lime, chunky pills, plain-spoken. Hard to misread.',
+    sketch:
+      '<rect width="160" height="100" fill="#16121f"/>' +
+      '<rect x="10" y="10" width="66" height="26" rx="13" fill="#211b2e"/>' +
+      '<rect x="84" y="10" width="66" height="26" rx="13" fill="#211b2e"/>' +
+      '<rect x="10" y="44" width="140" height="26" rx="13" fill="#1c1728"/>' +
+      '<rect x="10" y="44" width="86" height="26" rx="13" fill="#c6f24e"/>' +
+      '<g fill="#2b2340"><rect x="10" y="78" width="34" height="16" rx="8"/><rect x="48" y="78" width="30" height="16" rx="8"/>' +
+      '<rect x="82" y="78" width="30" height="16" rx="8"/></g>' +
+      '<rect x="116" y="78" width="34" height="16" rx="8" fill="#ff4d3d"/>' }
+];
+
+/** Ask the bridge what is actually in this build; fall back to all of them. */
+function uiList() {
+  try {
+    return JSON.parse(global.Stride.availableUis());
+  } catch (e) {
+    return UI_META.map(function (u) { return u.id; });
+  }
+}
+
+function currentUi() {
+  try { return global.Stride.currentUi(); } catch (e) { return 'original'; }
+}
+
+/**
+ * Everyone set up on this console, newest state every call.
+ *
+ * The welcome screen used to hold this as a literal — four names of one
+ * household, in a file that ships to anybody. Worse than untidy: the coach is
+ * now gated per person, so a name that exists on the picker but not in Settings
+ * is a walker who silently gets no coaching and no history. The picker and the
+ * store have to be the same list, and this is the only copy of it.
+ *
+ * Empty is a real answer, not a failure — a console nobody has set up yet.
+ */
+function people() {
+  try {
+    return JSON.parse(global.Stride.settingsJson()).people || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function defaultWalker() {
+  try {
+    return JSON.parse(global.Stride.settingsJson()).default_walker || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function allowGuest() {
+  try {
+    return JSON.parse(global.Stride.settingsJson()).allow_guest !== false;
+  } catch (e) {
+    return true;
+  }
+}
+
+/* ===========================================================================
+   4. TOUCH
+   ---------------------------------------------------------------------------
+   Fire on touchstart, not click: `click` waits for touch-end plus gesture
+   disambiguation, which reads as an ignored press when you are mid-stride.
+   Every tappable thing also wants `touch-action: manipulation` in CSS or the
+   WebView spends ~300 ms deciding whether it was a double-tap.
+   =========================================================================== */
+
+/* Nothing counts as a press in the moment just after waking the screen — the
+   tap that woke it was aimed at a dark panel, not at whatever is under it. */
+var quietUntil = 0;
+function suppress(ms) { quietUntil = Date.now() + (ms || 500); }
+function justWoke() { return Date.now() < quietUntil; }
+
+function tap(el, fn) {
+  if (!el) return el;
+  var handled = false;
+  el.addEventListener('touchstart', function (e) {
+    handled = true;
+    el.classList.add('down');
+    if (!justWoke()) fn(e);
+    e.preventDefault();
+  }, { passive: false });
+  var up = function () { el.classList.remove('down'); };
+  el.addEventListener('touchend', up);
+  el.addEventListener('touchcancel', up);
+  el.addEventListener('click', function (e) { if (!handled && !justWoke()) fn(e); });
+  return el;
+}
+
+/* Fine on a tap, coarse on a hold, the way the physical buttons behave.
+   A flat coarse repeat was 3.6 km/h per second and the target "just took off";
+   a uniformly slow one made a deliberate run to 18 km/h tedious. So it
+   accelerates — gentle for the first second, quicker the longer you hold. */
+var HOLD_MS = 550, REPEAT_START_MS = 420, REPEAT_MIN_MS = 110, REPEAT_DECAY = 0.82;
+
+function stepper(el, fn, fine, coarse) {
+  if (!el) return el;
+  var holdTimer = null, repeatTimer = null, handled = false;
+  function begin() {
+    if (justWoke()) return;
+    fn(fine);
+    var gap = REPEAT_START_MS;
+    function again() {
+      fn(coarse);
+      gap = Math.max(REPEAT_MIN_MS, gap * REPEAT_DECAY);
+      repeatTimer = setTimeout(again, gap);
+    }
+    holdTimer = setTimeout(again, HOLD_MS);
+  }
+  function end() {
+    clearTimeout(holdTimer); clearTimeout(repeatTimer);
+    holdTimer = repeatTimer = null;
+    el.classList.remove('down');
+  }
+  el.addEventListener('touchstart', function (e) {
+    handled = true; el.classList.add('down'); begin(); e.preventDefault();
+  }, { passive: false });
+  el.addEventListener('touchend', end);
+  el.addEventListener('touchcancel', end);
+  el.addEventListener('mousedown',  function () { if (!handled) begin(); });
+  el.addEventListener('mouseup',    function () { if (!handled) end(); });
+  el.addEventListener('mouseleave', function () { if (!handled) end(); });
+  return el;
+}
+
+/**
+ * Hold-to-continue, for the safety-key screen. A single tap must not clear an
+ * alarm that means the belt cut out under someone.
+ *
+ * @param onProgress optional, called with 0..1 so the UI can fill something.
+ */
+function hold(el, ms, fn, onProgress) {
+  if (!el) return el;
+  var startedAt = 0, timer = null, raf = null;
+  function tick() {
+    var p = Math.min(1, (Date.now() - startedAt) / ms);
+    if (onProgress) onProgress(p);
+    if (p < 1) raf = setTimeout(tick, 50);
+  }
+  function begin(e) {
+    if (justWoke()) return;
+    startedAt = Date.now();
+    el.classList.add('down');
+    timer = setTimeout(function () { stop(); fn(); }, ms);
+    tick();
+    if (e && e.preventDefault) e.preventDefault();
+  }
+  function stop() {
+    clearTimeout(timer); clearTimeout(raf);
+    timer = raf = null;
+    el.classList.remove('down');
+    if (onProgress) onProgress(0);
+  }
+  el.addEventListener('touchstart', begin, { passive: false });
+  el.addEventListener('touchend', stop);
+  el.addEventListener('touchcancel', stop);
+  el.addEventListener('mousedown', begin);
+  el.addEventListener('mouseup', stop);
+  el.addEventListener('mouseleave', stop);
+  return el;
+}
+
+/* ===========================================================================
+   5. FORMATTING
+   =========================================================================== */
+
+function mmss(s) {
+  s = Math.max(0, Math.round(s || 0));
+  var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  var mm = h ? (m < 10 ? '0' + m : '' + m) : '' + m;
+  return (h ? h + ':' : '') + mm + ':' + (sec < 10 ? '0' + sec : sec);
+}
+
+/* 3201 -> "3,201". By hand rather than toLocaleString so it cannot depend on
+   whatever ICU data this 2020-vintage WebView happens to ship with. */
+function nf(n) {
+  return String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+/** Metres to km. Two decimals by default: at walking pace one decimal sits
+ *  still for two minutes at a time, which reads as a frozen display. */
+function km(m, dp) { return ((m || 0) / 1000).toFixed(dp == null ? 2 : dp); }
+
+var FAN_NAMES = ['OFF', 'LOW', 'MEDIUM', 'HIGH', 'AUTO'];
+function fanName(n) { return FAN_NAMES[n] || 'OFF'; }
+/** The control row's own label: "OFF" or "2 OF 4". */
+function fanLabel(n) { return n ? n + ' OF 4' : 'OFF'; }
+
+/* ===========================================================================
+   6. THE BRIDGE
+   ---------------------------------------------------------------------------
+   `Stride` is the @JavascriptInterface object MainActivity injects. Stubbing
+   it here means every UI opens standalone in a desktop browser without each
+   one carrying its own copy of the stub.
+   =========================================================================== */
+
+var BRIDGE = ['choose', 'chooseGuided', 'skipWarmup', 'skipCooldown', 'pause',
+              'resume', 'end', 'home', 'speed', 'incline', 'fan', 'setFan',
+              'setWalker', 'ackDmk', 'hushCoach', 'dim', 'setUi'];
+
+/** @return true if this page is running without the console behind it. */
+function stub() {
+  if (global.Stride && global.Stride.pause) return false;
+  var s = {};
+  BRIDGE.forEach(function (name) {
+    s[name] = function () {
+      var args = Array.prototype.slice.call(arguments);
+      console.log('Stride.' + name, args);
+    };
+  });
+  /* The two that return something. On a desktop every UI is "available", which
+     is what you want when you are comparing them side by side in a browser. */
+  var pretendUi = 'original';
+  s.currentUi = function () { return pretendUi; };
+  s.availableUis = function () {
+    return '["original","ember","cluster","daylight","pacer"]';
+  };
+  s.setUi = function (name) { pretendUi = name; console.log('Stride.setUi', name); };
+  global.Stride = s;
+  return true;
+}
+
+/* ===========================================================================
+   7. DESKTOP DEMO
+   ---------------------------------------------------------------------------
+   Only runs when the bridge is a stub, so it can never fight the real
+   renderer on the console. Drives window.render at the same 5 Hz Kotlin does,
+   which is the only honest way to check that a layout does not jitter.
+
+       ?screen=live-guided   open straight onto one screen
+       ?dmk=1                safety key out
+       ?coach=1              a coach line on arrival
+
+   Number keys 1-9 and 0 jump between screens while it runs.
+   =========================================================================== */
+
+var DEMO_SCREENS = ['welcome', 'warmup', 'live-casual', 'live-guided',
+                    'paused', 'cooldown', 'summary'];
+
+function demo(opts) {
+  opts = opts || {};
+  var q = {};
+  global.location.search.replace(/^\?/, '').split('&').forEach(function (kv) {
+    if (!kv) return;
+    var p = kv.split('=');
+    q[decodeURIComponent(p[0])] = decodeURIComponent(p[1] || '');
+  });
+
+  var screen = q.screen || opts.screen || 'live-guided';
+  var guided = screen === 'live-guided' || screen === 'warmup' || opts.guided;
+
+  /* Rolling hills at 30 minutes, resolved the way Plan.kt would. */
+  var shape = SHAPES[1].points;
+  var total = 30 * 60, steps = [], at = 0;
+  var shares = [0.11, 0.09, 0.07, 0.12, 0.06, 0.05, 0.09, 0.08, 0.07, 0.12, 0.14];
+  var labels = ['Settle in', 'First rise', 'Down the far side', 'The long one',
+                'Short recovery', 'The wall', 'Over the top', 'One more',
+                'Long descent', 'The last drag', 'Cool down'];
+  var inclines = [0, 4, -1, 6.5, 1, 9.5, 2, 5.5, -1.5, 3, 0];
+  for (var i = 0; i < shares.length; i++) {
+    var end = i === shares.length - 1 ? total : at + total * shares[i];
+    steps.push({ start: Math.round(at), end: Math.round(end),
+                 incline: inclines[i], label: labels[i] });
+    at = end;
+  }
+
+  var t = opts.elapsed == null ? 512 : opts.elapsed;   // mid-walk, mid-hill
+  var dist = 720, cals = 78;
+
+  function frame() {
+    var phase = screen === 'live-casual' || screen === 'live-guided' ? 'running'
+              : screen === 'welcome' ? 'welcome' : screen;
+    var moving = phase === 'running' || phase === 'warmup' || phase === 'cooldown';
+    var step = null, idx = 0;
+    for (var j = 0; j < steps.length; j++) {
+      if (t < steps[j].end) { step = steps[j]; idx = j + 1; break; }
+    }
+    if (!step) { step = steps[steps.length - 1]; idx = steps.length; }
+
+    var speed = moving ? (phase === 'warmup' ? 2.0 : 5.4) : 0;
+    if (moving) { t += 0.2; dist += speed / 3.6 * 0.2; cals += 0.02; }
+
+    global.render({
+      speed: speed, incline: guided ? step.incline : 1.5,
+      targetSpeed: speed, targetIncline: guided ? step.incline : 1.5,
+      distance: Math.round(dist), elapsed: Math.round(t),
+      calories: Math.round(cals), pulse: 0, fan: 2,
+      workout: 'walk', dmk: q.dmk === '1',
+      ramping: '', phaseLeft: phase === 'warmup' ? 161 : 0, boardMode: 2,
+      avgSpeed: 5.2, maxSpeed: 6.1, avgIncline: 3.4, maxIncline: 9.5,
+      who: 'Sam',
+      plan: guided ? 'Rolling hills' : '',
+      segment: guided ? idx : 0, segments: guided ? steps.length : 0,
+      segmentLabel: guided ? step.label : '',
+      segmentLeft: guided ? step.end - t : 0,
+      suggestPace: guided ? 5.6 : 0, inclineAuto: true,
+      mode: phase
+    });
+  }
+
+  if (guided && global.plan) global.plan({ name: 'Rolling hills', steps: steps });
+  if (q.coach === '1' && global.coach) {
+    setTimeout(function () {
+      global.coach({ line: 'Nine and a half percent for the next forty seconds. ' +
+                           'Shorten your stride and stay tall.', kind: 'local' });
+    }, 400);
+  }
+
+  frame();
+  setInterval(frame, 200);
+
+  global.addEventListener('keydown', function (e) {
+    var n = parseInt(e.key, 10);
+    if (isNaN(n)) return;
+    var pick = DEMO_SCREENS[n === 0 ? 9 : n - 1];
+    if (!pick) return;
+    screen = pick;
+    guided = pick === 'live-guided' || pick === 'warmup';
+    if (guided && global.plan) global.plan({ name: 'Rolling hills', steps: steps });
+    if (pick === 'welcome') resetDerived();
+  });
+
+  return { screens: DEMO_SCREENS };
+}
+
+/* ========================================================================= */
+
+global.STRIDE = {
+  track: track,
+  profile: profile,
+  adapt: adapt,
+  setPlan: setPlan,
+  screenFor: screenFor,
+  resetDerived: resetDerived,
+
+  flow: flow,
+  profiles: profiles,
+  allowGuest: allowGuest,
+  DURATIONS: DURATIONS,
+  SHAPES: SHAPES,
+
+  UI_META: UI_META,
+  people: people,
+  defaultWalker: defaultWalker,
+  uiList: uiList,
+  currentUi: currentUi,
+
+  tap: tap,
+  stepper: stepper,
+  hold: hold,
+  suppress: suppress,
+  justWoke: justWoke,
+
+  mmss: mmss,
+  nf: nf,
+  km: km,
+  durationLabel: durationLabel,
+  fanName: fanName,
+  fanLabel: fanLabel,
+
+  stub: stub,
+  demo: demo,
+
+  /** document.getElementById, because every UI wants it on the first line. */
+  $: function (id) { return document.getElementById(id); }
+};
+
+})(window);

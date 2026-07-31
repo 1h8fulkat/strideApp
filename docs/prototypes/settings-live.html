@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280,height=800,initial-scale=1">
+<title>STRIDE — settings (the real one)</title>
+<!--
+  The *real* settings screen, off the real asset, in a browser.
+
+  spikes/settings.html is the mock that was drawn to agree the shape. This is
+  the shipped `assets/ui/stride-settings.js` with a stubbed bridge in front of
+  it, so what renders here is what renders on the deck — the same file, not a
+  copy of it that has since drifted.
+
+  The stub stands in for Kotlin: it holds settings in memory, invents a couple
+  of straps when asked to scan, and reports a plausible board. Nothing here is
+  in the APK.
+
+      python3 -m http.server 8777      (from the repo root)
+      http://127.0.0.1:8777/spikes/settings-live.html
+-->
+<style>
+  html,body{margin:0;width:1280px;height:800px;overflow:hidden;background:#050b1f}
+</style>
+</head>
+<body>
+
+<script>
+/* ---- the bridge Kotlin normally provides ------------------------------- */
+var STORE = {
+  people: [],
+  default_walker: '',
+  allow_guest: true,
+  units: 'km',
+  ha_enabled: false,
+  mqtt_host: '', mqtt_port: 1883, mqtt_user: '', mqtt_pass: '',
+  mqtt_tls: false, mqtt_prefix: 'stride',
+  warmup_min: 2, cooldown_min: 2, warmup_kph: 2.0,
+  incline_rate: 'normal', open_lap_min: 20,
+  coach_on: true, coach_talk: 'normal', coach_voice: 'Supportive Friend',
+  coach_remote: true, coach_milestones: true,
+  hr_source: 'auto', hr_addr: '', hr_name: '',
+  sleep_min: 5, clock_24: true, brightness: 'normal', keep_awake: true
+};
+var SCANNING = false, TESTED = false;
+
+window.Stride = {
+  settingsJson: function () { return JSON.stringify(STORE); },
+  saveSetting: function (k, v) {
+    if (v === 'true' || v === 'false') STORE[k] = (v === 'true');
+    else if (/^-?\d+(\.\d+)?$/.test(v)) STORE[k] = parseFloat(v);
+    else STORE[k] = v;
+    console.log('save', k, '=', STORE[k]);
+  },
+  addPerson: function (n) {
+    if (n && !STORE.people.some(function (p) { return p.name === n; }))
+      STORE.people.push({ name: n, coached: true, publish: true });
+    return JSON.stringify(STORE);
+  },
+  removePerson: function (n) {
+    STORE.people = STORE.people.filter(function (p) { return p.name !== n; });
+    if (!STORE.people.some(function (p) { return p.name === STORE.default_walker; }))
+      STORE.default_walker = '';
+    return JSON.stringify(STORE);
+  },
+  setPersonFlag: function (n, f, on) {
+    STORE.people.forEach(function (p) { if (p.name === n) p[f] = on; });
+    return JSON.stringify(STORE);
+  },
+  hrScan: function () { SCANNING = true; },
+  hrFound: function () {
+    return JSON.stringify(SCANNING ? [
+      { address: 'D4:8A:1C:22:90:11', name: 'Polar H10', rssi: -58 },
+      { address: 'F1:20:9B:04:77:23', name: 'Wahoo TICKR', rssi: -74 }
+    ] : []);
+  },
+  hrPair: function (a, n) { STORE.hr_addr = a; STORE.hr_name = n; SCANNING = false; },
+  hrForget: function () { STORE.hr_addr = ''; STORE.hr_name = ''; },
+  hrStatus: function () {
+    return JSON.stringify({
+      available: true, scanning: SCANNING,
+      connected: !!STORE.hr_addr, battery: STORE.hr_addr ? 78 : -1,
+      bpm: STORE.hr_addr ? 60 + Math.floor(Math.random() * 6) : 0,
+      name: STORE.hr_name, address: STORE.hr_addr
+    });
+  },
+  mqttTest: function () { TESTED = true; },
+  mqttStatus: function () {
+    return JSON.stringify({
+      enabled: !!STORE.ha_enabled && !!STORE.mqtt_host,
+      connected: TESTED && !!STORE.mqtt_host, broker: STORE.mqtt_host
+    });
+  },
+  boardLimits: function () {
+    return JSON.stringify({ minGrade: -3, maxGrade: 12, minKph: 1.6, maxKph: 19 });
+  },
+  about: function () {
+    return JSON.stringify({ version: '0.1-spike', build: 1,
+      board: 'FitPro · device 0x04', android: '9' });
+  },
+  resetSettings: function () { location.reload(); return JSON.stringify(STORE); },
+  availableUis: function () {
+    return JSON.stringify(['original', 'ember', 'cluster', 'daylight', 'pacer']);
+  },
+  currentUi: function () { return 'original'; },
+  setUi: function (n) { console.log('setUi', n); }
+};
+</script>
+
+<script src="../android/stride/app/src/main/assets/ui/stride-core.js"></script>
+<script src="../android/stride/app/src/main/assets/ui/stride-settings.js"></script>
+<script>
+  // Straight in — there is no console behind it to open it from.
+  STRIDE_SETTINGS.open();
+</script>
+</body>
+</html>

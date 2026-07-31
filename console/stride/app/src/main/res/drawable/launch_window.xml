@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The window background, which the system paints the instant the activity is
+    created — before onCreate runs, before the WebView exists. That is the
+    whole job: it covers the gap where the panel would otherwise show black.
+
+    gravity="fill" is stated rather than left to the default because the source
+    is exactly 1280x800 and so is the panel, so this is a 1:1 blit and should
+    stay one. If either number ever changes, a stretched splash is a much
+    better failure than a tiled one.
+-->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/launch_screen"
+    android:gravity="fill" />

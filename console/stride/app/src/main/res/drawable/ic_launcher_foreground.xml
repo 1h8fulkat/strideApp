@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The stadium and its runner, as vector rather than a scaled PNG.
+
+    Geometry is lifted verbatim from icons/glyph/stride-glyph.svg, which is the
+    same path stride-core.js draws on the console: two straights from x 382 to
+    642 closed by r 220 semicircles, and the runner at (424, 292) — on the top
+    straight, just past the left bend.
+
+    The 0.78 scale is not taste. An adaptive icon is 108dp of canvas of which a
+    launcher may show as little as a 72dp circle, so anything outside that is
+    liable to be masked away. At full size the mark spans x 136–888, which is
+    73% of the width and would have its ends clipped by a circular mask. At
+    0.78 the widest point sits ~31dp from centre against the mask's 36dp
+    radius, so every part of the loop survives every mask shape.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+
+    <group
+        android:pivotX="512"
+        android:pivotY="512"
+        android:scaleX="0.78"
+        android:scaleY="0.78">
+
+        <!-- The rail. The only line. -->
+        <path
+            android:pathData="M382,292 H642 A220,220 0 0 1 642,732 H382 A220,220 0 0 1 382,292 Z"
+            android:strokeColor="#F4EFE6"
+            android:strokeWidth="52"
+            android:strokeLineCap="round" />
+
+        <!-- The runner. The only colour. -->
+        <path
+            android:pathData="M424,292 m-48,0 a48,48 0 1,0 96,0 a48,48 0 1,0 -96,0 Z"
+            android:fillColor="#E0A458" />
+    </group>
+</vector>

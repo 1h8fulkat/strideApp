@@ -1,0 +1,1575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280,height=800,initial-scale=1">
+<title>STRIDE</title>
+<style>
+/* ---------------------------------------------------------------------------
+   STRIDE HUD — "Original", the interface the treadmill is actually walked on.
+   Target viewport is exactly 1280x800 (the console panel). Everything is
+   absolutely positioned against that, so no reflow and no scrolling.
+   Structure follows inspiration-UI/Nice.webp: oval track hero, speed and
+   incline flanking, secondary metrics along the bottom.
+
+   Three screens — welcome, workout, summary — switched by session state,
+   which the Kotlin side owns. See Session.kt for why the board's own mode
+   can't be trusted for this.
+
+   The vertical budget is fixed and every band is load-bearing:
+
+       62 – 466   hero        oval track, path ahead, or phase countdown
+      478 – 558   coach       docked ribbon; empty space when nothing is said
+      566 – 658   telemetry
+      678 – 766   controls
+
+   The coach used to float over the top of the hero, where it covered the
+   segment header and the warm-up countdown — the two things most worth
+   reading at the moment it appears. It is docked now. Do not float it back.
+--------------------------------------------------------------------------- */
+:root{
+  --bg-0:#050b1f;          /* deepest navy */
+  --bg-1:#0a1533;
+  --ink:#eaf0ff;
+  --ink-dim:#7f92c4;
+  --ink-faint:#44548a;
+  --accent:#39e0ff;        /* primary cyan */
+  --accent-warm:#ff9d3c;   /* progress / effort */
+  --good:#5dff9b;
+  --alert:#ff5c7a;
+  --track-line:#1e3068;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  width:1280px;height:800px;overflow:hidden;
+  background:var(--bg-0);
+  color:var(--ink);
+  font-family:"Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  user-select:none;
+  /* WebView paints a yellow box on tap/focus by default. */
+  -webkit-tap-highlight-color:rgba(0,0,0,0);
+}
+*:focus{outline:none}
+button{-webkit-tap-highlight-color:rgba(0,0,0,0);outline:none}
+/* Depth: a soft radial lift behind the track, like the reference. */
+body::before{
+  content:"";position:absolute;top:0;right:0;bottom:0;left:0;
+  background:radial-gradient(ellipse 900px 520px at 50% 44%,
+    rgba(28,58,140,.55) 0%, rgba(10,21,51,.25) 45%, transparent 72%);
+  pointer-events:none;
+}
+
+.screen{position:absolute;top:0;right:0;bottom:0;left:0;display:none}
+.screen.on{display:block}
+
+/* ---- top bar ------------------------------------------------------------ */
+.topbar{
+  position:absolute;top:0;left:0;right:0;height:56px;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 32px;color:var(--ink-dim);font-size:16px;letter-spacing:.04em;
+}
+.topbar .state{
+  color:var(--accent);font-weight:600;text-transform:uppercase;
+  letter-spacing:.18em;font-size:15px;
+  border:2px solid currentColor;border-radius:16px;padding:5px 20px;
+  transition:color .2s,border-color .2s,background .2s;
+}
+.topbar .state[data-mode="running"]{
+  background:rgba(93,255,155,.12);color:var(--good);
+}
+.topbar .state[data-mode="ready"]{color:var(--ink-faint)}
+.topbar .state[data-mode="paused"]{color:var(--accent-warm)}
+
+/* ---- side gauges -------------------------------------------------------- */
+.side{position:absolute;top:142px;width:250px;text-align:center}
+.side.left{left:24px}
+.side.right{right:24px}
+.side .label{
+  font-size:15px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--ink-dim);margin-bottom:6px;
+}
+.side .value{
+  font-size:104px;font-weight:200;line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.side .unit{font-size:18px;color:var(--ink-dim);margin-top:4px}
+.side .target{
+  margin-top:14px;font-size:15px;color:var(--ink-faint);
+  font-variant-numeric:tabular-nums;
+}
+.side .target b{color:var(--accent);font-weight:600}
+
+/* Simple tick column, stands in for the reference's arc gauge. Ends clear of
+   the coach band at 478 — a column running under the ribbon looked severed. */
+.ticks{margin-top:16px;height:112px;display:flex;flex-direction:column-reverse;align-items:center}
+.ticks i{display:block;width:44px;height:3px;margin-top:5px;background:var(--track-line);border-radius:2px;transition:background .25s}
+.ticks i.on{background:var(--accent)}
+.side.right .ticks i.on{background:var(--accent-warm)}
+
+/* ---- centre: track ------------------------------------------------------
+   The rail, the lanes and the head dot are all generated from STRIDE.track
+   rather than written out by hand, so the dot sits on real arc-length along
+   the stadium instead of somewhere an ellipse approximation put it. */
+.stage{position:absolute;left:274px;top:62px;width:732px;height:404px}
+.stage svg{width:732px;height:404px}
+.lap{
+  position:absolute;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;pointer-events:none;
+}
+.lap .n{
+  font-size:144px;font-weight:200;line-height:.9;
+  font-variant-numeric:tabular-nums;
+  text-shadow:0 0 44px rgba(57,224,255,.45);
+}
+.lap .cap{
+  font-size:15px;letter-spacing:.28em;text-transform:uppercase;
+  color:var(--ink-dim);margin-top:10px;
+}
+
+/* ---- warm-up / cool-down centre panel ----------------------------------- */
+.phase{
+  position:absolute;left:274px;top:62px;width:732px;height:404px;
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+}
+.phase.on{display:flex}
+.phase .pname{
+  font-size:26px;letter-spacing:.34em;text-transform:uppercase;color:var(--accent);
+}
+.phase .pclock{
+  margin-top:22px;font-size:150px;font-weight:200;line-height:.9;
+  font-variant-numeric:tabular-nums;
+  text-shadow:0 0 44px rgba(57,224,255,.35);
+}
+.phase .pnote{margin-top:18px;font-size:17px;color:var(--ink-dim)}
+/* What is coming, stated as a preview. Never live plan state: a warm-up that
+   says "2 of 9 · 1:36 left" is claiming to be a walk that has not started. */
+.phase .pprev{
+  margin-top:14px;font-size:15px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ink-faint);
+}
+.phase .pbar{
+  margin-top:32px;width:420px;height:4px;border-radius:2px;
+  background:var(--track-line);overflow:hidden;
+}
+.phase .pbar i{display:block;height:4px;width:0;background:var(--accent);border-radius:2px}
+.phase[data-kind="cooldown"] .pname{color:var(--accent-warm)}
+.phase[data-kind="cooldown"] .pbar i{background:var(--accent-warm)}
+
+/* ---- bottom metric strip ------------------------------------------------ */
+.strip{
+  position:absolute;left:0;right:0;top:566px;height:92px;
+  display:flex;align-items:center;justify-content:center;
+}
+.metric{display:flex;flex-direction:column;align-items:center;min-width:150px;margin:0 37px}
+.metric .k{
+  font-size:13px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--ink-faint);margin-bottom:6px;
+}
+.metric .v{font-size:42px;font-weight:300;font-variant-numeric:tabular-nums}
+.metric .v small{font-size:17px;color:var(--ink-dim);margin-left:4px}
+
+/* ---- controls ----------------------------------------------------------- */
+/* Held clear of the panel edge: touches within ~15px of the bezel register
+   unreliably on this digitizer, which made the old flush row feel broken. */
+.controls{
+  position:absolute;left:0;right:0;top:678px;height:88px;
+  display:flex;align-items:center;justify-content:center;
+  padding:0 34px;
+}
+button{
+  flex:1;max-width:160px;height:76px;margin:0 8px;
+  /* Without this the WebView waits ~300ms disambiguating a double-tap. */
+  touch-action:manipulation;
+  background:rgba(22,37,90,.55);
+  border:2px solid var(--track-line);
+  border-radius:30px;
+  color:var(--ink);font-size:16px;letter-spacing:.08em;
+  font-family:inherit;
+  transition:background .15s,border-color .15s,transform .06s;
+}
+button:active,button.down{transform:scale(.96);background:rgba(57,224,255,.28)}
+button.primary{border-color:var(--accent);color:var(--accent)}
+button.stop{border-color:var(--alert);color:var(--alert)}
+/* Dim what isn't useful in the current state, so START/STOP read clearly. */
+button.muted{opacity:.4}
+button.active{
+  border-color:var(--good);color:var(--good);
+  background:rgba(93,255,155,.14);opacity:1;
+}
+button.pulse{animation:pulse .9s ease-out 2}
+@keyframes pulse{
+  0%{box-shadow:0 0 0 0 rgba(57,224,255,.55)}
+  100%{box-shadow:0 0 0 22px rgba(57,224,255,0)}
+}
+
+/* ---- fan menu ----------------------------------------------------------- */
+.fanmenu{
+  position:absolute;right:216px;bottom:118px;width:170px;
+  background:rgba(10,21,51,.97);border:2px solid var(--track-line);
+  border-radius:22px;padding:10px;display:none;z-index:30;
+  box-shadow:0 18px 50px rgba(0,0,0,.55);
+}
+.fanmenu.show{display:block}
+.fanmenu button{
+  display:block;width:100%;max-width:none;height:52px;margin:4px 0;
+  border-radius:16px;font-size:15px;
+}
+.fanmenu button.on{border-color:var(--accent);color:var(--accent)}
+
+/* ---- overlays -----------------------------------------------------------
+   The scrim is nearly opaque on purpose. At 0.92 the live layer showed through
+   enough to compete with the headline over it — a 150px countdown or a bright
+   arc behind forty-point text made the words genuinely hard to read, which is
+   the one thing a paused screen cannot afford. Not fully opaque either: the
+   workout has not gone anywhere, and a faint ghost of it says so. */
+.overlay{
+  position:absolute;top:0;right:0;bottom:0;left:0;background:rgba(5,11,31,.98);
+  display:none;align-items:center;justify-content:center;flex-direction:column;
+  z-index:50;
+}
+.overlay.show{display:flex}
+.overlay h1{font-size:52px;font-weight:200;letter-spacing:.02em}
+.overlay p{margin-top:14px;color:var(--ink-dim);font-size:20px}
+.overlay .row{margin-top:46px;display:flex;justify-content:center}
+.overlay .row button{flex:none;width:250px;max-width:none;height:92px;font-size:20px;margin:0 16px}
+#dmk h1{color:var(--alert)}
+
+/* ---- welcome ------------------------------------------------------------ */
+.welcome{
+  position:absolute;top:0;right:0;bottom:0;left:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+.welcome .hello{font-size:62px;font-weight:200;letter-spacing:.01em}
+.welcome .ask{margin-top:16px;font-size:24px;color:var(--ink-dim);font-weight:300}
+.picks{margin-top:66px;display:flex;justify-content:center}
+.pick{
+  flex:none;width:288px;height:224px;margin:0 20px;
+  background:rgba(22,37,90,.5);border:2px solid var(--track-line);
+  border-radius:38px;color:var(--ink);font-family:inherit;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  max-width:none;
+  transition:background .15s,border-color .15s,transform .08s;
+}
+.pick:active,.pick.down{transform:scale(.97);background:rgba(57,224,255,.2)}
+.pick .glyph{font-size:66px;line-height:1}
+.pick .name{margin-top:18px;font-size:26px;letter-spacing:.22em;text-transform:uppercase}
+.pick .hint{margin-top:8px;font-size:15px;color:var(--ink-faint)}
+.welcome .foot{position:absolute;bottom:44px;color:var(--ink-faint);font-size:16px}
+
+/* ---- summary ------------------------------------------------------------ */
+.summary{
+  position:absolute;top:0;right:0;bottom:0;left:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+.summary .head{font-size:56px;font-weight:200}
+.summary .sub{margin-top:12px;font-size:20px;color:var(--ink-dim);letter-spacing:.14em;text-transform:uppercase}
+.cards{margin-top:52px;display:flex;justify-content:center}
+.card{
+  /* Six of these have to fit 1280px with room to breathe at both ends. */
+  flex:none;width:178px;margin:0 8px;padding:26px 0;
+  background:rgba(22,37,90,.4);border:2px solid var(--track-line);border-radius:26px;
+  display:flex;flex-direction:column;align-items:center;
+}
+.card .k{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint)}
+.card .v{margin-top:12px;font-size:40px;font-weight:300;font-variant-numeric:tabular-nums}
+.card .v small{font-size:15px;color:var(--ink-dim);margin-left:3px}
+.summary .done{margin-top:52px}
+.summary .done button{width:280px;max-width:none;height:88px;font-size:19px}
+
+/* ---- coach ribbon -------------------------------------------------------
+   Docked in its own band between the hero and the telemetry row. It used to
+   float over the top of the hero, where it covered the segment header and the
+   warm-up countdown — the two things you most want to read at the exact moment
+   the coach speaks. This placement is load-bearing; do not float it back.
+
+   The band is empty when the coach is silent. That is deliberate: a ribbon
+   that pushed the layout around when it arrived would move the telemetry under
+   someone's eye mid-stride.
+
+   Chromium 83: no `inset`, no flexbox `gap` — explicit edges and margins only. */
+.coach{
+  position:absolute;left:34px;right:34px;top:478px;height:80px;
+  background:rgba(10,21,51,.96);
+  border:2px solid rgba(57,224,255,.34);
+  border-left:3px solid var(--accent);
+  border-radius:18px;
+  z-index:40;                       /* over the fan menu, under the overlays */
+  opacity:0;
+  transform:translateY(10px);
+  transition:opacity .32s ease,transform .32s ease;
+  pointer-events:none;              /* never steals a tap meant for the HUD */
+}
+/* Tappable only while it is up, so it can never swallow a press aimed at the
+   HUD underneath it. */
+.coach.show{opacity:1;transform:translateY(0);pointer-events:auto}
+.coach.down{background:rgba(22,37,90,.96)}
+.coach .who{
+  position:absolute;left:26px;top:31px;
+  font-size:12px;letter-spacing:.28em;text-transform:uppercase;
+  color:var(--accent);
+}
+.coach .ct{
+  position:absolute;left:122px;right:196px;top:0;height:80px;
+  display:flex;align-items:center;
+  font-size:23px;font-weight:300;line-height:1.3;color:var(--ink);
+  overflow:hidden;
+}
+/* Generous target: this gets pressed by someone moving at 6 km/h. The words
+   are small, the touch area is the full height of the ribbon. */
+.coach .x{
+  position:absolute;top:0;right:0;width:180px;height:80px;
+  color:var(--ink-faint);font-size:14px;line-height:80px;text-align:center;
+  letter-spacing:.18em;text-transform:uppercase;
+}
+
+/* ---- welcome sub-steps --------------------------------------------------
+   Walk → Casual or Guided → duration and shape. Purely client side: nothing
+   reaches Kotlin until a walk is actually committed to. */
+/* The step is sized by its widest row — the four plan cards — so its text
+   needs centring explicitly or it hugs the left of that box. */
+.step{display:none;text-align:center}
+.step.on{display:block}
+.chips{margin-top:26px;display:flex;justify-content:center}
+.chip{
+  flex:none;width:112px;height:64px;margin:0 7px;max-width:none;
+  border-radius:20px;font-size:19px;
+}
+.chip.on{border-color:var(--accent);color:var(--accent);background:rgba(57,224,255,.14)}
+.plans{margin-top:30px;display:flex;justify-content:center}
+.plan{
+  flex:none;width:250px;margin:0 11px;padding:22px 16px 18px;max-width:none;height:auto;
+  background:rgba(22,37,90,.5);border:2px solid var(--track-line);border-radius:30px;
+  color:var(--ink);font-family:inherit;display:block;text-align:center;
+}
+.plan:active,.plan.down{transform:scale(.97);background:rgba(57,224,255,.2)}
+.plan .pn{font-size:22px;letter-spacing:.14em;text-transform:uppercase}
+.plan .pb{margin-top:7px;font-size:14px;color:var(--ink-faint);min-height:34px}
+.plan canvas{display:block;margin:6px auto 0}
+.back{
+  position:absolute;left:38px;bottom:40px;width:150px;height:60px;max-width:none;
+  font-size:15px;
+}
+
+/* ---- settings -----------------------------------------------------------
+   One affordance, bottom-right of the profile screen, mirroring BACK on the
+   left. Deliberately quiet: it is used about once a month, and the question on
+   this screen is "who is walking", not "which interface would you like". */
+.gear{
+  position:absolute;right:38px;bottom:40px;width:150px;height:60px;max-width:none;
+  font-size:14px;letter-spacing:.16em;color:var(--ink-faint);
+  border-color:rgba(22,37,90,.8);background:rgba(22,37,90,.3);
+}
+
+#settings{justify-content:flex-start;padding-top:78px}
+#settings h1{font-size:42px}
+#settings p{margin-top:10px}
+.uis{margin-top:44px;display:flex;justify-content:center}
+.uicard{
+  flex:none;width:206px;margin:0 9px;padding:14px 14px 20px;max-width:none;height:auto;
+  background:rgba(22,37,90,.4);border:2px solid var(--track-line);border-radius:24px;
+  color:var(--ink);font-family:inherit;display:block;text-align:center;
+}
+.uicard:active,.uicard.down{transform:scale(.97);background:rgba(57,224,255,.2)}
+/* The one you are looking at. Not a hover state — this panel has no pointer. */
+.uicard.on{border-color:var(--accent);background:rgba(57,224,255,.14)}
+.uicard.soon{opacity:.34}
+.uicard svg{display:block;width:178px;height:111px;border-radius:10px}
+.uicard .un{margin-top:14px;font-size:18px;letter-spacing:.18em;text-transform:uppercase}
+.uicard .ub{margin-top:6px;font-size:13px;color:var(--ink-faint);line-height:1.35;min-height:36px}
+
+.pick.who{width:212px;height:210px;margin:0 12px}
+.pick.who .initial{
+  width:84px;height:84px;border-radius:42px;
+  border:2px solid var(--accent);color:var(--accent);
+  font-size:38px;font-weight:200;line-height:82px;text-align:center;
+}
+.pick.who .name{margin-top:16px}
+
+/* ---- the path ahead -----------------------------------------------------
+   Replaces the oval for every walk. An oval cannot show a hill; a path
+   receding into the distance can, so the climb is visible before it arrives.
+   Canvas rather than SVG: this repaints at 5 Hz on a 2016 MediaTek, and
+   rebuilding a few dozen path nodes per frame as DOM would not hold up. */
+.path{position:absolute;left:274px;top:62px;width:732px;height:404px}
+.path canvas{display:block;width:732px;height:404px}
+.pathinfo{
+  position:absolute;left:0;right:0;top:16px;text-align:center;pointer-events:none;
+}
+.pathinfo .seg{
+  font-size:15px;letter-spacing:.26em;text-transform:uppercase;color:var(--accent);
+}
+.pathinfo .sub{margin-top:6px;font-size:14px;color:var(--ink-faint)}
+.suggest{
+  position:absolute;left:0;right:0;bottom:8px;text-align:center;pointer-events:none;
+  font-size:16px;color:var(--ink-dim);
+}
+.suggest b{color:var(--accent-warm);font-weight:600}
+.suggest.hand b{color:var(--ink-faint)}
+
+/* ---- sleep -------------------------------------------------------------- */
+#sleep{background:#000;z-index:80}
+#sleep .t{font-size:112px;font-weight:100;color:#1d2a4d;font-variant-numeric:tabular-nums}
+#sleep .w{margin-top:26px;font-size:17px;color:#16203c;letter-spacing:.3em;text-transform:uppercase}
+</style>
+</head>
+<body>
+
+<!-- ======================= WELCOME ==================================== -->
+<div class="screen" id="screenWelcome">
+  <div class="topbar">
+    <div id="wClock">—</div>
+    <div></div>
+    <div id="wDate">—</div>
+  </div>
+  <div class="welcome">
+    <!-- step 1 — who -->
+    <div class="step on" id="step1">
+      <div class="hello" id="greeting">Hello</div>
+      <div class="ask">Who's walking?</div>
+      <div class="picks" id="people"></div>
+    </div>
+
+    <!-- step 2 — what -->
+    <div class="step" id="step2">
+      <div class="hello" id="whoName">Welcome</div>
+      <div class="ask">What are we doing today?</div>
+      <div class="picks">
+        <button class="pick" id="pickWalk"><span class="glyph">🚶</span>
+          <span class="name">Walk</span><span class="hint">steady and easy</span></button>
+        <button class="pick" id="pickRun"><span class="glyph">🏃</span>
+          <span class="name">Run</span><span class="hint">push the pace</span></button>
+      </div>
+    </div>
+
+    <!-- step 3 — how -->
+    <div class="step" id="step3">
+      <div class="hello">Walk</div>
+      <div class="ask">On your own, or guided?</div>
+      <div class="picks">
+        <button class="pick" id="pickCasual"><span class="glyph">🚶</span>
+          <span class="name">Casual</span><span class="hint">you choose everything</span></button>
+        <button class="pick" id="pickGuided"><span class="glyph">⛰️</span>
+          <span class="name">Guided</span><span class="hint">the hill is handled for you</span></button>
+      </div>
+    </div>
+
+    <!-- step 4 — which shape, how long -->
+    <div class="step" id="step4">
+      <div class="ask" style="margin-top:0">How long?</div>
+      <div class="chips" id="durations"></div>
+      <div class="ask" style="margin-top:34px">Pick a shape</div>
+      <div class="plans" id="plans"></div>
+    </div>
+
+    <div class="foot" id="wFoot">Clip the safety key on first — the belt eases up to 2 km/h as soon as you choose.</div>
+    <button id="btnBack" class="back" style="display:none">← BACK</button>
+    <button id="btnSettings" class="gear">SETTINGS</button>
+  </div>
+</div>
+
+<!-- ======================= WORKOUT ==================================== -->
+<div class="screen" id="screenHud">
+  <div class="topbar">
+    <div id="clock">—</div>
+    <div class="state" id="mode" data-mode="ready">ready</div>
+    <div id="date">—</div>
+  </div>
+
+  <!-- incline -->
+  <div class="side left">
+    <div class="label">Incline</div>
+    <div class="value" id="incline">0.0</div>
+    <div class="unit">%</div>
+    <div class="target">target <b id="inclineTarget">0.0</b>%</div>
+    <div class="ticks" id="inclineTicks"></div>
+  </div>
+
+  <!-- speed -->
+  <div class="side right">
+    <div class="label">Speed</div>
+    <div class="value" id="speed">0.0</div>
+    <div class="unit">km/h</div>
+    <div class="target">target <b id="speedTarget">0.0</b></div>
+    <div class="ticks" id="speedTicks"></div>
+  </div>
+
+  <!-- track -->
+  <!-- Warm-up / cool-down take over the centre; the 400 m track is for the
+       workout proper, and a lap counter means nothing while easing in. -->
+  <div class="phase" id="phase">
+    <div class="pname" id="phaseName">Warm up</div>
+    <div class="pclock" id="phaseClock">2:00</div>
+    <div class="pnote" id="phaseNote">easing in at 2 km/h</div>
+    <div class="pprev" id="phasePrev"></div>
+    <div class="pbar"><i id="phaseBar"></i></div>
+  </div>
+
+  <div class="path" id="path">
+    <canvas id="pathCanvas" width="732" height="404"></canvas>
+    <div class="pathinfo">
+      <div class="seg" id="segName"></div>
+      <div class="sub" id="segSub"></div>
+    </div>
+    <div class="suggest" id="suggest"></div>
+  </div>
+
+  <!-- The rail, the four lanes and the start/finish tick all have their `d`
+       filled in from STRIDE.track at load: one stadium, one set of numbers,
+       and the head dot placed by arc-length along the very path being drawn. -->
+  <div class="stage" id="stage">
+    <svg viewBox="0 0 732 404" width="732" height="404">
+      <defs>
+        <linearGradient id="prog" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"  stop-color="#5dff9b"/>
+          <stop offset="55%" stop-color="#39e0ff"/>
+          <stop offset="100%" stop-color="#ff9d3c"/>
+        </linearGradient>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="7" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <!-- lanes, inside the rail -->
+      <g id="lanes" fill="none" stroke="var(--track-line)" stroke-width="2"></g>
+      <!-- The lap just finished, being erased from behind by the new one, so
+           the ring stays whole and the dot never stops to wait for a redraw. -->
+      <path id="tail"
+            fill="none" stroke="rgba(57,224,255,.22)" stroke-width="6"
+            stroke-linecap="round"
+            pathLength="1000" stroke-dasharray="0 1000"/>
+      <!-- lap progress -->
+      <path id="progress"
+            fill="none" stroke="url(#prog)" stroke-width="7"
+            stroke-linecap="round" filter="url(#glow)"
+            pathLength="1000" stroke-dasharray="0 1000"/>
+      <line id="startTick" stroke="var(--ink-dim)" stroke-width="2"/>
+      <circle id="dot" cx="0" cy="0" r="9" fill="#eaf0ff" filter="url(#glow)"/>
+    </svg>
+    <div class="lap">
+      <div class="n" id="lap">0</div>
+      <div class="cap">laps &middot; 400 m</div>
+    </div>
+  </div>
+
+  <div class="strip">
+    <div class="metric"><div class="k">Elapsed</div><div class="v" id="elapsed">0:00</div></div>
+    <div class="metric"><div class="k">Distance</div><div class="v"><span id="distance">0</span><small>m</small></div></div>
+    <div class="metric"><div class="k">Calories</div><div class="v"><span id="calories">0</span><small>kcal</small></div></div>
+    <div class="metric"><div class="k">Heart rate</div><div class="v"><span id="pulse">—</span><small>bpm</small></div></div>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="btnStart">START</button>
+    <button id="btnSpeedDown">SPEED −</button>
+    <button id="btnSpeedUp">SPEED +</button>
+    <button id="btnInclineDown">INCLINE −</button>
+    <button id="btnInclineUp">INCLINE +</button>
+    <button id="btnFan">FAN</button>
+    <button class="stop" id="btnStop">STOP</button>
+  </div>
+
+  <div class="fanmenu" id="fanmenu">
+    <button data-fan="0">OFF</button>
+    <button data-fan="1">LOW</button>
+    <button data-fan="2">MEDIUM</button>
+    <button data-fan="3">HIGH</button>
+    <button data-fan="4">AUTO</button>
+  </div>
+</div>
+
+<!-- ======================= SUMMARY ==================================== -->
+<div class="screen" id="screenSummary">
+  <div class="summary">
+    <div class="head" id="sumHead">Nice work</div>
+    <div class="sub" id="sumSub">walk complete</div>
+    <div class="cards">
+      <div class="card"><div class="k">Time</div><div class="v" id="sumTime">0:00</div></div>
+      <div class="card"><div class="k">Distance</div><div class="v"><span id="sumDist">0</span><small>m</small></div></div>
+      <div class="card"><div class="k">Calories</div><div class="v"><span id="sumCal">0</span><small>kcal</small></div></div>
+      <div class="card"><div class="k">Avg speed</div><div class="v"><span id="sumAvg">0.0</span><small>km/h</small></div></div>
+      <div class="card"><div class="k">Max speed</div><div class="v"><span id="sumMax">0.0</span><small>km/h</small></div></div>
+      <div class="card"><div class="k">Avg incline</div><div class="v"><span id="sumInc">0.0</span><small>%</small></div></div>
+    </div>
+    <div class="done"><button class="primary" id="btnDone">DONE</button></div>
+  </div>
+</div>
+
+<!-- ======================= OVERLAYS =================================== -->
+<div class="overlay" id="confirm">
+  <h1>Workout paused</h1>
+  <!-- Says where you are, not just that you stopped. Someone coming back to a
+       paused console after answering the door wants the walk located again. -->
+  <p id="pausedWhere">The belt has stopped.</p>
+  <div class="row">
+    <button class="primary" id="btnResume">RESUME</button>
+    <button class="stop" id="btnEnd">END WORKOUT</button>
+  </div>
+</div>
+
+<!-- Settings > UI. Five documents, one narrow contract; Kotlin picks the asset
+     and reloads. Only the ones actually in this build are offered. -->
+<div class="overlay" id="settings">
+  <h1>Interface</h1>
+  <p>Five ways to walk. The treadmill behaves identically in all of them.</p>
+  <div class="uis" id="uis"></div>
+  <div class="row"><button class="primary" id="btnUiClose">CLOSE</button></div>
+</div>
+
+<!-- Sits above every screen. The hardware has already cut the belt by the time
+     this appears; the overlay exists to explain why nothing is responding. -->
+<div class="overlay" id="dmk">
+  <h1>Safety key removed</h1>
+  <p>Insert the key to activate the treadmill</p>
+  <div class="row"><button class="primary" id="btnDmkOk">KEY IS BACK IN</button></div>
+</div>
+
+<!-- ======================= COACH ====================================== -->
+<!-- Outside the screens so a line can land on any of them. -->
+<div class="coach" id="coach">
+  <div class="who">Coach</div>
+  <div class="ct" id="coachText"></div>
+  <div class="x">Dismiss &times;</div>
+</div>
+
+<div class="overlay" id="sleep">
+  <div class="t" id="sleepClock">—</div>
+  <div class="w">Tap to wake</div>
+</div>
+
+<script src="stride-core.js"></script>
+<script src="stride-settings.js"></script>
+<script>
+/* The Kotlin side calls window.render(state) at ~5 Hz. `Stride` is the
+   @JavascriptInterface bridge; stride-core stubs it so this page can be opened
+   in a desktop browser for design work without the treadmill.
+
+   Touch handling, the track maths and the formatters all live in the core —
+   see the header there for why. This file owns the look and nothing else. */
+const standalone = STRIDE.stub();
+
+const LAP_M = 400;
+const $ = STRIDE.$;
+const nf = STRIDE.nf;
+const mmss = STRIDE.mmss;
+const tap = STRIDE.tap;
+const stepper = STRIDE.stepper;
+
+function ack(btn){
+  btn.classList.remove('pulse');
+  void btn.offsetWidth;      // restart the animation
+  btn.classList.add('pulse');
+}
+
+/* --- wiring -------------------------------------------------------------- */
+/* --- welcome steps -------------------------------------------------------
+   Walk splits into casual and guided; run stays a single tap, because a
+   guided run is a different problem and nobody has asked for it. */
+/* Everyone who might walk up to it, read from Settings rather than written
+   here. It used to be a literal — four names of one household in a file that
+   ships to anybody — and now that the coach is gated per person, a name on this
+   picker that is not in Settings would be a walker who silently gets no
+   coaching and no history. One list, in one place.
+
+   Rebuilt on every visit, because somebody may have just added themselves. */
+let walker = STRIDE.defaultWalker();
+
+function pickWalker(name){
+  walker = name;
+  $('whoName').textContent = name || 'Guest';
+  Stride.setWalker(name);
+  showStep(2);
+}
+
+function buildPeople(){
+  const box = $('people');
+  box.innerHTML = '';
+  const names = STRIDE.profiles();
+
+  names.forEach(name => {
+    const b = document.createElement('button');
+    b.className = 'pick who';
+    b.innerHTML = '<span class="initial">' + name[0].toUpperCase() + '</span>' +
+                  '<span class="name">' + name + '</span>';
+    tap(b, () => pickWalker(name));
+    box.appendChild(b);
+  });
+
+  /* The way in to Settings, and only while there is no other way to be here:
+     once somebody is set up this is a button on the busiest screen on the
+     console that exists to be pressed twice a year. Settings is reachable from
+     its own button either way. */
+  if (!STRIDE.people().length){
+    const s = document.createElement('button');
+    s.className = 'pick who';
+    s.innerHTML = '<span class="initial">+</span><span class="name">Add people</span>';
+    tap(s, () => STRIDE_SETTINGS.open());
+    box.appendChild(s);
+  }
+}
+
+/* --- Settings > UI -------------------------------------------------------
+   Kotlin owns the choice and reloads the WebView; this screen just shows the
+   five and taps `setUi`. Anything in the list but not in the APK is drawn
+   greyed and does nothing, so the shape of what is coming is visible without
+   offering a blank page. */
+function buildUis(){
+  const box = $('uis');
+  const here = STRIDE.currentUi();
+  const built = STRIDE.uiList();
+  box.innerHTML = '';
+  STRIDE.UI_META.forEach(u => {
+    const ready = built.indexOf(u.id) >= 0;
+    const b = document.createElement('button');
+    b.className = 'uicard' + (u.id === here ? ' on' : '') + (ready ? '' : ' soon');
+    b.innerHTML =
+      '<svg viewBox="0 0 160 100">' + u.sketch + '</svg>' +
+      '<div class="un">' + u.name + '</div>' +
+      '<div class="ub">' + (ready ? u.blurb : 'not in this build yet') + '</div>';
+    if (ready && u.id !== here) tap(b, () => Stride.setUi(u.id));
+    box.appendChild(b);
+  });
+}
+
+const TEMPLATES = [
+  {id:'steady',  name:'Steady',        blurb:'One gentle hill, held'},
+  {id:'rolling', name:'Rolling hills', blurb:'Up and down, over and over'},
+  {id:'pyramid', name:'Pyramid',       blurb:'Climbs to a peak, then back down'},
+  {id:'climb',   name:'Long climb',    blurb:'One sustained ascent'},
+];
+/* Shapes drawn on the cards, as incline percentages across the walk. Purely
+   illustrative — the real profile comes from Kotlin at start. */
+const SHAPES = {
+  steady:[0,2,3.5,3.5,5,3,1.5,0],
+  rolling:[0,4,-1,6.5,1,9.5,2,5.5,-1.5,3,0],
+  pyramid:[0,2.5,5,7.5,10,11.5,7,4,1.5,0],
+  climb:[0,3,5.5,4.5,7.5,11,6,2.5,0],
+};
+let chosenMinutes = 30;
+
+/* who → what → how → which. Purely client side; nothing reaches Kotlin, and the
+   belt cannot move, until a walk is actually committed to on the last step.
+
+   The profile step is one card today. It exists so that adding a second person
+   later is a change to this list rather than a change to the flow — though the
+   rest of the system is still single-user, so that is all it would be. */
+const STEPS = ['step1','step2','step3','step4'];
+let stepNow = 1;
+
+function showStep(n){
+  stepNow = n;
+  STEPS.forEach((id,i) => $(id).classList.toggle('on', i === n-1));
+  $('btnBack').style.display = n > 1 ? 'block' : 'none';
+  $('wFoot').style.display = n === 1 ? 'block' : 'none';
+  // The interface question belongs with "who is walking", not halfway into
+  // choosing a plan.
+  $('btnSettings').style.display = n === 1 ? 'block' : 'none';
+}
+
+function sparkline(cv, pts){
+  const c = cv.getContext('2d'), w = cv.width, h = cv.height;
+  c.clearRect(0,0,w,h);
+  // Room for the descents as well as the climbs.
+  const max = 12, min = -3;
+  const y = v => h - ((v - min)/(max - min))*(h-6) - 3;
+  c.beginPath();
+  c.moveTo(0, h);
+  pts.forEach((v,i) => c.lineTo(i/(pts.length-1)*w, y(v)));
+  c.lineTo(w, h);
+  c.closePath();
+  c.fillStyle = 'rgba(57,224,255,.22)';
+  c.fill();
+  c.beginPath();
+  pts.forEach((v,i) => {
+    const px = i/(pts.length-1)*w, py = y(v);
+    i ? c.lineTo(px,py) : c.moveTo(px,py);
+  });
+  c.strokeStyle = '#39e0ff'; c.lineWidth = 2; c.stroke();
+}
+
+function buildGuidedStep(){
+  const durations = $('durations');
+  durations.innerHTML = '';
+  [5,15,20,30,45].forEach(m => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (m === chosenMinutes ? ' on' : '');
+    // Five minutes is a bench test: every segment in about 30 seconds.
+    b.textContent = m + ' min';
+    tap(b, () => {
+      chosenMinutes = m;
+      [...durations.children].forEach(c => c.classList.toggle('on', c === b));
+    });
+    durations.appendChild(b);
+  });
+
+  const plans = $('plans');
+  plans.innerHTML = '';
+  TEMPLATES.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'plan';
+    b.innerHTML = '<div class="pn">' + t.name + '</div>' +
+                  '<div class="pb">' + t.blurb + '</div>';
+    const cv = document.createElement('canvas');
+    cv.width = 210; cv.height = 56;
+    b.appendChild(cv);
+    plans.appendChild(b);
+    sparkline(cv, SHAPES[t.id]);
+    tap(b, () => Stride.chooseGuided(t.id, chosenMinutes));
+  });
+}
+
+buildPeople();
+tap($('pickWalk'), () => showStep(3));
+tap($('pickRun'),  () => Stride.choose('run'));
+tap($('pickCasual'), () => Stride.choose('walk'));
+tap($('pickGuided'), () => { buildGuidedStep(); showStep(4); });
+tap($('btnBack'), () => showStep(Math.max(1, stepNow - 1)));
+/* The settings screen is shared by all five interfaces — see
+   stride-settings.js. This document keeps the button and nothing else;
+   eight sections of real configuration maintained in five places is how
+   the copy nobody opens stops matching the store. */
+tap($('btnSettings'), () => STRIDE_SETTINGS.open());
+/* Somebody may have just added themselves. The picker is cheap to rebuild and
+   stale is the one thing it must not be — a name it shows that Settings does
+   not have is a walker with no coaching and no history. */
+document.addEventListener('stride-settings-closed', buildPeople);
+if ($('btnUiClose')) tap($('btnUiClose'), () => STRIDE_SETTINGS.close());
+
+/* The leftmost button changes job with the phase. Choosing a workout is what
+   starts it now, so there is no START — this slot is skip / pause / resume. */
+tap($('btnStart'), () => {
+  closeFan();
+  switch (shownMode){
+    case 'warmup':   Stride.skipWarmup();  break;
+    case 'cooldown': Stride.skipCooldown(); break;
+    case 'paused':   Stride.resume();      break;
+    case 'running':  Stride.pause();       break;
+  }
+  ack($('btnStart'));
+});
+tap($('btnStop'),  () => {
+  // Cool-down is already the way out; STOP there would just be a second one.
+  if (shownMode !== 'warmup' && shownMode !== 'running' && shownMode !== 'paused') return;
+  closeFan();
+  // Halt the belt first, ask second. Never the other way round.
+  Stride.pause();
+  $('confirm').classList.add('show');
+});
+tap($('btnResume'), () => { $('confirm').classList.remove('show'); Stride.resume(); });
+tap($('btnEnd'),    () => { $('confirm').classList.remove('show'); Stride.end(); });
+tap($('btnDone'),   () => Stride.home());
+// The board only pulses mode 8 on removal, so we can't sense the key coming
+// back — you tell us. If it is still out, the next poll raises this again.
+tap($('btnDmkOk'),  () => Stride.ackDmk());
+
+stepper($('btnSpeedUp'),    d => Stride.speed(d),   0.1, 0.5);
+stepper($('btnSpeedDown'),  d => Stride.speed(-d),  0.1, 0.5);
+stepper($('btnInclineUp'),  d => Stride.incline(d), 0.5, 0.5);
+stepper($('btnInclineDown'),d => Stride.incline(-d),0.5, 0.5);
+
+/* Fan: a slide-out with the actual levels, rather than cycling blind. */
+let fanTimer = null;
+function closeFan(){ $('fanmenu').classList.remove('show'); clearTimeout(fanTimer); }
+tap($('btnFan'), () => {
+  const menu = $('fanmenu');
+  if (menu.classList.contains('show')) { closeFan(); return; }
+  menu.classList.add('show');
+  clearTimeout(fanTimer);
+  fanTimer = setTimeout(closeFan, 5000);
+});
+[...$('fanmenu').querySelectorAll('button')].forEach(b => {
+  tap(b, () => { Stride.setFan(parseInt(b.dataset.fan, 10)); closeFan(); });
+});
+
+/* --- helpers ------------------------------------------------------------- */
+function ticks(el, n, active){
+  if (el.childElementCount !== n){
+    el.innerHTML = '';
+    for (let i=0;i<n;i++) el.appendChild(document.createElement('i'));
+  }
+  [...el.children].forEach((c,i)=>c.classList.toggle('on', i < active));
+}
+
+/* --- the 400 m track -----------------------------------------------------
+   The canonical stadium: two 248px straights closed by r=158 semicircles,
+   centred in the 732x404 hero. Face-on here — the oblique squash exists for
+   the UIs that are short of vertical space, and this one is not.
+
+   Everything the ring needs comes out of this one object, so the rail the dot
+   runs on and the rail that is drawn cannot drift apart. */
+const TRACK = STRIDE.track({straight:248, radius:158, cx:366, cy:202, squash:1});
+
+const progress = $('progress'), tail = $('tail'), dot = $('dot');
+progress.setAttribute('d', TRACK.pathD(0));
+tail.setAttribute('d', TRACK.pathD(0));
+
+/* Four lanes inside the rail. A stadium offset inwards keeps its straights and
+   loses radius, which is exactly what keeps lanes parallel round the bends. */
+[20, 36, 52, 68].forEach(inset => {
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p.setAttribute('d', TRACK.pathD(inset));
+  $('lanes').appendChild(p);
+});
+
+/* Start/finish, struck outwards along the rail's own normal. */
+(() => {
+  const p = TRACK.atFraction(0);
+  const t = $('startTick');
+  t.setAttribute('x1', p.x); t.setAttribute('y1', p.y);
+  t.setAttribute('x2', p.x + p.nx * 15); t.setAttribute('y2', p.y + p.ny * 15);
+})();
+
+/* --- screens ------------------------------------------------------------- */
+const SCREENS = {welcome:'screenWelcome', warmup:'screenHud', running:'screenHud',
+                 paused:'screenHud', cooldown:'screenHud', summary:'screenSummary'};
+let shownMode = null;
+
+function showScreen(mode){
+  if (mode === shownMode) return;
+  const target = SCREENS[mode] || 'screenWelcome';
+  ['screenWelcome','screenHud','screenSummary']
+    .forEach(id => $(id).classList.toggle('on', id === target));
+  if (mode === 'welcome' || mode === 'summary') closeFan();
+  if (mode !== 'paused') $('confirm').classList.remove('show');
+  if (mode !== 'welcome') STRIDE_SETTINGS.close();
+  // Back to the first question whenever we land on the welcome screen, so a
+  // finished walk never leaves a half-made choice sitting there.
+  if (mode === 'welcome') showStep(1);
+  /* Changing screen counts as activity. Without this, finishing a workout drops
+     straight onto the summary with half an hour of "idle" already banked — the
+     panel dimmed to sleep the instant the first walk ended, before it could be
+     read. */
+  lastTouch = Date.now();
+  shownMode = mode;
+}
+
+/* --- sleep ---------------------------------------------------------------
+   Console lives in the room; at rest it should be dark, not a glowing slab.
+   Only sleeps when no workout is in progress. */
+const SLEEP_AFTER_MS = 5 * 60 * 1000;
+let lastTouch = Date.now(), asleep = false;
+
+function wake(){
+  lastTouch = Date.now();
+  if (!asleep) return;
+  asleep = false;
+  STRIDE.suppress(500);
+  $('sleep').classList.remove('show');
+  Stride.dim(false);
+}
+
+/* The waking tap must not also press whatever it landed on.
+   Handling it on the overlay itself and calling preventDefault() suppresses
+   the synthetic click that would otherwise be delivered to the button now
+   sitting under the finger — which is how one tap used to both wake the
+   console and start a workout. */
+const sleepEl = $('sleep');
+sleepEl.addEventListener('touchstart', e => { e.preventDefault(); wake(); }, {passive:false});
+sleepEl.addEventListener('mousedown',  e => { e.preventDefault(); wake(); });
+
+/* Everything else only resets the idle timer; it must never wake, or it would
+   tear the overlay away mid-gesture and let the press through again. */
+function markActivity(){ lastTouch = Date.now(); }
+document.addEventListener('touchstart', markActivity, {capture:true, passive:true});
+document.addEventListener('mousedown',  markActivity, {capture:true});
+
+setInterval(() => {
+  const idle = Date.now() - lastTouch;
+  const restful = shownMode === 'welcome' || shownMode === 'summary' || shownMode === null;
+  if (!asleep && restful && idle > SLEEP_AFTER_MS){
+    asleep = true;
+    $('sleep').classList.add('show');
+    Stride.dim(true);
+  }
+}, 5000);
+
+/* --- the path ahead ------------------------------------------------------
+   A ribbon receding to a vanishing point, scrolling towards the walker.
+
+   The geometry is one idea: for a point `d` metres ahead, a perspective factor
+   p = near / (near + d) shrinks it towards the horizon. Everything — width,
+   lateral meander, and the rise or fall of the ground — is that one factor
+   applied to a world-space offset, which is why a hill genuinely looks like it
+   is approaching rather than like a graph scrolling sideways.
+
+   Elevation is the point of the whole thing: the path's height at distance d
+   comes from the *plan*, so an eight percent climb two minutes out is already
+   visible, rising into the distance, before you reach it. */
+const pathCv = $('pathCanvas'), pctx = pathCv.getContext('2d');
+const PW = 732, PH = 404;
+
+/* The path ahead, obliquely.
+
+   The walker stands bottom-left and the path recedes up and to the right. Its
+   curves are a *meandering path* — lateral wander — with elevation laid on top,
+   so a climb both rises and carries on snaking. An oblique view keeps the
+   meander legible where a head-on one would compress every bend into a few
+   pixels near the vanishing point, and keeps the hill readable where a flat
+   side-on elevation chart would lose the wander entirely.
+
+   Everything is measured relative to the walker, so the path always flows from
+   underfoot rather than beside it, and both the far end and the edges fade
+   rather than being cut off. */
+const X0 = PW * 0.12, Y0 = PH * 0.82;   // where the walker stands
+/* Pulled in from the corner deliberately: the far end is the gap the ridges
+   part around, and a vanishing point jammed against the right edge leaves no
+   room for mountains on both sides of it. */
+const SPAN = 520;                        // screen length of the whole view
+/* Shallow on purpose. At 32° the path climbed the screen steeply just by
+   receding, so a flat walk looked like a hill and the two were impossible to
+   tell apart — the first thing the first real walk exposed. Nearly level now,
+   so height on screen means height on the ground. */
+const THETA = 19 * Math.PI / 180;        // how obliquely it recedes
+const CT = Math.cos(THETA), ST = Math.sin(THETA);
+const KDEPTH = 45;                       // metres to half perspective scale
+const SEE_AHEAD = 260;                   // metres of path drawn
+const LAT_SCALE = 15;                    // px per metre of lateral wander, near
+const ELEV_SCALE = 26;                   // px per metre of rise, near
+const HALF_W = 1.5;                      // path half-width, metres
+const WIDTH_SCALE = 15;
+
+/* Distances sampled along the path: dense underfoot, sparse where a metre is
+   worth a fraction of a pixel. Built once. */
+const SAMPLES_U = (function(){
+  const out = [];
+  for (let u = 0; u < SEE_AHEAD; u = u < 4 ? u + 1 : u * 1.06) out.push(u);
+  return out;
+})();
+
+let planSteps = [], planName = '';
+let elevMarks = [];
+
+window.plan = function(p){
+  planSteps = (p && p.steps) || [];
+  planName = (p && p.name) || '';
+  elevMarks = [];
+  let h = 0;
+  for (const st of planSteps){
+    elevMarks.push(h);
+    h += (st.end - st.start) * st.incline * 0.01 * 1.5;
+  }
+  elevMarks.push(h);
+};
+
+/* Rise in metres at plan-time t. Flat with no plan, which is right for a
+   casual walk. */
+function elevAt(t){
+  if (!planSteps.length) return 0;
+  if (t <= 0) return 0;
+  for (let i = 0; i < planSteps.length; i++){
+    const st = planSteps[i];
+    if (t < st.end) return elevMarks[i] + (t - st.start) * st.incline * 0.01 * 1.5;
+  }
+  return elevMarks[elevMarks.length - 1];
+}
+
+/* Lateral wander at a world position, metres. Two waves so it never reads as a
+   sine test pattern. */
+function bendAt(w){
+  return Math.sin(w / 34) * 9 + Math.sin(w / 79) * 5;
+}
+
+/* Oblique projection of a point u metres ahead. */
+function project(u, ctx, flat){
+  const p = KDEPTH / (KDEPTH + u);          // perspective scale, 1 → 0
+  const along = SPAN * (1 - p);             // screen distance travelled
+  const lat = (bendAt(ctx.world + u) - ctx.bend0) * p * LAT_SCALE;
+  const rise = flat ? 0
+    : (elevAt(ctx.t0 + u / ctx.paceMs) - ctx.elev0) * p * ELEV_SCALE;
+  return {
+    // Lateral offset runs perpendicular to the direction of travel.
+    x: X0 + along * CT + lat * ST,
+    y: Y0 - along * ST + lat * CT - rise,
+    hw: HALF_W * p * WIDTH_SCALE,
+    p: p,
+  };
+}
+
+/* --- scenery -------------------------------------------------------------
+   Low-poly ridges and pines in the interface blues, each drifting at its own
+   parallax rate. Two facets per peak — one lit, one shaded — is enough to read
+   as geodesic without becoming a landscape renderer. */
+function hash(i){
+  const x = Math.sin(i * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function ridge(offset, baseY, height, spacing, dark, light, cap, gapX, gapW){
+  const first = Math.floor(offset / spacing) - 1;
+  for (let i = first; i < first + (PW / spacing) + 3; i++){
+    const px = i * spacing - offset;
+    if (px < -spacing || px > PW + spacing) continue;
+    /* Flatten the range where the path runs off into the distance, so it has a
+       valley to emerge from rather than a peak to walk through. */
+    const near = Math.min(1, Math.abs(px - gapX) / gapW);
+    const gap = 0.08 + 0.92 * near * near;
+    const h = height * (0.55 + hash(i) * 0.65) * gap;
+    const w = spacing * (0.62 + hash(i + 99) * 0.3);
+    const apexX = px + (hash(i + 7) - 0.5) * spacing * 0.3;
+    const apexY = baseY - h;
+    // Shaded face.
+    pctx.beginPath();
+    pctx.moveTo(apexX, apexY);
+    pctx.lineTo(px - w, baseY);
+    pctx.lineTo(px + w * 0.1, baseY);
+    pctx.closePath();
+    pctx.fillStyle = dark;
+    pctx.fill();
+    // Lit face.
+    pctx.beginPath();
+    pctx.moveTo(apexX, apexY);
+    pctx.lineTo(px + w * 0.1, baseY);
+    pctx.lineTo(px + w, baseY);
+    pctx.closePath();
+    pctx.fillStyle = light;
+    pctx.fill();
+    // A facet near the summit, which is what sells the low-poly look.
+    if (cap){
+      pctx.beginPath();
+      pctx.moveTo(apexX, apexY);
+      pctx.lineTo(apexX - w * 0.22, apexY + h * 0.28);
+      pctx.lineTo(apexX + w * 0.24, apexY + h * 0.24);
+      pctx.closePath();
+      pctx.fillStyle = cap;
+      pctx.fill();
+    }
+  }
+}
+
+function pines(offset, baseY, size, spacing, colour, pts){
+  const first = Math.floor(offset / spacing) - 1;
+  let drawn = 0;
+  for (let i = first; i < first + (PW / spacing) + 3; i++){
+    if (drawn >= 2) break;               // one or two, never a forest
+    const x = i * spacing - offset + hash(i + 21) * spacing * 0.5;
+    if (x < -40 || x > PW + 40) continue;
+    const h = size * (0.7 + hash(i + 5) * 0.6);
+    const y = baseY + hash(i + 13) * 12;
+    /* Never on or under the line. A tree growing out of the path reads as a
+       mistake, so anything close to it in x at a similar depth is skipped. */
+    let clear = true;
+    for (let k = 0; k < pts.length; k++){
+      if (Math.abs(pts[k].y - y) < 55 && Math.abs(pts[k].x - x) < 90){ clear = false; break; }
+      if (pts[k].y > y + 10 && Math.abs(pts[k].x - x) < 60){ clear = false; break; }
+    }
+    if (!clear) continue;
+    drawn++;
+    pctx.fillStyle = colour;
+    for (let tier = 0; tier < 3; tier++){
+      const ty = y - tier * h * 0.26;
+      const tw = h * 0.30 * (1 - tier * 0.22);
+      pctx.beginPath();
+      pctx.moveTo(x, ty - h * 0.52);
+      pctx.lineTo(x - tw, ty);
+      pctx.lineTo(x + tw, ty);
+      pctx.closePath();
+      pctx.fill();
+    }
+  }
+}
+
+function drawPath(s){
+  pctx.clearRect(0, 0, PW, PH);
+
+  const done = s.distance || 0;
+  /* Floored so a stopped belt still draws a path rather than dividing by zero;
+     the view simply stops moving. */
+  const paceMs = Math.max(0.6, (s.speed || 0) / 3.6);
+  const ctx = {
+    world: done,
+    t0: s.elapsed || 0,
+    paceMs: paceMs,
+    bend0: bendAt(done),
+    elev0: elevAt(s.elapsed || 0),
+  };
+
+  /* Sample the path first: the scenery is placed around it, not the other way
+     round. */
+  const pts = SAMPLES_U.map(u => project(u, ctx, false));
+  const n = pts.length;
+  const vanishX = pts[n - 1].x;
+
+  /* Background, furthest and slowest first. Kept dim: this is scenery, and the
+     numbers around it are what someone is actually reading. */
+  ridge(done * 1.1, PH * 0.40, 122, 118, '#0d1836', '#121f45', null, vanishX, 210);
+  ridge(done * 2.2, PH * 0.50, 96,  92, '#111f45', '#16285a', '#1c3269', vanishX, 170);
+  pines(done * 5.5, PH * 0.60, 34, 150, 'rgba(22,40,92,.6)', pts);
+
+  /* Erase the scenery back towards the canvas edges, so it dissolves into the
+     page instead of ending on the hard rectangle of the canvas bounds. Done as
+     a composite wipe *before* the path is drawn, so the path keeps its own
+     edges. */
+  pctx.globalCompositeOperation = 'destination-out';
+  const wipes = [
+    [0, 0, PW * 0.20, 0],                       // left edge
+    [PW, 0, PW * 0.80, 0],                      // right edge
+    [0, PH * 0.62, 0, PH * 0.46],               // below the ridge bases
+    [0, 0, 0, PH * 0.18],                       // top, into the sky
+  ];
+  for (let i = 0; i < wipes.length; i++){
+    const g = pctx.createLinearGradient(wipes[i][0], wipes[i][1], wipes[i][2], wipes[i][3]);
+    g.addColorStop(0, 'rgba(0,0,0,1)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    pctx.fillStyle = g;
+    pctx.fillRect(0, 0, PW, PH);
+  }
+  /* Corners last: linear wipes leave them, and a corner is where a hard canvas
+     edge shows most. */
+  const vig = pctx.createRadialGradient(PW / 2, PH * 0.45, PH * 0.30,
+                                        PW / 2, PH * 0.45, PH * 0.95);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,1)');
+  pctx.fillStyle = vig;
+  pctx.fillRect(0, 0, PW, PH);
+  pctx.globalCompositeOperation = 'source-over';
+
+  pctx.lineCap = 'round';
+  pctx.lineJoin = 'round';
+
+  /* The level line: where the path would run if the ground stayed flat.
+     Without it there is nothing to judge height against, and a receding path is
+     indistinguishable from a climbing one. The gap between this and the real
+     line *is* the hill. */
+  const flatPts = SAMPLES_U.map(u => project(u, ctx, true));
+
+  /* ---- the ground ------------------------------------------------------
+     The path used to be a line in mid-air. It is standing on something now:
+     the solid between the path and the level plane below it, which is the
+     earth you are walking over. Climb and the earth thickens under you;
+     descend and the path cuts down into it; walk on the flat and it settles to
+     an even lip, so the line always has a surface beneath it and never floats.
+
+     Deliberately *not* a full ground plane spread out sideways. This is an
+     oblique projection, which has no horizon — widen a plane in it and the
+     ground stands on its edge like a mountainside. (Found the hard way in the
+     terrain spikes; see newUI.md.) A proper floor needs a pinhole camera,
+     which is spike 2's job and parked. What is here works within the
+     projection it has. */
+  const LIP = 11;                       // px of earth under a level path, near
+  pctx.beginPath();
+  pctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < n; i++) pctx.lineTo(pts[i].x, pts[i].y);
+  for (let i = n - 1; i >= 0; i--){
+    pctx.lineTo(flatPts[i].x, flatPts[i].y + LIP * pts[i].p);
+  }
+  pctx.closePath();
+  const soil = pctx.createLinearGradient(X0, Y0 + 30, X0 + SPAN * CT, Y0 - SPAN * ST);
+  soil.addColorStop(0,    'rgba(23,42,96,.92)');
+  soil.addColorStop(0.45, 'rgba(17,32,74,.62)');
+  soil.addColorStop(1,    'rgba(12,24,56,0)');
+  pctx.fillStyle = soil;
+  pctx.fill();
+
+  /* A lit edge along the top of the earth, right under the path. This is the
+     line that actually sells contact — without it the fill reads as a shadow
+     rather than as a surface the path is resting on. */
+  pctx.beginPath();
+  pctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < n; i++) pctx.lineTo(pts[i].x, pts[i].y);
+  pctx.lineWidth = 1.5;
+  pctx.strokeStyle = 'rgba(90,120,200,.34)';
+  pctx.stroke();
+
+  pctx.beginPath();
+  pctx.moveTo(flatPts[0].x, flatPts[0].y);
+  for (let i = 1; i < flatPts.length; i++) pctx.lineTo(flatPts[i].x, flatPts[i].y);
+  pctx.setLineDash([5, 9]);
+  pctx.lineWidth = 1.5;
+  pctx.strokeStyle = 'rgba(127,146,196,.30)';
+  pctx.stroke();
+  pctx.setLineDash([]);
+
+  /* The ribbon: a soft wash between the edges, no outline, so there is no hard
+     cut anywhere. */
+  pctx.beginPath();
+  pctx.moveTo(pts[0].x - pts[0].hw * ST, pts[0].y - pts[0].hw * CT);
+  for (let i = 1; i < n; i++) pctx.lineTo(pts[i].x - pts[i].hw * ST, pts[i].y - pts[i].hw * CT);
+  for (let i = n - 1; i >= 0; i--) pctx.lineTo(pts[i].x + pts[i].hw * ST, pts[i].y + pts[i].hw * CT);
+  pctx.closePath();
+  const wash = pctx.createLinearGradient(X0, Y0, X0 + SPAN * CT, Y0 - SPAN * ST);
+  wash.addColorStop(0, 'rgba(57,224,255,.18)');
+  wash.addColorStop(1, 'rgba(57,224,255,0)');
+  pctx.fillStyle = wash;
+  pctx.fill();
+
+  /* The glowing centre line. Segment by segment so each carries its own fade;
+     three passes fake the glow, which is cheaper than shadowBlur — and this
+     2016 GPU does not enjoy shadowBlur at 5 Hz. */
+  const PASSES = [[5.0, 0.06], [2.6, 0.14], [1.0, 0.95]];
+  for (let k = 0; k < PASSES.length; k++){
+    const mult = PASSES[k][0], alpha = PASSES[k][1];
+    for (let i = 1; i < n; i++){
+      const fade = Math.max(0, 1 - Math.pow(i / n, 0.75));
+      if (fade <= 0.01) continue;
+      const w = Math.max(0.7, Math.min(6, pts[i].p * 7));
+      pctx.beginPath();
+      pctx.moveTo(pts[i - 1].x, pts[i - 1].y);
+      pctx.lineTo(pts[i].x, pts[i].y);
+      pctx.lineWidth = w * mult;
+      pctx.strokeStyle = 'rgba(57,224,255,' + (alpha * fade).toFixed(3) + ')';
+      pctx.stroke();
+    }
+  }
+
+  /* Segment boundaries: where the ground is about to change. */
+  if (planSteps.length){
+    for (let i = 0; i < planSteps.length; i++){
+      const t = planSteps[i].end;
+      const u = (t - ctx.t0) * paceMs;
+      if (u <= 0 || u > SEE_AHEAD) continue;
+      const g = project(u, ctx);
+      const fade = Math.max(0, 1 - Math.pow(u / SEE_AHEAD, 0.75));
+      pctx.beginPath();
+      pctx.arc(g.x, g.y, Math.max(3, 9 * g.p), 0, Math.PI * 2);
+      pctx.fillStyle = 'rgba(255,157,60,' + (0.7 * fade).toFixed(3) + ')';
+      pctx.fill();
+    }
+  }
+
+  /* The walker. Fixed — the world moves past, not the dot. */
+  const me = pts[0];
+  /* Contact shadow first, under everything else about the dot. A bright disc
+     with nothing beneath it hovers no matter what the path does. */
+  pctx.save();
+  pctx.translate(me.x, me.y + 7);
+  pctx.scale(1, 0.34);
+  pctx.beginPath();
+  pctx.arc(0, 0, 20, 0, Math.PI * 2);
+  pctx.fillStyle = 'rgba(4,9,26,.55)';
+  pctx.fill();
+  pctx.restore();
+
+  const HALO = [[26, 0.08], [16, 0.18]];
+  for (let i = 0; i < HALO.length; i++){
+    pctx.beginPath();
+    pctx.arc(me.x, me.y, HALO[i][0], 0, Math.PI * 2);
+    pctx.fillStyle = 'rgba(234,240,255,' + HALO[i][1] + ')';
+    pctx.fill();
+  }
+  pctx.beginPath();
+  pctx.arc(me.x, me.y, 8, 0, Math.PI * 2);
+  pctx.fillStyle = '#eaf0ff';
+  pctx.fill();
+}
+
+/* --- coach ---------------------------------------------------------------
+   Kotlin calls this when a line arrives from Home Assistant. The audio is
+   played on the Kotlin side, not here: this WebView is a 2020 Chromium behind
+   a file:// origin, and the platform media stack is the thing that can be
+   relied on to make a sound. */
+let coachTimer = null;
+
+/* Dismiss. The whole ribbon is the target, not just the glyph — one tap to be
+   rid of it, from anywhere on it, because sometimes you just want to get on
+   with the walk. It silences the audio as well as clearing the text; hiding the
+   words while the speaker keeps talking would be the worst of both. */
+function dismissCoach(){
+  clearTimeout(coachTimer);
+  $('coach').classList.remove('show');
+  Stride.hushCoach();
+}
+tap($('coach'), dismissCoach);
+
+window.coach = function(c){
+  const line = (c && c.line) || '';
+  if (!line) return;
+  $('coachText').textContent = line;
+  $('coach').classList.add('show');
+  clearTimeout(coachTimer);
+  // Held long enough to read twice — reading at a run takes longer than
+  // reading at a desk, and with headphones in this text *is* the message.
+  // Scales with the sentence so a long line never gets cut short.
+  const hold = Math.min(18000, Math.max(9000, 5000 + line.length * 90));
+  coachTimer = setTimeout(() => $('coach').classList.remove('show'), hold);
+};
+
+/* --- render -------------------------------------------------------------- */
+window.render = function(s){
+  const mode = (s.mode || 'welcome').toLowerCase();
+  showScreen(mode);
+  $('dmk').classList.toggle('show', !!s.dmk);
+
+  if (mode === 'summary'){ renderSummary(s); return; }
+  if (mode === 'welcome') return;
+
+  $('speed').textContent   = (s.speed ?? 0).toFixed(1);
+  $('incline').textContent = (s.incline ?? 0).toFixed(1);
+  $('speedTarget').textContent   = (s.targetSpeed ?? 0).toFixed(1);
+  $('inclineTarget').textContent = (s.targetIncline ?? 0).toFixed(1);
+
+  $('elapsed').textContent  = mmss(s.elapsed ?? 0);
+  $('distance').textContent = nf(s.distance ?? 0);
+  $('calories').textContent = nf(s.calories ?? 0);
+  $('pulse').textContent    = s.pulse ? s.pulse : '—';
+
+  // 0..19 km/h and -3..+12 % mapped onto 10 ticks each
+  ticks($('speedTicks'),   10, Math.round((s.speed ?? 0) / 19 * 10));
+  ticks($('inclineTicks'), 10, Math.round((((s.incline ?? 0) + 3) / 15) * 10));
+
+  // The chip says what you're *doing*. "running" is the internal name of the
+  // active session state, which read as wrong on every walk. Colour still keys
+  // off the state, so walking and running are both green.
+  const modeEl = $('mode');
+  modeEl.textContent = mode === 'warmup'   ? 'warming up'
+    : mode === 'cooldown' ? 'cooling down'
+    : s.ramping === 'resuming' ? 'resuming'
+    : mode === 'running' ? (s.workout === 'run' ? 'running' : 'walking')
+    : mode;
+  modeEl.dataset.mode = mode;
+
+  const fan = s.fan ?? 0;
+  $('btnFan').textContent = fan ? 'FAN ' + ['','I','II','III','A'][fan] : 'FAN';
+  [...$('fanmenu').querySelectorAll('button')]
+    .forEach(b => b.classList.toggle('on', parseInt(b.dataset.fan, 10) === fan));
+
+  if (mode === 'paused'){
+    const where = [mmss(s.elapsed ?? 0) + ' in'];
+    if (s.segments) where.push(`${s.segmentLabel || 'segment ' + s.segment} · ${s.segment} of ${s.segments}`);
+    else where.push(nf(s.distance ?? 0) + ' m');
+    where.push('the belt has stopped');
+    $('pausedWhere').textContent = where.join(' · ');
+  }
+
+  const moving = (mode === 'running' || mode === 'warmup' || mode === 'cooldown');
+  const btn = $('btnStart');
+  btn.textContent = mode === 'warmup'   ? 'SKIP'
+                  : mode === 'cooldown' ? 'SKIP'
+                  : mode === 'paused'   ? 'RESUME'
+                  : 'PAUSE';
+  btn.classList.toggle('active', mode === 'running');
+  $('btnStop').classList.toggle('muted', mode === 'cooldown');
+  $('btnSpeedUp').classList.toggle('muted', !moving);
+  $('btnSpeedDown').classList.toggle('muted', !moving);
+
+  // Neither hero makes sense during the timed phases — those get the panel.
+  const timed = (mode === 'warmup' || mode === 'cooldown');
+  $('phase').classList.toggle('on', timed);
+
+  /* Which hero: the path or the oval.
+
+     A guided walk has a plan, so there is ground ahead worth drawing and the
+     path earns the space. A casual walk has no plan — the path would be a
+     dead flat line with no markers on it, which tells you nothing the numbers
+     do not. The oval counts laps instead, which is the thing a casual walk
+     actually accumulates. */
+  const guided = (s.segments || 0) > 0;
+  $('path').style.display = (!timed && guided) ? 'block' : 'none';
+  $('stage').style.display = (!timed && !guided) ? 'block' : 'none';
+
+  if (!timed && !guided) {
+    // Dot travels the current lap; the arc behind it is the lap just finished,
+    // shrinking as the new one grows, so the line is never absent.
+    const dist = s.distance ?? 0;
+    const laps = TRACK.laps(dist);
+    const frac = TRACK.lapFraction(dist);
+    $('lap').textContent = laps;
+
+    /* The dash is not simply frac × 1000. `stroke-dasharray` measures the drawn
+       path, and the head dot is placed by arc-length along the true stadium;
+       dashFraction() converts between the two so the bright arc always ends
+       exactly underneath the dot. Identity while the track is face-on, but the
+       moment anyone squashes it the two would part company by several metres. */
+    const dash = TRACK.dashFraction(frac);
+
+    // Below a hair of progress the round cap draws a stub that reads as a
+    // toggle switch, so hold the head back until the lap actually starts.
+    progress.style.opacity = frac > 0.004 ? 1 : 0;
+    progress.setAttribute('stroke-dasharray', `${dash.toFixed(1)} 1000`);
+
+    // The remainder of the ring belongs to the previous lap. Nothing to erase
+    // on the very first one.
+    if (laps > 0){
+      tail.style.opacity = 1;
+      tail.setAttribute('stroke-dasharray', `${(1000-dash).toFixed(1)} 1000`);
+      tail.setAttribute('stroke-dashoffset', `${(-dash).toFixed(1)}`);
+    } else {
+      tail.style.opacity = 0;
+    }
+
+    dot.style.opacity = dist > 0 ? 1 : 0;
+    if (dist > 0){
+      const p = TRACK.atFraction(frac);
+      dot.setAttribute('cx', p.x.toFixed(1)); dot.setAttribute('cy', p.y.toFixed(1));
+    }
+  }
+
+  if (!timed && guided) {
+    drawPath(s);
+
+    $('segName').textContent = s.segmentLabel || '';
+    $('segSub').textContent =
+      `${s.plan} · ${s.segment} of ${s.segments} · ${mmss(s.segmentLeft || 0)} left`;
+
+    // Suggested pace, and whether the hill is still the plan's to move.
+    const el = $('suggest');
+    if (s.suggestPace > 0){
+      const delta = (s.suggestPace - (s.targetSpeed || 0));
+      const verb = delta > 0.15 ? 'lift to' : delta < -0.15 ? 'ease to' : 'hold';
+      el.innerHTML = verb === 'hold'
+        ? `hold <b>${s.suggestPace.toFixed(1)}</b> km/h`
+        : `${verb} <b>${s.suggestPace.toFixed(1)}</b> km/h`;
+      el.classList.toggle('hand', !s.inclineAuto);
+      if (!s.inclineAuto) el.innerHTML += ' · incline yours until the next stretch';
+    } else {
+      el.textContent = '';
+    }
+  }
+  if (timed){
+    const total = 120;                       // WARMUP_MS / COOLDOWN_MS
+    const left = s.phaseLeft ?? 0;
+    $('phase').dataset.kind = mode;
+    $('phaseName').textContent  = mode === 'warmup' ? 'Warm up' : 'Cool down';
+    $('phaseClock').textContent = mmss(left);
+    $('phaseNote').textContent  = mode === 'warmup'
+      ? 'easing in — skip whenever you’re ready'
+      : 'easing down — skip to finish';
+    $('phaseBar').style.width = Math.max(0, Math.min(100, (1 - left/total) * 100)) + '%';
+
+    /* What is coming, phrased as a preview and never as live plan state. A
+       warm-up that reads "2 of 9 · 1:36 left" is claiming to be a walk that
+       has not started yet — wrong about the segment, wrong about the clock,
+       and wrong about which one of them is running. */
+    $('phasePrev').textContent =
+      mode !== 'warmup'          ? ''
+      : planSteps.length         ? `${planSteps.length} stretches ahead · first up: ${planSteps[0].label}`
+      : s.workout === 'run'      ? 'then the pace is yours'
+                                 : 'then it’s a casual walk — you set the pace';
+  }
+};
+
+function renderSummary(s){
+  const kind = s.workout && s.workout !== 'none' ? s.workout : 'workout';
+  /* The walker's own name, or none at all for a guest — better than
+   congratulating somebody by the wrong name. */
+  $('sumHead').textContent = walker ? ('Nice work, ' + walker) : 'Nice work';
+  $('sumSub').textContent  = kind + ' complete';
+  $('sumTime').textContent = mmss(s.elapsed ?? 0);
+  $('sumDist').textContent = nf(s.distance ?? 0);
+  $('sumCal').textContent  = nf(s.calories ?? 0);
+  $('sumAvg').textContent  = (s.avgSpeed ?? 0).toFixed(1);
+  $('sumMax').textContent  = (s.maxSpeed ?? 0).toFixed(1);
+  $('sumInc').textContent  = (s.avgIncline ?? 0).toFixed(1);
+}
+
+/* --- clock --------------------------------------------------------------- */
+/* No name here: this screen is the question "who is walking", and answering it
+   with a name before it has been asked is just wrong. */
+function greet(h){
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+setInterval(() => {
+  const d = new Date();
+  const t = d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  const day = d.toLocaleDateString([], {weekday:'long', day:'numeric', month:'long'});
+  $('clock').textContent = t;  $('date').textContent  = day;
+  $('wClock').textContent = t; $('wDate').textContent = day;
+  $('sleepClock').textContent = t;
+  $('greeting').textContent = greet(d.getHours());
+}, 1000);
+
+showScreen('welcome');
+</script>
+</body>
+</html>
