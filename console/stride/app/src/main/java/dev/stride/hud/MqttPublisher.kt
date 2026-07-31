@@ -86,14 +86,21 @@ class MqttPublisher(
 
         /** field key -> (display name, unit, device_class or null, icon or null) */
         private val SENSORS = listOf(
-            Sensor("speed", "Treadmill Speed", "km/h", "speed", null),
-            Sensor("incline", "Treadmill Incline", "%", null, "mdi:angle-acute"),
-            Sensor("distance", "Treadmill Distance", "m", "distance", null),
-            Sensor("elapsed", "Treadmill Elapsed", "s", "duration", null),
-            Sensor("pulse", "Treadmill Pulse", "bpm", null, "mdi:heart-pulse"),
-            Sensor("calories", "Treadmill Calories", "kcal", null, "mdi:fire"),
-            Sensor("mode", "Treadmill Mode", null, null, "mdi:state-machine"),
-            Sensor("workout", "Treadmill Workout", null, null, "mdi:walk"),
+            // **Not** prefixed "Treadmill". Home Assistant builds an entity_id
+            // from the device name plus the entity name, and this device is
+            // called "Treadmill" — so "Treadmill Speed" produced
+            // `sensor.treadmill_treadmill_speed`, the word twice, in every
+            // entity, forever. Exactly the fault that was found and fixed on
+            // the per-person device; this one had been sitting next to it the
+            // whole time.
+            Sensor("speed", "Speed", "km/h", "speed", null),
+            Sensor("incline", "Incline", "%", null, "mdi:angle-acute"),
+            Sensor("distance", "Distance", "m", "distance", null),
+            Sensor("elapsed", "Elapsed", "s", "duration", null),
+            Sensor("pulse", "Pulse", "bpm", null, "mdi:heart-pulse"),
+            Sensor("calories", "Calories", "kcal", null, "mdi:fire"),
+            Sensor("mode", "Mode", null, null, "mdi:state-machine"),
+            Sensor("workout", "Workout", null, null, "mdi:walk"),
         )
     }
 
@@ -304,7 +311,7 @@ class MqttPublisher(
         // **Not** prefixed with the person's name. Home Assistant builds an
         // entity_id from the device name and the entity name, so "STRIDE —
         // Sam" plus "Sam Treadmill Distance" produced
-        // `sensor.stride_sam_sam_treadmill_distance` — the name twice, in
+        // `sensor.stride_<person>_<person>_treadmill_distance` — the name twice, in
         // every entity, forever. The device already says who this is.
         val sensors = listOf(
             Sensor("distance", "Treadmill Distance", "m", "distance", null),

@@ -1,0 +1,147 @@
+# STRIDE — the helpers and rollups the scripts expect to find.
+#
+# Copy this file to your Home Assistant config as `packages/stride.yaml`, and
+# make sure `configuration.yaml` includes packages:
+#
+#     homeassistant:
+#       packages: !include_dir_named packages
+#
+# Then restart Home Assistant.
+#
+# ---------------------------------------------------------------------------
+# WHY THIS FILE EXISTS
+#
+# The treadmill's own entities need none of this — the console publishes MQTT
+# discovery and they appear on their own. What it cannot publish is anything
+# that has to be *accumulated*: a session counter resets to zero at the start
+# of every walk, which is the right shape for a session and useless for "how
+# far this week".
+#
+# Those rollups used to exist only in the author's own Home Assistant, defined
+# by hand and never written down, and the coach and dashboard referenced them
+# as though everyone had them. Anyone else installing STRIDE got a coach
+# talking confidently about `sensor.treadmill_distance_weekly`, which did not
+# exist, reading as zero kilometres every week forever.
+#
+# Everything here is optional in the sense that STRIDE runs without it. It is
+# not optional if you want the coach to know what you did this week.
+# ---------------------------------------------------------------------------
+
+# --- accumulate the session counter into real periods ----------------------
+#
+# `utility_meter` is built for exactly this: a source that climbs and then
+# resets. It notices the reset rather than treating it as a negative reading,
+# which is why this is not a template sensor doing arithmetic.
+#
+# Source is the console's own distance sensor. If you renamed the treadmill
+# device in Home Assistant, change these to match and set `treadmill_prefix`
+# in stride.conf to the same thing.
+utility_meter:
+  treadmill_distance_daily:
+    source: sensor.treadmill_distance
+    cycle: daily
+  treadmill_distance_weekly:
+    source: sensor.treadmill_distance
+    cycle: weekly
+  treadmill_distance_monthly:
+    source: sensor.treadmill_distance
+    cycle: monthly
+  treadmill_calories_weekly:
+    source: sensor.treadmill_calories
+    cycle: weekly
+  treadmill_time_walked_this_week:
+    source: sensor.treadmill_elapsed
+    cycle: weekly
+
+# --- how many walks this week ----------------------------------------------
+counter:
+  stride_workouts_this_week:
+    name: Treadmill workouts this week
+    initial: 0
+    step: 1
+
+# --- when things last happened ---------------------------------------------
+#
+# Stamped by the reminder automations rather than typed. They exist as helpers
+# because Home Assistant has nowhere else to keep "the last time a thing
+# happened" that survives a restart.
+input_datetime:
+  stride_last_weigh_in:
+    name: Last weigh-in
+    has_date: true
+    has_time: true
+  stride_last_bp:
+    name: Last blood pressure reading
+    has_date: true
+    has_time: true
+  stride_weigh_in_time:
+    name: Weigh-in reminder time
+    has_date: false
+    has_time: true
+  stride_bp_time:
+    name: Blood pressure reminder time
+    has_date: false
+    has_time: true
+
+# --- how the coach speaks ---------------------------------------------------
+#
+# Changed from the dashboard or the console; the coach reads it at the moment
+# it writes a line, so a change applies to the next thing it says.
+input_select:
+  stride_coach_personality:
+    name: Coach personality
+    options:
+      - Supportive Friend
+      - Drill Sergeant
+      - Data Nerd
+      - Zen Master
+    initial: Supportive Friend
+    icon: mdi:account-voice
+
+automation:
+  # Count a walk when the console reaches its summary screen, which is the one
+  # moment a session is definitely over. The 20-second hold is there because
+  # the mode briefly passes through summary during some transitions.
+  - alias: STRIDE — count a finished walk
+    id: stride_count_workout
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: sensor.treadmill_mode
+        to: summary
+        for:
+          seconds: 20
+    conditions:
+      # Ignore a mis-tap: under 100 m is not a walk.
+      - condition: numeric_state
+        entity_id: sensor.treadmill_distance
+        above: 100
+    actions:
+      - action: counter.increment
+        target:
+          entity_id: counter.stride_workouts_this_week
+
+  - alias: STRIDE — reset the weekly walk count
+    id: stride_reset_workout_count
+    mode: single
+    triggers:
+      - trigger: time
+        at: "00:00:01"
+    conditions:
+      - condition: time
+        weekday:
+          - mon
+    actions:
+      - action: counter.reset
+        target:
+          entity_id: counter.stride_workouts_this_week
+
+template:
+  - sensor:
+      # The scripts ask for `sensor.treadmill_workouts_this_week`; the counter
+      # is called something else because a counter and a sensor cannot share a
+      # name. This is the bridge, and it is the only reason it exists.
+      - name: Treadmill workouts this week
+        unique_id: stride_treadmill_workouts_this_week
+        state: "{{ states('counter.stride_workouts_this_week') | int(0) }}"
+        icon: mdi:counter

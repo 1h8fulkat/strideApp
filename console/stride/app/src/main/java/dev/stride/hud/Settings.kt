@@ -121,7 +121,7 @@ class Settings(context: Context) {
         val name: String,
         val coached: Boolean,
         val publish: Boolean,
-        /** `person.sam_mckenzie`, or empty for somebody who exists only here. */
+        /** `person.jane_doe`, or empty for somebody who exists only here. */
         val haPerson: String = "",
     ) {
         fun json(): JSONObject = JSONObject()

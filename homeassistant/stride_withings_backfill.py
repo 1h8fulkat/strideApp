@@ -71,6 +71,12 @@ BANDS = {
     "sleep_hours": (0, 20), "sleep_hr": (25, 220),
 }
 
+# Home Assistant names Withings entities after the device the integration was
+# set up against, so this differs per install — check Developer Tools -> States
+# for yours. Leave `withings_prefix` unset and these rows simply do not merge
+# into anything, which is the right outcome for somebody with no Withings kit.
+PREFIX = conf("withings_prefix", "sensor.withings_")
+
 # key -> (statistic_id, display name, unit). An entity id means the row is
 # merged into that live sensor's own statistics; a `stride:` id is ours.
 MEAN_SERIES = {

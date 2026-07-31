@@ -29,9 +29,11 @@ import re
 import sys
 import urllib.request
 
-from stride_config import HA, conf, mqtt, token
+from stride_config import HA, ai_task, conf, mqtt, optional, token, treadmill
 
-AI_TASK = "ai_task.claude_ai_task"
+# Resolved when the script runs, not when it is imported. There is no default
+# — see stride_config.ai_task — and a missing one should stop somebody running
+# the installer, not stop another module importing this one to read its tables.
 NOTIFY = conf("notify_service", "persistent_notification.create")
 
 # Where tapping the notification lands.
@@ -68,8 +70,18 @@ FAT = conf("body_fat_entity", "")
 # without the code needing to know why. The default is empty, which means the
 # coach simply has less to go on.
 NAME = conf("walker_name", "there")
-TARGET_LINE = conf("weight_target", "")
 AVOID = conf("coach_avoid", "")
+
+# One key for the target, shared with the dashboard. The coach turns it into a
+# sentence rather than asking somebody to write one — two settings that both
+# meant "your target" was a way to have them disagree.
+_TARGET = conf("weight_target_kg", "")
+TARGET_LINE = f"Their working target is {_TARGET} kg." if _TARGET else ""
+
+# Assembled before the f-string rather than inside it: an f-string expression
+# cannot contain a backslash before Python 3.12, and these need newlines.
+GOAL_BLOCK = ("\n\nTHEIR GOAL\n" + TARGET_LINE) if TARGET_LINE else ""
+AVOID_BLOCK = ("\n\nDO NOT COMMENT ON\n" + AVOID) if AVOID else ""
 
 PERSONA = f"""You are the coach inside STRIDE, a treadmill and health system
 its owner built themselves to become more aware of their movement. You speak to
@@ -126,9 +138,7 @@ heart rate at the same pace on a single day is not improvement. One bad night is
 not a sleep problem. You will rarely clear the bar for calling something a trend,
 and that is the correct outcome.
 
-{TARGET_LINE and f"THEIR GOAL\n{TARGET_LINE}" or ""}
-
-{AVOID and f"DO NOT COMMENT ON\n{AVOID}" or ""}"""
+{GOAL_BLOCK}{AVOID_BLOCK}"""
 
 VOICES = {
     "Supportive Friend": "Warm and steady. You are pleased to see him and you say so without gushing.",
@@ -303,10 +313,10 @@ TREADMILL
 - This week: {{ (states('sensor.treadmill_distance_weekly') | float(0) / 1000) | round(2) }} km
   over {{ states('sensor.treadmill_workouts_this_week') }} session(s)
 - This month: {{ (states('sensor.treadmill_distance_monthly') | float(0) / 1000) | round(2) }} km
-- Most recent session: {{ (states('sensor.treadmill_treadmill_distance') | float(0) / 1000) | round(2) }} km,
-  {{ (states('sensor.treadmill_treadmill_elapsed') | float(0) / 60) | round(0) | int }} min,
-  {{ states('sensor.treadmill_treadmill_calories') }} kcal
-- Treadmill state: {{ states('sensor.treadmill_treadmill_mode') }}
+- Most recent session: {{ (states('{TREADMILL_DISTANCE}') | float(0) / 1000) | round(2) }} km,
+  {{ (states('{TREADMILL_ELAPSED}') | float(0) / 60) | round(0) | int }} min,
+  {{ states('{TREADMILL_CALORIES}') }} kcal
+- Treadmill state: {{ states('{TREADMILL_MODE}') }}
 
 NOTE: the weekly workout count is inflated by a logging fault before 29 July 2026.
 Treat any figure above 5 sessions this week as unreliable and do not comment on it.
@@ -377,7 +387,7 @@ def build_script() -> dict:
                 "action": "ai_task.generate_data",
                 "data": {
                     "task_name": "stride coach {{ kind }}",
-                    "entity_id": AI_TASK,
+                    "entity_id": ai_task(),
                     "instructions": instructions,
                     "structure": {
                         "headline": {
@@ -447,11 +457,11 @@ AUTOMATIONS = {
     "stride_coach_post_workout": call_coach(
         "post_workout",
         triggers=[{"trigger": "state",
-                   "entity_id": "sensor.treadmill_treadmill_mode",
+                   "entity_id": treadmill("mode"),
                    "to": "summary",
                    "for": {"seconds": 20}}],
         extra_conditions=[{"condition": "numeric_state",
-                           "entity_id": "sensor.treadmill_treadmill_distance",
+                           "entity_id": treadmill("distance"),
                            "above": 100}],
         alias="STRIDE — coach post-workout reflection",
     ),

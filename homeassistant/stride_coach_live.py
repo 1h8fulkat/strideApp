@@ -53,11 +53,14 @@ import re
 import sys
 import urllib.request
 
+from stride_config import HA, ai_task, conf, mqtt, optional, token, treadmill
+
 # The persona is imported rather than restated: two coaches drifting into two
 # different personalities is exactly the failure this avoids.
 from stride_coach_llm import HA, PERSONA, VOICES, token
 
-AI_TASK = "ai_task.claude_ai_task"
+# No default: see stride_config.ai_task for why.
+AI_TASK = ai_task()
 EVENT_TOPIC = "stride/treadmill/event"
 LIVE_TOPIC = "stride/coach/live"
 

@@ -104,19 +104,33 @@ Steps 1–4 need nothing from this repository on the Home Assistant side.
 
 ## Configuration
 
-Nothing personal is baked in. Copy the example and fill in what you have:
+Nothing personal is baked in anywhere. Two places hold settings, and neither is
+a source file.
+
+**The console configures itself, on itself.** Broker details, who walks, units,
+warm-up, the coach, heart-rate source, display — all in Settings on the
+treadmill's own screen. No config files, no rebuild.
+
+**The Home Assistant side reads one file:**
 
 ```sh
 cp homeassistant/stride.conf.example homeassistant/stride.conf
 ```
 
-Every script reads that one file. Anything you leave blank is simply absent —
-no Withings scale, no blood-pressure cuff, no coach profile — and the code
-treats absence as a subject to stay quiet about rather than something to
-apologise for.
+Every key is documented in that example, including what happens when you leave
+it blank — which is always "that subject is absent", never an error. No scale,
+no blood-pressure cuff, no phone: the coach is built to say nothing about what
+it was not given rather than to hedge or guess.
 
-The console's own settings live on the console, in its settings screen. It has
-no configuration files and needs no rebuild to be reconfigured.
+One key has no default and cannot have one: `coach_ai_task`, because which AI
+entity you have depends entirely on which integration you set up.
+
+**If you want weekly and monthly totals**, copy
+[`homeassistant/packages/stride.yaml`](homeassistant/packages/stride.yaml) into
+your Home Assistant config. The console publishes a per-session counter that
+resets at the start of every walk — correct for a session, useless for "how far
+this week" — so the accumulation has to happen in Home Assistant. That file
+also creates the helpers the coach and reminders expect to find.
 
 ---
 

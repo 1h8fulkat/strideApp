@@ -1,29 +1,121 @@
-# STRIDE — Home Assistant side configuration.
+# STRIDE — configuration for the Home Assistant side.
 #
-# Copy to `stride.conf` (which git ignores) and fill in. Every script in this
-# directory reads it.
+#     cp stride.conf.example stride.conf
 #
-# Nothing here is optional-by-politeness: without a token the scripts cannot
-# install anything, and without the broker they cannot publish. The treadmill
-# console itself needs none of this — it talks to MQTT directly and registers
-# itself through discovery.
+# `stride.conf` is gitignored. Every script in this directory reads it.
+#
+# ---------------------------------------------------------------------------
+# THE TREADMILL ITSELF NEEDS NONE OF THIS.
+#
+# The console publishes MQTT discovery and registers itself in Home Assistant
+# on its own. Everything here is for the extras — the coach, the reminders, the
+# dashboard and the Apple Health webhook.
+#
+# **Anything you leave blank is treated as absent, not as broken.** No scale,
+# no blood-pressure cuff, no phone: the coach is built to say nothing about a
+# subject it was not given, rather than to hedge or to guess. Fill in what you
+# actually have.
+# ---------------------------------------------------------------------------
 
-# Where Home Assistant lives, as the scripts will reach it.
+
+# === Required, for anything in this directory to run =======================
+
+# Where Home Assistant is, as these scripts will reach it.
 ha_url: http://homeassistant.local:8123
 
-# A long-lived access token: Profile -> Security -> Long-lived access tokens.
+# Profile -> Security -> Long-lived access tokens -> Create token.
 ha_api_token: paste-yours-here
 
-# The MQTT broker Home Assistant uses. Host only, or tcp://host:port.
+# The MQTT broker Home Assistant uses. Host, or tcp://host:port.
+# The same details you put into the console's Settings -> Home Assistant.
 mqtt_broker: tcp://homeassistant.local:1883
 mqtt_user: stride
 mqtt_pass: change-me
 
-# Externally reachable base URL, used to print the Apple Health webhook.
-# Only needed if you use the iOS companion app.
+
+# === The coach =============================================================
+
+# Which AI task entity writes the coach's lines. **No default** — it depends
+# entirely on which integration you set up, and a wrong one fails at call time
+# with an error that does not say what is wrong.
+#
+# Find yours in Developer Tools -> States, filtered to `ai_task.`.
+coach_ai_task: ai_task.your_ai_task_here
+
+# What the coach calls you. Blank and it says "there", which reads fine.
+walker_name:
+
+# Your working weight target in kg, if you have one. Shared with the dashboard.
+# Blank and the coach says nothing about a goal and the dashboard draws no
+# target line.
+weight_target_kg:
+
+# **Subjects the coach must not comment on.** Free text, deliberately: this is
+# where you write "my blood pressure" or "my weight" or "anything about sleep"
+# without the code needing to understand why. It is passed through as an
+# instruction. Blank means no restrictions beyond the built-in ones, which
+# already forbid medical advice and expressions of concern.
+coach_avoid:
+
+# Where a coach message is pushed. Find yours under `notify.` in Developer
+# Tools -> Actions. Blank falls back to a persistent notification in Home
+# Assistant, which is visible but does not reach a phone.
+notify_service:
+
+
+# === Your treadmill's entities =============================================
+
+# The console's device is called "Treadmill", so its entities are
+# `sensor.treadmill_speed`, `sensor.treadmill_distance` and so on. If you
+# renamed the device in Home Assistant, put the new prefix here — and change
+# the sources in packages/stride.yaml to match.
+treadmill_prefix: treadmill
+
+
+# === Apple Health, via the iOS companion app ===============================
+# Only needed if you use the app. Skip all of this otherwise.
+
+# Externally reachable base URL for your Home Assistant, so the app can post
+# from outside the house.
 ha_external_url: https://your-home-assistant.example.com
 
-# The webhook id the iOS app posts to. Generate 30 random characters:
-#   python3 -c "import secrets;print(secrets.token_urlsafe(22)[:30])"
-# This is the ONLY thing protecting that endpoint - see stride_health_webhook.py
+# The webhook id the app posts to. **This is the only thing protecting that
+# endpoint** — see the comment in stride_health_webhook.py. Generate 30 random
+# characters and keep them to yourself:
+#
+#     python3 -c "import secrets; print(secrets.token_urlsafe(22)[:30])"
 stride_webhook_id: generate-your-own
+
+# Your phone's step sensor, if the Home Assistant companion app provides one.
+# Used only as a fallback when Apple Health has not synced yet.
+phone_steps_entity:
+
+
+# === A Withings scale or blood-pressure cuff ================================
+# All optional. Leave blank if you do not have them.
+
+# Home Assistant names Withings entities after the device the integration was
+# set up against, so this differs per install. Check Developer Tools -> States
+# for something like `sensor.something_withings_weight` and put everything up
+# to and including `withings_` here.
+withings_prefix: sensor.withings_
+
+# Individual entities, if they do not follow that prefix.
+weight_entity:
+body_fat_entity:
+systolic_entity:
+diastolic_entity:
+withings_steps_entity:
+
+
+# === The dashboard ==========================================================
+
+# Console walkers to show treadmill tiles for, comma separated, using the ids
+# the console publishes — usually just first names in lower case:
+#
+#     console_people: sam,alex
+#
+# Blank is fine. The per-person entities exist either way and appear under
+# their own STRIDE devices; this only decides what the dashboard puts on a
+# tile.
+console_people:
