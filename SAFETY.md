@@ -1,132 +1,106 @@
 # Safety
 
-**Read this before you install anything.**
+Read this before you install anything.
 
 STRIDE replaces the software on a treadmill console and then drives the
-machine: it sets the belt speed and it moves the incline deck, under a person
-standing on it. That is not the same class of project as a dashboard.
-
-None of what follows is boilerplate. Every line of it is a decision that is
-enforced in the code, and the reasons are worth knowing before you trust it.
+machine. It sets the belt speed and moves the incline deck while somebody is
+standing on it.
 
 ---
 
 ## What can hurt you
 
-**The belt can move without you touching the console.** A guided walk changes
-the incline on its own, and a warm-up ramps the belt up when a workout starts.
-Both are deliberate. Both mean the machine can do something you did not just
-ask it to do, this second.
+**The belt and deck can move without you touching anything.** A guided walk
+changes the incline on its own, and a warm-up ramps the belt up when a workout
+starts.
 
-**The incline deck moves under load.** Going from flat to nine percent moves
-real mass while you are standing on it.
+**The incline deck moves under load** — flat to nine percent shifts real weight
+while you're on it.
 
-**A treadmill without its manufacturer's software is still a treadmill.** The
-motor controller, the belt and the deck are unchanged. Everything that was
-physically dangerous about the machine before is still true.
+**Everything that was dangerous about the treadmill before still is.** The
+motor, belt and deck are unchanged.
 
 ---
 
-## The rules this software follows
+## What the software does about it
 
-These are not suggestions in a document. They are how it is built.
+**The safety key is the emergency stop, not the software.** Pull it and the
+hardware cuts the belt, independently of anything STRIDE is doing. STRIDE
+notices and shows a screen, but it isn't what stopped the belt.
 
-**The physical safety key is the stop of record.** Pull it and the hardware
-cuts the belt, below and independent of anything STRIDE is doing. STRIDE
-notices and shows a screen, but it is not the thing that stopped the belt. If
-you take one thing from this page: *the key is the emergency stop, not the
-software.*
+**STRIDE drives the incline. It only ever suggests a speed.** A guided walk
+moves the deck, because the deck can't run away underneath you. It will say
+"lift to 6.4 km/h" and leave the belt where it is.
 
-**Incline is driven, speed is only ever suggested.** A guided walk moves the
-deck, because the deck cannot run away underneath anyone. It never sets your
-pace — it proposes one and you decide. This asymmetry is deliberate and is
-enforced in `MainActivity`, not left to the plan.
+**Automatic stops ramp down** at 2 km/h per second. The first guided walk cut
+the belt from 4.2 km/h to zero the moment the plan ended, which was enough to
+catch someone off guard — at a run it would have put them on the floor. **The
+STOP button is exempt and stops immediately**, because that is a person
+deciding.
 
-**Every automatic finish decelerates.** The first guided walk ended by cutting
-the belt from 4.2 km/h to zero the instant the plan expired, which was enough
-to catch someone off guard; at a run it would have put them on the floor.
-Automatic stops now ramp down at 2 km/h per second. **The STOP button is
-deliberately exempt** — that is a person deciding, and it needs to be
-immediate.
+**The board's limits win.** Incline and speed ranges are read from the machine
+at startup and every plan is clamped to them. Nothing in Settings can raise
+them.
 
-**The machine's own limits always win.** Incline and speed ranges are read from
-the board at connect. A plan is a proposal and is clamped to what the hardware
-reports. Nothing in the settings screen can raise those limits, on purpose:
-storing a maximum incline somebody typed would be storing a way to ask the deck
-for something it cannot do.
-
-**Incline moves gradually.** At most one percent every three seconds by
-default, so the largest jump in any built-in plan takes about half a minute to
-arrive rather than landing under you mid-stride. The setting offers Gentle,
-Normal and Quick rather than raw numbers, so that reasoning stays attached to
-the choice.
+**Incline moves gradually** — a percent every three seconds by default, so the
+biggest jump in any built-in plan takes about half a minute rather than landing
+under you mid-stride. Settings offers Gentle, Normal and Quick rather than raw
+numbers.
 
 ---
 
-## What this is not
+## What this isn't
 
-**STRIDE is not a medical device.** It is not certified as anything, by anyone.
+STRIDE is not a medical device and is not certified as anything.
 
-**The coach is not medical advice.** It is a language model given some numbers
-and told to be brief. It is explicitly instructed never to give medical advice
-and never to express concern about a reading, and there is a setting to take a
-subject off the table entirely. It can still be wrong, and it does not know
-anything about you that you did not give it.
+The coach is a language model given some numbers and told to be brief. It is
+instructed never to give medical advice or express concern about a reading, and
+there is a setting to take a subject off the table entirely. It can still be
+wrong.
 
-**Heart rate here is not clinical.** Handlebar grips and Bluetooth chest straps
-are consumer sensors. If a number looks alarming, believe your body and a
-doctor, not a treadmill.
+Handlebar grips and Bluetooth straps are consumer heart rate sensors. If a
+number looks alarming, believe your body and a doctor.
 
 ---
 
-## What you are doing to your treadmill
-
-Installing this means disabling the manufacturer's software on the console.
+## What you're doing to your treadmill
 
 - **Your warranty is almost certainly void.** Assume it is.
-- **You will lose the manufacturer's features** — subscription workouts, their
-  app, their account, whatever else the console did.
-- **You are working with the console's operating system.** It is possible to
-  make it unbootable. Read the install guide fully before starting, not while
-  stuck halfway.
+- **You lose iFit** — subscription workouts, the app, the account.
+- **You can make the console unbootable.** Read the whole install guide before
+  starting, not while stuck halfway.
 
-**This is reversible.** A factory reset from the console's own recovery restores
-the manufacturer's software, and that has been verified on the machine STRIDE
-was built against. Installing STRIDE is not a one-way door, and it does not
-touch the motor controller, the belt or the deck — only the screen on the front.
+**It's reversible.** A factory reset restores the manufacturer's software,
+verified on the machine STRIDE was built against. You are replacing the screen
+on the front, not the motor controller.
 
-Reversible is not the same as supported. Nothing here is supported by anybody,
-and a factory reset verified on one console is not a promise about yours. But
-the honest risk is "you may have to reset the console and start again", not
-"you may end up with a treadmill you cannot use".
+That is not the same as supported — nothing here is supported by anybody, and a
+reset that worked on one console is not a promise about yours. But the
+realistic worst case is "reset it and start again", not "you now own a broken
+treadmill".
 
-Still: do not do this to a treadmill you do not own.
+Don't do this to a treadmill you don't own.
 
 ---
 
 ## If something goes wrong
 
-1. **Pull the safety key.** Always first. It is hardware.
+1. **Pull the safety key.**
 2. Step off.
-3. Switch the treadmill off at the wall.
+3. Switch off at the wall.
 
-If the console misbehaves — a screen that will not respond, a plan that does
-something unexpected — the key and the wall switch are both still there and
-both still work. STRIDE cannot disable either.
+Both still work whatever the console is doing. STRIDE can't disable either.
 
-**If you want the treadmill back as it was**, a factory reset from the
-console's recovery restores the manufacturer's software. Verified on the
-machine this was built against. You will have to set up iFit again from
-scratch, and you will be back where you started — which is the point.
+To get the treadmill back as it was, factory reset from the console's recovery
+and set up iFit again.
 
 ---
 
 ## Reporting a safety problem
 
-If you find something that could hurt somebody, please raise it directly rather
-than in a public issue first: open a
+Please open a
 [security advisory](https://github.com/keranm/strideApp/security/advisories/new)
-so it can be looked at before it is widely known.
+rather than a public issue, so it can be looked at before it is widely known.
 
-Anything that moves the belt or the deck in a way the person on it did not
-expect is a safety problem, not a bug.
+Anything that moves the belt or deck in a way the person on it didn't expect is
+a safety problem, not a bug.

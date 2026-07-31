@@ -4,18 +4,12 @@
 #
 # `stride.conf` is gitignored. Every script in this directory reads it.
 #
-# ---------------------------------------------------------------------------
-# THE TREADMILL ITSELF NEEDS NONE OF THIS.
+# The treadmill itself needs none of this — the console registers itself in
+# Home Assistant over MQTT. This is for the extras: the coach, the reminders,
+# the dashboard and the Apple Health webhook.
 #
-# The console publishes MQTT discovery and registers itself in Home Assistant
-# on its own. Everything here is for the extras — the coach, the reminders, the
-# dashboard and the Apple Health webhook.
-#
-# **Anything you leave blank is treated as absent, not as broken.** No scale,
-# no blood-pressure cuff, no phone: the coach is built to say nothing about a
-# subject it was not given, rather than to hedge or to guess. Fill in what you
-# actually have.
-# ---------------------------------------------------------------------------
+# Leave anything blank and that subject is just absent. No scale, no BP cuff,
+# no phone — the coach won't mention what it wasn't given.
 
 
 # === Required, for anything in this directory to run =======================
@@ -35,10 +29,8 @@ mqtt_pass: change-me
 
 # === The coach =============================================================
 
-# Which AI task entity writes the coach's lines. **No default** — it depends
-# entirely on which integration you set up, and a wrong one fails at call time
-# with an error that does not say what is wrong.
-#
+# Which AI task entity writes the coach's lines. No default, because it depends
+# on your integration — and a wrong one fails later with an unhelpful error.
 # Find yours in Developer Tools -> States, filtered to `ai_task.`.
 coach_ai_task: ai_task.your_ai_task_here
 
@@ -50,11 +42,10 @@ walker_name:
 # target line.
 weight_target_kg:
 
-# **Subjects the coach must not comment on.** Free text, deliberately: this is
-# where you write "my blood pressure" or "my weight" or "anything about sleep"
-# without the code needing to understand why. It is passed through as an
-# instruction. Blank means no restrictions beyond the built-in ones, which
-# already forbid medical advice and expressions of concern.
+# Subjects the coach must not comment on. Free text - "my blood pressure", "my
+# weight", "anything about sleep" - passed through as an instruction. It won't
+# give medical advice or express concern either way; this is for anything else
+# you'd rather it left alone.
 coach_avoid:
 
 # Where a coach message is pushed. Find yours under `notify.` in Developer
@@ -79,9 +70,8 @@ treadmill_prefix: treadmill
 # from outside the house.
 ha_external_url: https://your-home-assistant.example.com
 
-# The webhook id the app posts to. **This is the only thing protecting that
-# endpoint** — see the comment in stride_health_webhook.py. Generate 30 random
-# characters and keep them to yourself:
+# The webhook id the app posts to. This is the only thing protecting that
+# endpoint, so generate 30 random characters and keep them to yourself:
 #
 #     python3 -c "import secrets; print(secrets.token_urlsafe(22)[:30])"
 stride_webhook_id: generate-your-own
@@ -111,11 +101,9 @@ withings_steps_entity:
 # === The dashboard ==========================================================
 
 # Console walkers to show treadmill tiles for, comma separated, using the ids
-# the console publishes — usually just first names in lower case:
+# the console publishes - usually first names in lower case:
 #
 #     console_people: sam,alex
 #
-# Blank is fine. The per-person entities exist either way and appear under
-# their own STRIDE devices; this only decides what the dashboard puts on a
-# tile.
+# Blank is fine; the entities exist either way under their own STRIDE devices.
 console_people:

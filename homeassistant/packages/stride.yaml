@@ -8,40 +8,22 @@
 #
 # Then restart Home Assistant.
 #
-# ---------------------------------------------------------------------------
-# WHY THIS FILE EXISTS
+# None of this is needed to use the treadmill — the console shows up in Home
+# Assistant on its own. This is for the things that need accumulated history:
+# the coach knowing what you did this week, and the reminders knowing when you
+# last weighed in.
 #
-# The treadmill's own entities need none of this — the console publishes MQTT
-# discovery and they appear on their own. What it cannot publish is anything
-# that has to be *accumulated*: a session counter resets to zero at the start
-# of every walk, which is the right shape for a session and useless for "how
-# far this week".
-#
-# Those rollups used to exist only in the author's own Home Assistant, defined
-# by hand and never written down, and the coach and dashboard referenced them
-# as though everyone had them. Anyone else installing STRIDE got a coach
-# talking confidently about `sensor.treadmill_distance_weekly`, which did not
-# exist, reading as zero kilometres every week forever.
-#
-# **None of this is needed to use the treadmill.** The console appears in Home
-# Assistant on its own and you can build whatever dashboard you like from it.
-# This file is only for the extras that need accumulated history: the coach
-# saying what you did this week, and the reminders knowing when you last
-# weighed in.
-#
-# The shapes here — utility_meter for distance, history_stats for counts — are
-# the ones running in the author's own install, not a fresh guess.
-# ---------------------------------------------------------------------------
+# The console's distance counter resets at the start of every walk, which is
+# right for a session and no use for "how far this week", so the accumulating
+# happens here.
 
 # --- accumulate the session counter into real periods ----------------------
 #
-# `utility_meter` is built for exactly this: a source that climbs and then
-# resets. It notices the reset rather than treating it as a negative reading,
-# which is why this is not a template sensor doing arithmetic.
+# utility_meter handles a source that climbs then resets, which is exactly what
+# a per-session counter does.
 #
-# Source is the console's own distance sensor. If you renamed the treadmill
-# device in Home Assistant, change these to match and set `treadmill_prefix`
-# in stride.conf to the same thing.
+# If you renamed the treadmill device in Home Assistant, change the sources
+# below to match and set `treadmill_prefix` in stride.conf to the same thing.
 utility_meter:
   treadmill_distance_daily:
     source: sensor.treadmill_distance
@@ -58,13 +40,10 @@ utility_meter:
 
 # --- how many walks this week, and how long ---------------------------------
 #
-# `history_stats` rather than a counter kept by automations. It derives the
-# answer from history that already exists, so there is nothing to increment,
-# nothing to reset on a Monday, and nothing to drift if Home Assistant is
-# restarted mid-week.
+# Derived from history rather than counted by automations - nothing to
+# increment, nothing to reset on a Monday, nothing to drift across a restart.
 #
-# A walk counts when the console reaches its summary screen, which is the one
-# moment a session is definitely over.
+# A walk counts when the console reaches its summary screen.
 sensor:
   - platform: history_stats
     name: Treadmill workouts this week
@@ -88,9 +67,7 @@ sensor:
 
 # --- when things last happened ---------------------------------------------
 #
-# Stamped by the reminder automations rather than typed. They exist as helpers
-# because Home Assistant has nowhere else to keep "the last time a thing
-# happened" that survives a restart.
+# Stamped by the reminder automations, not typed in.
 input_datetime:
   stride_last_weigh_in:
     name: Last weigh-in
@@ -111,8 +88,7 @@ input_datetime:
 
 # --- how the coach speaks ---------------------------------------------------
 #
-# Changed from the dashboard or the console; the coach reads it at the moment
-# it writes a line, so a change applies to the next thing it says.
+# Read when the coach writes a line, so a change applies to the next one.
 input_select:
   stride_coach_personality:
     name: Coach personality

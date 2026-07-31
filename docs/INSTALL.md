@@ -35,15 +35,14 @@ on the front, not the motor controller, the belt or the deck.
 
 Time: about an hour for the console, ten minutes for Home Assistant.
 
-The three parts are independent. **The console is the only one that matters** —
-stop after Part 1 and you have a treadmill with no subscription, which is most
-of the point.
+The three parts are independent. Stop after Part 1 and you have a treadmill
+with no subscription, which is the main event.
 
 ---
 
 ## Step 0. Is my treadmill supported?
 
-Honestly: nobody knows except for one machine. That machine is:
+Nobody knows except for one machine, which is:
 
 | | |
 |---|---|
@@ -75,8 +74,8 @@ this project could have and it does not exist yet.
 
 ### 1.1 Factory reset the console
 
-Start from a clean machine. It takes five to ten minutes and it means nothing
-left over from iFit is in the way.
+Takes five to ten minutes, and means nothing left over from iFit is in the
+way.
 
 Find and hold the **pinhole reset button** while you switch the treadmill on at
 the power switch. You should see *System recovery* in blue text. Let it finish.
@@ -98,19 +97,17 @@ On the iFit welcome screen:
    sequence, not you having got it wrong.
 3. Tap **the same spot** ten more times.
 
-A message at the bottom of the screen confirms privileged mode is on. You can
-now **swipe up from the bottom** to reach the Android home button, which is how
-you get to Settings.
+A message at the bottom confirms privileged mode is on. **Swipe up from the
+bottom** to get the Android home button, and from there Settings.
 
-> **Some consoles ask for a code here** instead of simply unlocking — a
-> challenge number, expecting a response. Two ways to get one: ring NordicTrack
-> support and ask, or use a third-party calculator such as
-> <https://getresponsecode.com> — not affiliated with this project, not
-> endorsed, listed only because it is what people use.
+> **Some consoles ask for a code here** — a challenge number expecting a
+> response. Either ring NordicTrack support and ask for one, or use a
+> third-party calculator like <https://getresponsecode.com> (no connection to
+> this project).
 
 ### 1.3 Stop iFit locking you back out — **do not skip this**
 
-This is the step that decides whether any of the rest survives a reboot.
+Skip this and everything else you do gets undone at the next reboot.
 
 In the console's Android settings there are two apps to deal with. They appear
 as **iFit Admin** and **iFit**:
@@ -129,14 +126,12 @@ as **iFit Admin** and **iFit**:
 - **Uninstall it if you can.** This one usually can be removed, and removing it
   is the cleanest way to stop it starting up and taking the screen back.
 
-Leave iFit Admin with those permissions and it will quietly switch privileged
-mode off again the next time the treadmill boots, and you will be locked out
-with no explanation on screen.
+Leave iFit Admin those permissions and it switches privileged mode off again
+at the next boot, with nothing on screen to say why.
 
-Later, [`tools/unchain.sh`](../tools/unchain.sh) disables these over ADB — and
-disables iFit Admin *first*, before anything else, for exactly this reason.
-What you are doing here is the manual version, and you need it now because you
-do not have ADB yet.
+[`tools/unchain.sh`](../tools/unchain.sh) does this properly over ADB later,
+and kills iFit Admin first for the same reason. This is the manual version, and
+you need it now because you don't have ADB yet.
 
 ### 1.4 Enable ADB over Wi-Fi
 
@@ -165,10 +160,9 @@ Before changing anything, take a copy of what is on there:
 ./protocol/grab-ifit.sh
 ```
 
-This pulls the console's own APKs onto your computer. They are yours, from a
-machine you own — **do not redistribute them**. Their value is recovery: if
-something goes wrong you have the originals rather than a factory reset and
-hope.
+Pulls the console's APKs onto your computer. They're from a machine you own,
+so keep them to yourself. Handy if something goes wrong and you'd rather not
+rely on a factory reset.
 
 ### 1.6 Understand what you are about to run
 
@@ -270,12 +264,12 @@ cd homeassistant
 cp stride.conf.example stride.conf
 ```
 
-Fill it in. Every key is documented in the file, including what leaving it
-blank does — which is always "that subject is absent", never an error.
+Every key is documented in the file. Leave anything blank and that subject is
+just absent.
 
-One key has no default and must be set: **`coach_ai_task`**, the AI entity that
-writes the coach's lines. Which one you have depends entirely on which
-integration you set up; find yours in Developer Tools → States under `ai_task.`.
+**`coach_ai_task`** has to be set — it's the AI entity that writes the coach's
+lines, and which one you have depends on your integration. Find it in Developer
+Tools → States under `ai_task.`.
 
 ```sh
 python3 stride_coach_llm.py      # the coach, and the automations that fire it
@@ -328,15 +322,13 @@ picker.
 
 ## Credit
 
-Steps 1.1 to 1.4 follow a community *NordicTrack Gen 6 modding guide*, which is
-how the author got ADB onto this console in the first place. That guide
-continues towards QZ Companion, which is a different and perfectly good
-destination; STRIDE goes somewhere else after step 1.4 and replaces the console
-software entirely.
+Steps 1.1–1.4 follow a community *NordicTrack Gen 6 modding guide* — that's
+how ADB got onto this console in the first place. That guide heads towards QZ
+Companion, which is a perfectly good place to end up; STRIDE goes a different
+way after 1.4 and replaces the console software.
 
-If you know who wrote it, please
-[tell us](https://github.com/keranm/strideApp/issues) so it can be credited
-properly.
+If you know who wrote it, [tell us](https://github.com/keranm/strideApp/issues)
+and we'll credit them.
 
 ---
 
@@ -352,9 +344,8 @@ properly.
 
 ## Testing this guide
 
-If you are following this as a new user — especially on a factory-reset
-treadmill and a fresh Home Assistant — the following are the things most likely
-to be wrong, and knowing either way is worth more than any feature right now:
+If you're following this on a factory-reset treadmill and a fresh Home
+Assistant, these are the bits most likely to be wrong:
 
 - **Steps 1.1–1.4** are the route the author took, written up afterwards. Nobody
   has followed *this page* through them on a freshly reset machine.
@@ -364,5 +355,5 @@ to be wrong, and knowing either way is worth more than any feature right now:
 - **Anything you had to know that is not written down.** The author cannot see
   these, because he already knows them.
 
-Please open an issue with what you hit. "I got stuck at 1.1 on a 2019 Commercial
-1750" is more useful than it sounds.
+Open an issue with whatever you hit. "Stuck at 1.1 on a 2019 Commercial 1750"
+is genuinely useful.

@@ -3,22 +3,14 @@
 An independent interoperability specification for the serial protocol spoken by the FitPro motor
 control board ("brainboard") found in some NordicTrack and ProForm treadmills.
 
-> **Independence and trademarks**
+> Independent interoperability work, for compatibility with hardware the authors own. Assembled
+> from USB traffic analysis and examination of publicly distributed software.
 >
-> This document is an independent interoperability specification, produced through
-> reverse engineering for compatibility with hardware legally owned by the authors. It was
-> assembled from USB traffic analysis against that hardware and from examination of publicly
-> distributed software.
->
-> It is not affiliated with, endorsed by, or supported by iFIT Health & Fitness, ICON Health &
-> Fitness, NordicTrack, ProForm or any related company. All trademarks are the property of their
-> respective owners, and are used here only to identify the hardware this protocol belongs to.
->
-> Nothing here is a copy of anyone's documentation or source code. What follows is a description
-> of a wire format: packet layouts, field identifiers, numeric encodings and checksums.
+> Not affiliated with or endorsed by iFIT Health & Fitness, ICON Health & Fitness, NordicTrack or
+> ProForm. Trademarks belong to their owners and are used here only to say which hardware this is.
+> Nothing here is copied from anyone's documentation or source.
 
-**Everything marked CONFIRMED has been verified against a physical treadmill**, not merely
-inferred. Where a figure came from analysis but has not been exercised on hardware, it says so.
+Anything marked **CONFIRMED** was checked against a real treadmill. Anything that wasn't says so.
 
 Machine-readable field table: [`bitfields.json`](bitfields.json).
 
@@ -32,12 +24,11 @@ Machine-readable field table: [`bitfields.json`](bitfields.json).
 | OUT endpoint | `0x02`, interrupt, 64 bytes, interval 1 |
 | Usage page | `0xFF00` vendor-defined, **no report IDs** — a raw 64-byte pipe |
 
-Accessible to an ordinary Android app via `UsbManager` — **no root required**. Verified:
-permission granted, interface claimed. Only one process may hold the interface at a time, so any
-existing console software must be stopped first.
+Reachable from an ordinary Android app via `UsbManager`, no root needed. Only one process can hold
+the interface, so stop the existing console software first.
 
-The board is **request/response — it sends nothing unsolicited.** The working model is a
-subscription: you tell it which fields you want, then poll for updated values.
+The board is request/response and sends nothing unsolicited. You subscribe to the fields you want,
+then poll for values.
 
 ## Frame format
 
@@ -74,8 +65,7 @@ fun checksum(b: ByteArray): Byte {
 
 ## Commands — CONFIRMED
 
-The protocol defines the following command identifiers. These were each arrived at twice, by
-separate routes, and agree — which is the reason to trust them.
+Command identifiers. Each of these was arrived at twice by separate routes, and they agree.
 
 | Command | ID | | Command | ID |
 |---|---|---|---|---|
