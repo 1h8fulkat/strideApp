@@ -78,9 +78,12 @@ this project could have and it does not exist yet.
 Start from a clean machine. It takes five to ten minutes and it means nothing
 left over from iFit is in the way.
 
-Hold the **pinhole reset button** on the right side panel while you switch the
-treadmill on at the power switch. You should see *System recovery* in blue
-text. Let it finish.
+Find and hold the **pinhole reset button** while you switch the treadmill on at
+the power switch. You should see *System recovery* in blue text. Let it finish.
+
+> **The pinhole is in a different place on different machines** — the side
+> panel on some, the top of the console on others. Look for a single small hole
+> that is plainly not a screw or a vent.
 
 > **Do not connect it to Wi-Fi in iFit afterwards.** Leave it offline until
 > you have finished step 1.3. A console that reaches the internet is a console
