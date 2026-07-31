@@ -99,9 +99,10 @@ KINDS = {
                "Say the thing the screen cannot: what the walk was like, what he "
                "did well in it, what held up or did not, what it means next to "
                "the walks before it. If nothing stands out, one plain sentence "
-               "is better than a manufactured observation. This is read on a "
-               "screen, not aloud, so it can be a touch longer than a spoken "
-               "line — but two sentences at most.",
+               "is better than a manufactured observation. "
+               "This is both shown and read aloud as he steps off, so keep it "
+               "to something you would actually say out loud — two sentences at "
+               "most, and it should sound like a person, not a report.",
 }
 
 # The rules that only apply mid-workout. The persona covers the rest.

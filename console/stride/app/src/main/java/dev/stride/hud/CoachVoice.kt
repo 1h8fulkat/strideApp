@@ -43,10 +43,16 @@ class CoachVoice(private val context: Context) {
      * already behind you. The rate limiting upstream should mean this never
      * happens; if it does, the log says so.
      */
-    fun play(url: String) {
+    /**
+     * @return true if playback started. False means something was already
+     *         speaking and this line was dropped — which the caller may need to
+     *         know, because a caller that latches "said it" on a dropped line
+     *         never says it at all.
+     */
+    fun play(url: String): Boolean {
         if (speaking) {
             Log.i(TAG, "coach: still speaking, dropped $url")
-            return
+            return false
         }
         speaking = true
         try {
@@ -72,9 +78,11 @@ class CoachVoice(private val context: Context) {
                 true
             }
             mp.prepareAsync()
+            return true
         } catch (e: Exception) {
             Log.w(TAG, "coach: could not play $url — ${e.message}")
             done()
+            return false
         }
     }
 

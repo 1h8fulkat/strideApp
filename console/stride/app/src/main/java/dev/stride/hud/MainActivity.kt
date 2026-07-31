@@ -214,6 +214,10 @@ class MainActivity : Activity() {
     /** The coach's closing line, asked for near the end and shown on the summary. */
     @Volatile private var summaryLine = ""
 
+    /** Its audio, held back until the summary is actually on screen. */
+    @Volatile private var summaryUrl = ""
+    @Volatile private var summarySpoken = false
+
     /** Last speed the *board* reported, as opposed to what we asked for. */
     @Volatile private var lastActualKph = 0.0
 
@@ -455,6 +459,8 @@ class MainActivity : Activity() {
             session = Session.WELCOME
             workout = "none"
             summaryLine = ""
+            summaryUrl = ""
+            summarySpoken = false
             clearPlan()
             resetSession()
             pendingWrite = mapOf(
@@ -1233,15 +1239,43 @@ class MainActivity : Activity() {
         Log.i(TAG, "coach: \"$line\"")
         coach.heard(line)
         if (obj.optString("kind") == "summary") {
-            // Held rather than shown. It was asked for before the walk ended;
-            // flashing it over the last few seconds of walking would be the
-            // opposite of the point.
+            // Held, both the words and the audio. This was asked for at 98% of
+            // the plan, so it arrives while there is still walking to do —
+            // showing or speaking it then would be the opposite of the point.
+            // `speakSummary` releases it once the summary is actually up.
             summaryLine = line
-            Log.i(TAG, "coach: closing line ready")
+            summaryUrl = obj.optString("url")
+            Log.i(TAG, "coach: closing line ready" +
+                    if (summaryUrl.isEmpty()) " (no audio)" else "")
             return
         }
         showCoach(safe)
         obj.optString("url").takeIf { it.isNotEmpty() }?.let { voice.play(it) }
+    }
+
+    /**
+     * Say the closing line, once, and only while the summary is on screen.
+     *
+     * Waiting for the screen rather than firing on arrival: the line is asked
+     * for at 98% of the plan and can come back with a minute of walking still
+     * to go. Reading somebody their summary while they are still on the belt
+     * would be worse than silence.
+     *
+     * Polled rather than triggered from `finishWorkout`, because the answer may
+     * not have arrived yet when the belt stops — this catches it whichever way
+     * round they happen.
+     *
+     * Latched on the *result*, not the attempt. `play` drops a line when
+     * something else is still speaking, so latching on the call would silently
+     * lose the closing line whenever the last segment's coaching ran long.
+     */
+    private fun speakSummary() {
+        if (session != Session.SUMMARY || summarySpoken) return
+        if (summaryUrl.isEmpty()) return
+        if (voice.play(summaryUrl)) {
+            summarySpoken = true
+            Log.i(TAG, "coach: speaking the closing line")
+        }
     }
 
     private fun showCoach(json: String) {
@@ -1340,6 +1374,7 @@ class MainActivity : Activity() {
             val snap = accumulate(v)
             push(snap)
             coachTick(snap)
+            speakSummary()
 
             sinceMqtt += POLL_MS
             if (sinceMqtt >= MQTT_EVERY_MS) {
