@@ -41,8 +41,7 @@ everything around it is not.
 
 ![STRIDE on a NordicTrack console](docs/screenshots/oval-original.png)
 
-**[More screenshots →](docs/GALLERY.md)** — all five interfaces, a guided walk,
-and the settings that live on the treadmill itself.
+**[More screenshots →](docs/GALLERY.md)**
 
 ---
 
