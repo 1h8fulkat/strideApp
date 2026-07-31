@@ -39,14 +39,14 @@
       }
     },
     {
-      "action": "notify.mobile_app_kerans_iphone",
+      "action": "notify.NOTIFY_SERVICE",
       "data": {
         "title": "{{ headline }}",
         "message": "{{ body }}",
         "data": {
           "group": "stride-coach",
           "tag": "stride-post-workout",
-          "url": "/keran-workout/0"
+          "url": "/stride-console/0"
         }
       }
     }

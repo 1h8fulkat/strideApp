@@ -31,7 +31,7 @@ android {
         versionCode = 1
         versionName = "0.1-spike"
 
-        buildConfigField("String", "MQTT_BROKER", secret("mqtt.broker", "tcp://192.168.0.10:1883"))
+        buildConfigField("String", "MQTT_BROKER", secret("mqtt.broker", ""))
         buildConfigField("String", "MQTT_USER", secret("mqtt.user"))
         buildConfigField("String", "MQTT_PASS", secret("mqtt.pass"))
     }

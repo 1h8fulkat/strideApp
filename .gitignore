@@ -1,8 +1,9 @@
 # --- local configuration, never committed -----------------------------------
 # Home Assistant URL, token and broker credentials.
 homeassistant/stride.conf
-# Broker credentials injected into the console build.
-console/stride/local.properties
+# Broker credentials injected into the console build, and the Android SDK
+# path, which is a home directory and differs per machine.
+console/*/local.properties
 # This machine's DEVELOPMENT_TEAM. Not a secret — a team id ships inside every
 # app — but committing it makes a project that signs as somebody else.
 ios/Signing.local.xcconfig
