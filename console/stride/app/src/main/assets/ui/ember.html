@@ -126,6 +126,13 @@ button{font-family:inherit;color:inherit;background:none;border:none;
 .shapes{position:absolute;left:60px;top:290px;width:1160px;display:flex}
 .shapes .card{flex:1;height:300px;margin-right:20px;text-align:left}
 .shapes .card:last-child{margin-right:0}
+.row2 .card.gone{display:none}
+/* A route carries its own length, so the duration row goes and the cards move
+   up into the space it leaves. Never more than four cards either way. */
+.routes .mins,
+.routes #capHow{display:none}
+/* One route must not stretch to fill a row built for four. */
+.routes .shapes .card{flex:0 0 280px}
 .shapes .nm{position:absolute;left:28px;top:28px;font-size:26px;font-weight:300;letter-spacing:.02em}
 .shapes .bl{position:absolute;left:28px;top:66px;width:220px;font-size:16px;line-height:1.5;color:var(--dim)}
 .shapes .card.pick .nm{color:var(--accent)}
@@ -367,19 +374,21 @@ button{font-family:inherit;color:inherit;background:none;border:none;
   </div>
 
   <div class="step gone" id="stControl">
-    <div class="ask">On your own, or with a plan?</div>
+    <div class="ask" id="controlAsk">On your own, or with a plan?</div>
     <div class="row2">
       <button class="card" id="pickCasual">
         <span class="big">Casual</span><span class="sub">Nothing planned. Laps count themselves.</span></button>
       <button class="card pick" id="pickGuided">
         <span class="big">Guided</span><span class="sub">A shape of hills, and a voice to walk it with.</span></button>
+      <button class="card gone" id="pickRoutes">
+        <span class="big">My routes</span><span class="sub">A walk you have already done, hills and all.</span></button>
     </div>
   </div>
 
   <div class="step gone" id="stPlan">
-    <div class="cap" style="position:absolute;left:60px;top:70px">HOW LONG</div>
+    <div class="cap" id="capHow" style="position:absolute;left:60px;top:70px">HOW LONG</div>
     <div class="mins" id="mins"></div>
-    <div class="cap" style="position:absolute;left:60px;top:250px">THE SHAPE OF IT</div>
+    <div class="cap" id="capShape" style="position:absolute;left:60px;top:250px">THE SHAPE OF IT</div>
     <div class="shapes" id="shapes"></div>
   </div>
 
@@ -632,6 +641,10 @@ const flow = STRIDE.flow((step, f) => {
   // BEGIN only exists on the plan step; every other step commits by
   // tapping the thing you chose.
   $('btnBegin').classList.toggle('gone', step !== 'plan');
+  // The routes card only exists when there are routes, and they can arrive
+  // over MQTT while this screen is open — so it is decided on arrival at the
+  // step, not once at load.
+  if (step === 'control') refreshControl();
   if (step === 'mode') $('askMode').textContent = 'Walk or run, ' + f.profile + '?';
 });
 
@@ -671,30 +684,62 @@ STRIDE.DURATIONS.forEach(m => {
 
 /* The sparklines are the real segment inclines from Plan.kt, so the card shows
    the walk you are about to get rather than a decorative squiggle. */
-STRIDE.SHAPES.forEach(s => {
+function shapeCard(name, blurb, points, chosen, onPick) {
   const b = document.createElement('button');
-  b.className = 'card' + (s.id === flow.shape ? ' pick' : '');
-  const lo = Math.min.apply(null, s.points), hi = Math.max.apply(null, s.points);
-  const pts = s.points.map((v, i) =>
-    (i / (s.points.length - 1) * 240).toFixed(0) + ',' +
-    (86 - (v - lo) / (hi - lo) * 76).toFixed(0)).join(' ');
+  b.className = 'card' + (chosen ? ' pick' : '');
+  const lo = Math.min.apply(null, points), hi = Math.max.apply(null, points);
+  const span = (hi - lo) || 1;
+  const pts = points.map((v, i) =>
+    (i / (points.length - 1) * 240).toFixed(0) + ',' +
+    (86 - (v - lo) / span * 76).toFixed(0)).join(' ');
   b.innerHTML =
-    '<span class="nm">' + s.name + '</span>' +
-    '<span class="bl">' + s.blurb + '</span>' +
+    '<span class="nm">' + STRIDE.esc(name) + '</span>' +
+    '<span class="bl">' + STRIDE.esc(blurb) + '</span>' +
     '<svg viewBox="0 0 240 90" preserveAspectRatio="none">' +
       '<polyline points="' + pts + '" fill="none" stroke="' +
-      (s.id === flow.shape ? '#e0a458' : '#4a443c') + '" stroke-width="2"/></svg>';
+      (chosen ? '#e0a458' : '#4a443c') + '" stroke-width="2"/></svg>';
   tap(b, () => {
-    flow.setShape(s.id);
+    onPick();
     [].forEach.call(b.parentNode.children, c => c.classList.toggle('pick', c === b));
   });
   $('shapes').appendChild(b);
-});
+}
+
+/* Either the four shapes or up to four routes — never a mix, and never five.
+   Routes are chosen on the screen before this one. */
+function renderPlan() {
+  $('shapes').innerHTML = '';
+  const picking = flow.pickingRoute();
+  $('stPlan').classList.toggle('routes', picking);
+  $('capShape').textContent = picking ? 'WHICH ROUTE' : 'THE SHAPE OF IT';
+  if (picking) {
+    flow.routes().slice(0, 4).forEach(r => {
+      shapeCard(r.name || 'Route',
+                (r.distance_m / 1000).toFixed(2) + ' km · ' +
+                  Math.round(r.climb_m || 0) + ' m of climb',
+                STRIDE.routePoints(r), false, () => flow.setRoute(r.id));
+    });
+    return;
+  }
+  STRIDE.SHAPES.forEach(s =>
+    shapeCard(s.name, s.blurb, s.points, s.id === flow.shape,
+              () => flow.setShape(s.id)));
+}
+
+/* Offered only when there is something behind it. */
+function refreshControl() {
+  $('pickRoutes').classList.toggle('gone', flow.routes().length === 0);
+  $('controlAsk').textContent = flow.routes().length
+    ? 'On your own, a plan, or one of yours?' : 'On your own, or with a plan?';
+}
+
+renderPlan();
 
 tap($('pickWalk'),   () => flow.setMode('walk'));
 tap($('pickRun'),    () => flow.setMode('run'));
 tap($('pickCasual'), () => flow.setControl('casual'));
-tap($('pickGuided'), () => flow.setControl('guided'));
+tap($('pickGuided'), () => { flow.setControl('guided'); renderPlan(); });
+tap($('pickRoutes'), () => { flow.setControl('routes'); renderPlan(); });
 tap($('btnBack'),    () => flow.back());
 /* Tapping the suggestion takes it. Accepting the coach's number used to
    mean holding + until you reached it. */

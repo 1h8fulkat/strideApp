@@ -770,26 +770,6 @@ function myRoutes(){
   catch (e) { return []; }
 }
 
-/* Route names are typed on a phone, so they arrive here as untrusted text. */
-function esc(t){
-  return String(t).replace(/[&<>"]/g, c =>
-    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-}
-
-/* A route's own profile, sampled for the card sparkline — the ground you are
-   about to walk rather than a shape icon. */
-function routeSpark(r){
-  const segs = r.segments || [];
-  if (!segs.length) return [0,0];
-  const total = segs[segs.length-1][1] || 1, out = [];
-  for (let i = 0; i <= 40; i++){
-    const d = i/40*total;
-    let v = segs[segs.length-1][2];
-    for (const sg of segs) if (d < sg[1]) { v = sg[2]; break; }
-    out.push(v);
-  }
-  return out;
-}
 
 /* who → what → how → which. Purely client side; nothing reaches Kotlin, and the
    belt cannot move, until a walk is actually committed to on the last step.
@@ -860,14 +840,14 @@ function buildGuidedStep(){
     myRoutes().slice(0, 4).forEach(r => {
       const b = document.createElement('button');
       b.className = 'plan' + (r.id === chosenRoute ? ' on' : '');
-      b.innerHTML = '<div class="pn">' + esc(r.name || 'Route') + '</div>' +
+      b.innerHTML = '<div class="pn">' + STRIDE.esc(r.name || 'Route') + '</div>' +
                     '<div class="pb">' + (r.distance_m/1000).toFixed(2) + ' km · ' +
                     Math.round(r.climb_m || 0) + ' m up</div>';
       const cv = document.createElement('canvas');
       cv.width = 210; cv.height = 56;
       b.appendChild(cv);
       plans.appendChild(b);
-      sparkline(cv, routeSpark(r));
+      sparkline(cv, STRIDE.routePoints(r));
       tap(b, () => {
         chosenRoute = r.id;
         [...plans.children].forEach(c => c.classList.toggle('on', c === b));

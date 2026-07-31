@@ -95,7 +95,12 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 .row2 .card{flex:1;height:340px;margin-right:26px}
 .row2 .card:last-child{margin-right:0}
 .row2 .nm{position:absolute;left:36px;top:96px;font-size:68px;font-weight:600}
-.row2 .bl{position:absolute;left:36px;top:212px;width:440px;font-size:21px;line-height:1.5;color:var(--dim)}
+.row2 .bl{position:absolute;left:36px;top:212px;width:calc(100% - 72px);
+          font-size:21px;line-height:1.5;color:var(--dim)}
+/* Three cards is a third of the room each, so the heading has to be able to
+   wrap without landing on the blurb below it. */
+.row2.three .nm{font-size:52px;line-height:1.05;width:calc(100% - 72px)}
+.row2.three .bl{top:236px;font-size:19px}
 .row2 .card.pick .bl{color:#d9e6dc}
 
 .mins{position:absolute;left:44px;top:140px;width:1192px;display:flex}
@@ -107,6 +112,11 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 .shapes{position:absolute;left:44px;top:280px;width:1192px;display:flex}
 .shapes .card{flex:1;height:300px;margin-right:18px;overflow:hidden}
 .shapes .card:last-child{margin-right:0}
+.row2 .card.gone{display:none}
+/* A route carries its own length, so the duration row goes. Four cards either
+   way — routes replace the shapes rather than joining them. */
+.routes .mins{display:none}
+.routes .shapes .card{flex:0 0 288px}
 .shapes .nm{position:absolute;left:24px;top:22px;font-size:26px;font-weight:600}
 .shapes .bl{position:absolute;left:24px;top:58px;width:220px;font-size:16px;color:var(--dim)}
 .shapes .card.pick{background:var(--tint);border-color:var(--accent);color:var(--ink)}
@@ -314,19 +324,22 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
   </div>
 
   <div class="step gone" id="stControl">
-    <div class="head" style="top:112px">On your own, or guided?</div>
-    <div class="row2">
+    <div class="head" id="controlAsk" style="top:112px">On your own, or guided?</div>
+    <div class="row2" id="controlRow">
       <button class="card" id="pickCasual">
         <span class="nm">On your own</span>
         <span class="bl">Flat ground, your speed. The console counts laps and keeps quiet.</span></button>
       <button class="card pick" id="pickGuided">
         <span class="nm">Guided</span>
         <span class="bl">Hills set out in advance. The incline follows them; the speed stays yours.</span></button>
+      <button class="card gone" id="pickRoutes">
+        <span class="nm">My routes</span>
+        <span class="bl">A walk you have already done outdoors, hills and length its own.</span></button>
     </div>
   </div>
 
   <div class="step gone" id="stPlan">
-    <div class="head" style="top:60px;font-size:46px">How long, and over what ground?</div>
+    <div class="head" id="planAsk" style="top:60px;font-size:46px">How long, and over what ground?</div>
     <div class="mins" id="mins"></div>
     <div class="shapes" id="shapes"></div>
   </div>
@@ -510,6 +523,10 @@ const flow = STRIDE.flow((step, f) => {
   // BEGIN only exists on the plan step; every other step commits by
   // tapping the thing you chose.
   $('btnBegin').classList.toggle('gone', step !== 'plan');
+  // The routes card only exists when there are routes, and they can arrive
+  // over MQTT while this screen is open — so it is decided on arrival at the
+  // step, not once at load.
+  if (step === 'control') refreshControl();
   if (step === 'mode') $('askMode').textContent = 'Walk or run, ' + f.profile + '?';
 });
 
@@ -549,33 +566,69 @@ STRIDE.DURATIONS.forEach(m => {
 
 /* Filled sparklines, because on paper a filled shape reads as ground and a
    bare line reads as a graph. */
-STRIDE.SHAPES.forEach(s => {
-  const chosen = s.id === flow.shape;
-  const lo = Math.min.apply(null, s.points), hi = Math.max.apply(null, s.points);
-  const pts = s.points.map((v, i) =>
-    (i / (s.points.length - 1) * 260).toFixed(0) + ',' +
-    (106 - (v - lo) / (hi - lo) * 80).toFixed(0));
+function groundCard(name, blurb, points, chosen, onPick) {
+  const lo = Math.min.apply(null, points), hi = Math.max.apply(null, points);
+  const span = (hi - lo) || 1;
+  const pts = points.map((v, i) =>
+    (i / (points.length - 1) * 260).toFixed(0) + ',' +
+    (106 - (v - lo) / span * 80).toFixed(0));
   const b = document.createElement('button');
   b.className = 'card' + (chosen ? ' pick' : '');
   b.innerHTML =
-    '<span class="nm">' + s.name + '</span>' +
-    '<span class="bl">' + s.blurb + '</span>' +
+    '<span class="nm">' + STRIDE.esc(name) + '</span>' +
+    '<span class="bl">' + STRIDE.esc(blurb) + '</span>' +
     '<svg viewBox="0 0 260 110" preserveAspectRatio="none">' +
       '<polygon points="' + pts.join(' ') + ' 260,110 0,110" fill="' +
         (chosen ? '#c3d4c6' : '#dcd7c9') + '"/>' +
       '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' +
         (chosen ? '#3d6b4a' : '#1b1a17') + '" stroke-width="2"/></svg>';
   tap(b, () => {
-    flow.setShape(s.id);
+    onPick();
     [].forEach.call(b.parentNode.children, c => c.classList.toggle('pick', c === b));
   });
   $('shapes').appendChild(b);
-});
+}
+
+/* Either the four shapes or up to four routes — never a mix, and never five. */
+function renderPlan() {
+  $('shapes').innerHTML = '';
+  const picking = flow.pickingRoute();
+  $('stPlan').classList.toggle('routes', picking);
+
+  if (picking) {
+    $('planAsk').textContent = 'Which route?';
+    flow.routes().slice(0, 4).forEach(r => {
+      groundCard(r.name || 'Route',
+                 (r.distance_m / 1000).toFixed(2) + ' km, with ' +
+                   Math.round(r.climb_m || 0) + ' m of climbing in it.',
+                 STRIDE.routePoints(r), false, () => flow.setRoute(r.id));
+    });
+    return;
+  }
+
+  $('planAsk').textContent = 'How long, and over what ground?';
+  STRIDE.SHAPES.forEach(s =>
+    groundCard(s.name, s.blurb, s.points, s.id === flow.shape,
+               () => flow.setShape(s.id)));
+}
+
+/* Offered only when there is something behind it. */
+function refreshControl() {
+  const has = flow.routes().length > 0;
+  $('pickRoutes').classList.toggle('gone', !has);
+  // Three cards share the row, so the type comes down a step — see .row2.three.
+  $('controlRow').classList.toggle('three', has);
+  $('controlAsk').textContent = has
+    ? 'On your own, guided, or one of yours?' : 'On your own, or guided?';
+}
+
+renderPlan();
 
 tap($('pickWalk'),   () => flow.setMode('walk'));
 tap($('pickRun'),    () => flow.setMode('run'));
 tap($('pickCasual'), () => flow.setControl('casual'));
-tap($('pickGuided'), () => flow.setControl('guided'));
+tap($('pickGuided'), () => { flow.setControl('guided'); renderPlan(); });
+tap($('pickRoutes'), () => { flow.setControl('routes'); renderPlan(); });
 tap($('btnBack'),    () => flow.back());
 /* Tapping the suggestion takes it. It was read-only, so accepting the
    coach's number meant holding + until you got there. */

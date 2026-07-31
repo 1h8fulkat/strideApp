@@ -1091,6 +1091,43 @@ function demo(opts) {
   return { screens: DEMO_SCREENS };
 }
 
+/* ===========================================================================
+   ROUTES IN A PICKER
+   ---------------------------------------------------------------------------
+   Two helpers all five interfaces need, kept here rather than copied into each
+   of them — a route's name is untrusted text in every one of the five, and a
+   route's profile is sampled the same way whatever the card looks like.
+   =========================================================================== */
+
+/**
+ * A route's own gradient profile, sampled evenly for a card sparkline.
+ *
+ * Strictly better than a generic shape icon: it is the ground you are about to
+ * walk. Segments arrive as `[startM, endM, incline]` triples — see
+ * RouteStore.swift for why they are bare arrays.
+ */
+function routePoints(r) {
+  var segs = (r && r.segments) || [];
+  if (!segs.length) return [0, 0];
+  var total = segs[segs.length - 1][1] || 1, out = [];
+  for (var i = 0; i <= 40; i++) {
+    var d = i / 40 * total, v = segs[segs.length - 1][2];
+    for (var j = 0; j < segs.length; j++) {
+      if (d < segs[j][1]) { v = segs[j][2]; break; }
+    }
+    out.push(v);
+  }
+  return out;
+}
+
+/** Route names are typed by a person on a phone, and every UI builds its cards
+ *  with innerHTML. */
+function esc(t) {
+  return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+  });
+}
+
 /* ========================================================================= */
 
 global.STRIDE = {
@@ -1102,6 +1139,8 @@ global.STRIDE = {
   resetDerived: resetDerived,
 
   flow: flow,
+  routePoints: routePoints,
+  esc: esc,
   profiles: profiles,
   allowGuest: allowGuest,
   DURATIONS: DURATIONS,

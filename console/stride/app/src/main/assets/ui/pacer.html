@@ -638,6 +638,10 @@ const flow = STRIDE.flow((step, f) => {
   // BEGIN only exists on the plan step; every other step commits by
   // tapping the thing you chose.
   $('btnBegin').classList.toggle('gone', step !== 'plan');
+  // The routes card only exists when there are routes, and they can arrive
+  // over MQTT while this screen is open — so it is decided on arrival at the
+  // step, not once at load.
+  if (step === 'control') refreshControl();
   if (step === 'mode') $('askMode').textContent = 'Walking or running, ' + f.profile + '?';
 });
 
@@ -670,12 +674,6 @@ STRIDE.DURATIONS.forEach(m => {
 });
 
 /* Four lanes, drawn as lanes. */
-/* Route names are typed on a phone, so they arrive here as untrusted text. */
-function esc(t) {
-  return String(t).replace(/[&<>"]/g, c =>
-    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-}
-
 function lane(name, blurb, points, chosen, onPick) {
   const lo = Math.min.apply(null, points), hi = Math.max.apply(null, points);
   const span = (hi - lo) || 1;
@@ -685,8 +683,8 @@ function lane(name, blurb, points, chosen, onPick) {
   const b = document.createElement('button');
   b.className = 'slab' + (chosen ? ' pick' : '');
   b.innerHTML =
-    '<span class="nm">' + esc(name) + '</span>' +
-    '<span class="bl">' + esc(blurb) + '</span>' +
+    '<span class="nm">' + STRIDE.esc(name) + '</span>' +
+    '<span class="bl">' + STRIDE.esc(blurb) + '</span>' +
     '<svg viewBox="0 0 420 60" preserveAspectRatio="none"><polyline points="' + pts +
       '" fill="none" stroke="' + (chosen ? '#c6f24e' : '#6d6088') +
       '" stroke-width="6" stroke-linecap="round"/></svg>';
@@ -696,22 +694,6 @@ function lane(name, blurb, points, chosen, onPick) {
   });
   $('shapes').appendChild(b);
   return b;
-}
-
-/* A route's own profile, sampled for the lane graphic — the ground you are
-   about to walk rather than a shape icon. Segments are
-   [startM, endM, incline] triples; see RouteStore.swift. */
-function routePoints(r) {
-  const segs = r.segments || [];
-  if (!segs.length) return [0, 0];
-  const total = segs[segs.length - 1][1] || 1, out = [];
-  for (let i = 0; i <= 40; i++) {
-    const d = i / 40 * total;
-    let v = segs[segs.length - 1][2];
-    for (const sg of segs) if (d < sg[1]) { v = sg[2]; break; }
-    out.push(v);
-  }
-  return out;
 }
 
 function renderPlan() {
@@ -725,7 +707,7 @@ function renderPlan() {
       lane(r.name || 'Route',
            (r.distance_m / 1000).toFixed(2) + ' km · ' +
              Math.round(r.climb_m || 0) + ' m of climb',
-           routePoints(r), false, () => flow.setRoute(r.id));
+           STRIDE.routePoints(r), false, () => flow.setRoute(r.id));
     });
     return;
   }
@@ -748,7 +730,7 @@ function refreshControl() {
 
 renderPlan();
 
-tap($('pickWalk'),   () => { flow.setMode('walk'); refreshControl(); });
+tap($('pickWalk'),   () => flow.setMode('walk'));
 tap($('pickRun'),    () => flow.setMode('run'));
 tap($('pickCasual'), () => flow.setControl('casual'));
 tap($('pickGuided'), () => { flow.setControl('guided'); renderPlan(); });

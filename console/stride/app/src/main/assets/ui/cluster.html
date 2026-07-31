@@ -115,6 +115,12 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 .shapes{position:absolute;left:34px;top:308px;width:1212px;display:flex}
 .shapes .bay{flex:1;height:280px;margin-right:16px;border-radius:10px}
 .shapes .bay:last-child{margin-right:0}
+.row2 .bay.gone{display:none}
+/* A route carries its own length, so the duration row goes. Four bays either
+   way — routes replace the shapes rather than joining them. */
+.routes .mins,
+.routes #capHow{display:none}
+.routes .shapes .bay{flex:0 0 292px}
 .shapes .nm{position:absolute;left:24px;top:24px;font-size:22px;letter-spacing:.06em}
 .shapes .sub{position:absolute;left:24px;top:58px;font-size:13px;color:var(--dim)}
 .shapes .bay.pick .nm{color:var(--accent)}
@@ -350,13 +356,16 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
       <button class="bay pick" id="pickGuided">
         <span class="nm">GUIDED</span>
         <span class="sub">Incline follows a profile. Speed stays yours.</span></button>
+      <button class="bay gone" id="pickRoutes">
+        <span class="nm">ROUTES</span>
+        <span class="sub">Ground you have walked, replayed by distance.</span></button>
     </div>
   </div>
 
   <div class="step gone" id="stPlan">
-    <div class="cap" style="top:100px">DURATION</div>
+    <div class="cap" id="capHow" style="top:100px">DURATION</div>
     <div class="mins" id="mins"></div>
-    <div class="cap" style="top:274px">INCLINE PROFILE</div>
+    <div class="cap" id="capShape" style="top:274px">INCLINE PROFILE</div>
     <div class="shapes" id="shapes"></div>
   </div>
 
@@ -558,6 +567,9 @@ const flow = STRIDE.flow(step => {
   // BEGIN only exists on the plan step; every other step commits by
   // tapping the thing you chose.
   $('btnBegin').classList.toggle('gone', step !== 'plan');
+  // Routes can arrive over MQTT while this screen is open, so the card is
+  // decided on arrival at the step rather than once at load.
+  if (step === 'control') refreshControl();
 });
 
 /* Read from Settings, never written here. A name offered on this picker
@@ -594,33 +606,69 @@ STRIDE.DURATIONS.forEach(m => {
 /* Peak and gain rather than a blurb — the instrument reading of a template.
    Gain assumes a 5 km/h walk, which is what the numbers are for: comparing
    the four, not predicting the day. */
-STRIDE.SHAPES.forEach(s => {
-  const chosen = s.id === flow.shape;
-  const lo = Math.min.apply(null, s.points), hi = Math.max.apply(null, s.points);
-  const pts = s.points.map((v, i) =>
-    (i / (s.points.length - 1) * 250).toFixed(0) + ',' +
-    (92 - (v - lo) / (hi - lo) * 78).toFixed(0)).join(' ');
-  // 30 minutes at 5 km/h is 2500 m of run; mean grade over that is the gain.
-  const mean = s.points.reduce((a, v) => a + v, 0) / s.points.length;
-  const gain = Math.round(2500 * mean / 100);
+/* Peak and gain rather than a blurb — the instrument reading of a profile. For
+   a route both numbers are real rather than assumed: it was measured outdoors,
+   so the gain is its own barometric ascent and not 30 minutes at 5 km/h. */
+function bay(title, sub, points, chosen, onPick) {
+  const lo = Math.min.apply(null, points), hi = Math.max.apply(null, points);
+  const span = (hi - lo) || 1;
+  const pts = points.map((v, i) =>
+    (i / (points.length - 1) * 250).toFixed(0) + ',' +
+    (92 - (v - lo) / span * 78).toFixed(0)).join(' ');
   const b = document.createElement('button');
   b.className = 'bay' + (chosen ? ' pick' : '');
   b.innerHTML =
-    '<span class="nm">' + s.name.toUpperCase() + '</span>' +
-    '<span class="sub mono">PEAK ' + hi.toFixed(1) + '% · GAIN ' + gain + ' M</span>' +
+    '<span class="nm">' + STRIDE.esc(title) + '</span>' +
+    '<span class="sub mono">' + STRIDE.esc(sub) + '</span>' +
     '<svg viewBox="0 0 250 100" preserveAspectRatio="none"><polyline points="' + pts +
       '" fill="none" stroke="' + (chosen ? '#6fd0e0' : '#4a5257') + '" stroke-width="2"/></svg>';
   tap(b, () => {
-    flow.setShape(s.id);
+    onPick();
     [].forEach.call(b.parentNode.children, c => c.classList.toggle('pick', c === b));
   });
   $('shapes').appendChild(b);
-});
+}
+
+function renderPlan() {
+  $('shapes').innerHTML = '';
+  const picking = flow.pickingRoute();
+  $('stPlan').classList.toggle('routes', picking);
+  $('capShape').textContent = picking ? 'WHICH ROUTE' : 'INCLINE PROFILE';
+
+  if (picking) {
+    flow.routes().slice(0, 4).forEach(r => {
+      const pts = STRIDE.routePoints(r);
+      bay((r.name || 'Route').toUpperCase(),
+          (r.distance_m / 1000).toFixed(2) + ' KM · CLIMB ' +
+            Math.round(r.climb_m || 0) + ' M',
+          pts, false, () => flow.setRoute(r.id));
+    });
+    return;
+  }
+
+  STRIDE.SHAPES.forEach(s => {
+    const hi = Math.max.apply(null, s.points);
+    // 30 minutes at 5 km/h is 2500 m of run; mean grade over that is the gain.
+    const mean = s.points.reduce((a, v) => a + v, 0) / s.points.length;
+    const gain = Math.round(2500 * mean / 100);
+    bay(s.name.toUpperCase(),
+        'PEAK ' + hi.toFixed(1) + '% · GAIN ' + gain + ' M',
+        s.points, s.id === flow.shape, () => flow.setShape(s.id));
+  });
+}
+
+/* Offered only when there is something behind it. */
+function refreshControl() {
+  $('pickRoutes').classList.toggle('gone', flow.routes().length === 0);
+}
+
+renderPlan();
 
 tap($('pickWalk'),   () => flow.setMode('walk'));
 tap($('pickRun'),    () => flow.setMode('run'));
 tap($('pickCasual'), () => flow.setControl('casual'));
-tap($('pickGuided'), () => flow.setControl('guided'));
+tap($('pickGuided'), () => { flow.setControl('guided'); renderPlan(); });
+tap($('pickRoutes'), () => { flow.setControl('routes'); renderPlan(); });
 tap($('btnBack'),    () => flow.back());
 /* Tapping the suggestion takes it. Accepting the coach's number used to
    mean holding + until you reached it. */
