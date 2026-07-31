@@ -545,6 +545,9 @@ button{font-family:inherit;color:inherit;background:none;border:none;
    Everything that is not this UI's look — the track maths, the elevation
    profile, the setup flow, touch handling — comes from stride-core. */
 const standalone = STRIDE.stub();
+
+/* The coach's suggested pace, so tapping it can take it. */
+let suggestKph = 0;
 const $ = STRIDE.$, tap = STRIDE.tap, mmss = STRIDE.mmss, nf = STRIDE.nf;
 
 /* ---- the lap track ------------------------------------------------------
@@ -690,6 +693,10 @@ tap($('pickRun'),    () => flow.setMode('run'));
 tap($('pickCasual'), () => flow.setControl('casual'));
 tap($('pickGuided'), () => flow.setControl('guided'));
 tap($('btnBack'),    () => flow.back());
+/* Tapping the suggestion takes it. Accepting the coach's number used to
+   mean holding + until you reached it. */
+tap($('suggest'), () => { if (suggestKph > 0) Stride.setSpeed(suggestKph); });
+
 /* Tapping a plan used to arm the belt immediately, so choosing a shape and
    then a duration was impossible — the walk had already started. Selection
    and starting are separate now. */
@@ -853,9 +860,11 @@ window.render = function(raw){
                                : 'yours until the next stretch';
   $('inclineBar').style.width = Math.max(0, Math.min(200, s.belt.incline / 12 * 200)) + 'px';
 
-  /* Speed is a suggestion and nothing may act on it — the person on the
-     treadmill decides the pace, always. */
-  $('suggest').textContent = (guided && s.targets.suggest > 0 && !timed)
+  /* A suggestion. The plan never applies it — the person on the treadmill
+     decides the pace, always — but they can take it with one tap. */
+  const suggesting = guided && s.targets.suggest > 0 && !timed;
+  suggestKph = suggesting ? s.targets.suggest : 0;
+  $('suggest').textContent = suggesting
     ? 'lift to ' + s.targets.suggest.toFixed(1) + ' km/h'
     : '';
 

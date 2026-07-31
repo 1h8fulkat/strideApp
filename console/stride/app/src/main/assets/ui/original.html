@@ -650,6 +650,9 @@ button.pulse{animation:pulse .9s ease-out 2}
    see the header there for why. This file owns the look and nothing else. */
 const standalone = STRIDE.stub();
 
+/* The coach's suggested pace, so tapping it can take it. */
+let suggestKph = 0;
+
 const LAP_M = 400;
 const $ = STRIDE.$;
 const nf = STRIDE.nf;
@@ -835,6 +838,10 @@ tap($('pickRun'),  () => Stride.choose('run'));
 tap($('pickCasual'), () => Stride.choose('walk'));
 tap($('pickGuided'), () => { buildGuidedStep(); showStep(4); });
 tap($('btnBack'), () => showStep(Math.max(1, stepNow - 1)));
+/* Tapping the suggestion takes it. Accepting the coach's number used to
+   mean holding + until you reached it. */
+tap($('suggest'), () => { if (suggestKph > 0) Stride.setSpeed(suggestKph); });
+
 tap($('btnBegin'), () => Stride.chooseGuided(chosenShape, chosenMinutes));
 /* The settings screen is shared by all five interfaces — see
    stride-settings.js. This document keeps the button and nothing else;
@@ -1514,6 +1521,7 @@ window.render = function(s){
 
     // Suggested pace, and whether the hill is still the plan's to move.
     const el = $('suggest');
+    suggestKph = s.suggestPace > 0 ? s.suggestPace : 0;
     if (s.suggestPace > 0){
       const delta = (s.suggestPace - (s.targetSpeed || 0));
       const verb = delta > 0.15 ? 'lift to' : delta < -0.15 ? 'ease to' : 'hold';
@@ -1524,6 +1532,7 @@ window.render = function(s){
       if (!s.inclineAuto) el.innerHTML += ' · incline yours until the next stretch';
     } else {
       el.textContent = '';
+      suggestKph = 0;
     }
   }
   if (timed){

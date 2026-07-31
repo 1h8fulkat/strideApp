@@ -382,7 +382,8 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
       <circle cx="150" cy="150" r="120" fill="none" stroke="#20262a" stroke-width="12"/>
       <circle id="spdArc" cx="150" cy="150" r="120" fill="none" stroke="#eef3f5" stroke-width="12"
               pathLength="1000" stroke-dasharray="0 1000" transform="rotate(-90 150 150)"/>
-      <!-- The plan's suggestion, as a tick on the bezel. It is never applied. -->
+      <!-- The plan's suggestion, as a tick on the bezel. The plan never
+           applies it; tapping it does. -->
       <circle id="spdTick" cx="150" cy="150" r="120" fill="none" stroke="#e5b567" stroke-width="12"
               pathLength="1000" stroke-dasharray="0 1000" transform="rotate(-90 150 150)"/>
     </svg>
@@ -508,6 +509,9 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 <script src="stride-settings.js"></script>
 <script>
 const standalone = STRIDE.stub();
+
+/* The coach's suggested pace, so tapping it can take it. */
+let suggestKph = 0;
 const $ = STRIDE.$, tap = STRIDE.tap, mmss = STRIDE.mmss, nf = STRIDE.nf;
 
 /* Dial ranges. Fixed rather than adaptive: a gauge whose full scale moves is
@@ -615,6 +619,10 @@ tap($('pickRun'),    () => flow.setMode('run'));
 tap($('pickCasual'), () => flow.setControl('casual'));
 tap($('pickGuided'), () => flow.setControl('guided'));
 tap($('btnBack'),    () => flow.back());
+/* Tapping the suggestion takes it. Accepting the coach's number used to
+   mean holding + until you reached it. */
+tap($('suggest'), () => { if (suggestKph > 0) Stride.setSpeed(suggestKph); });
+
 /* Tapping a plan used to arm the belt immediately, so choosing a shape and
    then a duration was impossible — the walk had already started. Selection
    and starting are separate now. */
@@ -775,6 +783,7 @@ window.render = function(raw){
   /* The suggestion is a bezel tick and a caption, not a needle. Nothing on the
      console may act on it — the pace belongs to whoever is on the belt. */
   const suggesting = guided && s.targets.suggest > 0 && !timed;
+  suggestKph = suggesting ? s.targets.suggest : 0;
   $('suggest').textContent = suggesting ? 'TGT ' + s.targets.suggest.toFixed(1) : '';
   $('spdTick').setAttribute('stroke-dasharray',
     suggesting ? tick(s.targets.suggest / SPEED_FULL) : '0 1000');
