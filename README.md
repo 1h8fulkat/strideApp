@@ -154,19 +154,20 @@ also creates the helpers the coach and reminders expect to find.
 
 ## Design decisions worth knowing
 
-A few things here are deliberate and look odd until explained:
-
-- **Kotlin owns the treadmill, HTML owns the screen.** The console's five
-  interfaces are HTML documents in a WebView, so they can be designed in a
-  browser. Nothing in them can move the belt.
-- **The coach decides *when* to speak on the console; Home Assistant decides
-  *what* it says.** With HA unreachable it still marks your kilometres, using
-  built-in lines.
+- **Kotlin owns the treadmill, HTML owns the screen.** The five interfaces are
+  HTML in a WebView, so they can be designed in a browser. The buttons do what
+  buttons do — tap SPEED+ and the belt speeds up — but every request goes
+  through Kotlin, which clamps it to what the board says it can do. A bad
+  layout can't outrun the machine.
+- **The coach decides when to speak; Home Assistant decides what it says.**
+  With HA unreachable it still marks your kilometres from a set of built-in
+  lines.
 - **A stale number is worse than a missing one.** Every health metric carries
-  its age, and anything that has not changed since midnight is withheld rather
-  than presented as today's. This was learned the hard way.
-- **Per-person data is opt-in per person.** Coaching and recording are
-  properties of a walker, not of the console, and a guest gets neither.
+  its age, and anything that hasn't changed since midnight is withheld rather
+  than shown as today's. Learned the hard way, from a coach cheerfully
+  reporting yesterday's step count at 7am.
+- **Coaching and recording are per person**, not per console. A guest gets
+  neither.
 
 ---
 
