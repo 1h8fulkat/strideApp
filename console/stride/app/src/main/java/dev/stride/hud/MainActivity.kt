@@ -74,6 +74,13 @@ class MainActivity : Activity() {
          */
         const val DECEL_KPH_PER_SEC = 2.0
 
+        /**
+         * Below this the belt counts as stopped. Not zero: the board reports
+         * small non-zero speeds while the belt coasts to rest, and demanding
+         * an exact zero would nag forever.
+         */
+        const val STOPPED_KPH = 0.3
+
         /** How close the derived speed must sit to the target before the readout
          *  stops following it — see accumulate(). */
         const val SETTLE_BAND_KPH = 0.45
@@ -203,6 +210,12 @@ class MainActivity : Activity() {
      */
     @Volatile private var inclineAuto = false
     private var lastInclineMoveAt = 0L
+
+    /** Last speed the *board* reported, as opposed to what we asked for. */
+    @Volatile private var lastActualKph = 0.0
+
+    /** How many times we have had to re-command a stop. Reset when it takes. */
+    @Volatile private var stopNags = 0
 
     /** True while the belt is winding down towards an automatic finish. */
     @Volatile private var stopping = false
@@ -426,12 +439,24 @@ class MainActivity : Activity() {
             Log.i(TAG, "cooling down for ${cfg.cooldownMs() / 1000}s")
         }
 
-        /** Summary → welcome. Best-effort attempt to release the board too. */
+        /**
+         * Summary → welcome.
+         *
+         * The belt is commanded to a stop here as well as at the end of the
+         * workout. It should already be stopped, and on 31 July it was not —
+         * the console went back to the welcome screen with the belt still
+         * running. `enforceStopped` is the thing that actually guarantees it;
+         * this is the cheap second attempt at the moment the screen changes.
+         */
         @JavascriptInterface fun home() {
             session = Session.WELCOME
             workout = "none"
+            clearPlan()
             resetSession()
-            pendingWrite = mapOf(FitPro.Field.WORKOUT_MODE to FitPro.Mode.IDLE.toDouble())
+            pendingWrite = mapOf(
+                FitPro.Field.KPH to 0.0,
+                FitPro.Field.WORKOUT_MODE to FitPro.Mode.IDLE.toDouble(),
+            )
         }
 
         @JavascriptInterface fun speed(delta: Double) {
@@ -853,11 +878,47 @@ class MainActivity : Activity() {
             stopping = false
             rampTo = 0.0
             rampReason = ""
-            Log.i(TAG, "belt stopped — finishing")
+            // "Commanded zero", not "stopped". The belt takes a moment to come
+            // to rest, and the write that tells it to may not even arrive —
+            // see enforceStopped, which is what actually finishes the job.
+            Log.i(TAG, "wind-down complete — commanding stop")
             finishWorkout()
             return null
         }
         return mapOf(FitPro.Field.KPH to targetKph)
+    }
+
+    /**
+     * The belt must not be moving unless a workout is.
+     *
+     * This exists because it was not true. On 31 July a guided walk finished,
+     * the console logged "belt stopped", showed the summary, and went back to
+     * the welcome screen — while the belt kept running. It ran for another
+     * thirty-five seconds until somebody hit the physical stop button.
+     *
+     * The stop was sent once, as a one-shot `pendingWrite`, and the log for
+     * that exact moment shows `dropped frame (status:failed)`. One lost frame
+     * and the command was simply gone. Nothing retried it and nothing checked,
+     * because the code treated "I decremented my own target to zero" as
+     * meaning the machine had stopped.
+     *
+     * So this asks the board what it is actually doing, every poll, and keeps
+     * commanding a stop until it agrees. A treadmill running with nobody
+     * driving it is the worst failure this project has, and one dropped USB
+     * frame should not be able to cause it.
+     */
+    private fun enforceStopped(actualKph: Double): Map<FitPro.Field, Double>? {
+        if (Session.isMoving(session)) return null
+        if (actualKph < STOPPED_KPH) return null
+        stopNags++
+        if (stopNags == 1 || stopNags % 25 == 0) {
+            Log.w(TAG, "belt still moving at ${"%.1f".format(actualKph)} km/h " +
+                    "outside a workout — commanding stop again (attempt $stopNags)")
+        }
+        return mapOf(
+            FitPro.Field.KPH to 0.0,
+            FitPro.Field.WORKOUT_MODE to FitPro.Mode.PAUSE.toDouble(),
+        )
     }
 
     /** Stop everything and show the recap. Reached by the cool-down expiring or SKIP. */
@@ -928,7 +989,12 @@ class MainActivity : Activity() {
             if (elapsed >= lap) {
                 if (!stopping) {
                     Log.i(TAG, "guided: plan complete — winding the belt down")
-                    clearPlan()
+                    // The plan is deliberately *not* cleared here. Clearing it
+                    // drops the guided view and the console falls back to the
+                    // casual oval for the two or three seconds the belt takes
+                    // to wind down — which reads as a cool-down screen that
+                    // then vanishes. It is cleared on the way out of the
+                    // summary instead.
                     requestFinish()
                 }
                 return
@@ -1189,8 +1255,14 @@ class MainActivity : Activity() {
         var sinceMqtt = 0L
         var rejects = 0
         while (running) {
-            val writes = pendingWrite ?: decelStep() ?: rampStep()
-            pendingWrite = null
+            // enforceStopped comes first and outranks everything, including a
+            // queued write: nothing is more important than a belt that should
+            // not be moving.
+            val queued = pendingWrite
+            val writes = enforceStopped(lastActualKph) ?: queued ?: decelStep() ?: rampStep()
+            // Only consume the queued write if that is what actually went out.
+            // A stop command jumping the queue must not silently eat it.
+            if (queued != null && writes === queued) pendingWrite = null
 
             val reply = conn.exchange(FitPro.readWrite(deviceId, READS, writes ?: emptyMap()))
             if (reply == null) { Thread.sleep(POLL_MS); continue }
@@ -1315,6 +1387,11 @@ class MainActivity : Activity() {
         }
 
         val actual = v[FitPro.Field.ACTUAL_KPH] ?: 0.0
+        lastActualKph = actual
+        if (actual < STOPPED_KPH && stopNags > 0) {
+            Log.i(TAG, "belt confirmed stopped after $stopNags nag(s)")
+            stopNags = 0
+        }
         val incline = v[FitPro.Field.ACTUAL_INCLINE] ?: 0.0
 
         // ActualKph reads 0.00 on this board at every speed — see beltSpeed().
