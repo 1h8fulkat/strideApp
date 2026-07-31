@@ -89,21 +89,24 @@ You will also need the console to be an Android device you can reach with
 
 ## Installing
 
-**Not yet — see the banner at the top.** Full guides are still being written;
-the honest summary of where they are is in the prep document. The outline, so
-you can judge whether it is the kind of thing you want to attempt later:
+**[docs/INSTALL.md](docs/INSTALL.md)** — but read the banner above first. That
+guide has not yet been followed by anyone who did not already know the answers,
+and it says so at the top and marks the places it is weakest.
 
-1. **Enable privilege mode on the console** and get `adb` access.
-2. **Run [`tools/unchain.sh`](tools/unchain.sh)** — disables the iFit software
-   (including `com.ifit.eru`, which re-locks the console on every boot), and
-   installs a launcher and STRIDE.
-3. **On the console:** Settings → Home Assistant → broker host, user, password
-   → Test.
-4. **In Home Assistant:** accept the discovered STRIDE Treadmill device.
-5. **Optional:** the coach, reminders and dashboard from `homeassistant/`, and
-   the iOS app for Apple Health.
+In outline:
 
-Steps 1–4 need nothing from this repository on the Home Assistant side.
+1. **Check your board** with [`console/usbprobe`](console/usbprobe), which
+   reads and changes nothing — and please report what it says.
+2. **Enable privilege mode on the console** and get `adb` access.
+3. **Run [`tools/unchain.sh`](tools/unchain.sh)** — disables the iFit software,
+   `com.ifit.eru` first, because that is what re-locks the console on every
+   boot.
+4. **Build and install the console app**, then set it up on its own screen.
+5. **Optional:** broker details on the console and the treadmill appears in
+   Home Assistant. Then the coach, and the iOS app for Apple Health.
+
+Stop after step 4 and you have a treadmill with no subscription, which is most
+of the point. Steps 1–5 need nothing installed on the Home Assistant side.
 
 ---
 
