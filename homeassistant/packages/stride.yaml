@@ -23,8 +23,14 @@
 # talking confidently about `sensor.treadmill_distance_weekly`, which did not
 # exist, reading as zero kilometres every week forever.
 #
-# Everything here is optional in the sense that STRIDE runs without it. It is
-# not optional if you want the coach to know what you did this week.
+# **None of this is needed to use the treadmill.** The console appears in Home
+# Assistant on its own and you can build whatever dashboard you like from it.
+# This file is only for the extras that need accumulated history: the coach
+# saying what you did this week, and the reminders knowing when you last
+# weighed in.
+#
+# The shapes here — utility_meter for distance, history_stats for counts — are
+# the ones running in the author's own install, not a fresh guess.
 # ---------------------------------------------------------------------------
 
 # --- accumulate the session counter into real periods ----------------------
@@ -49,16 +55,36 @@ utility_meter:
   treadmill_calories_weekly:
     source: sensor.treadmill_calories
     cycle: weekly
-  treadmill_time_walked_this_week:
-    source: sensor.treadmill_elapsed
-    cycle: weekly
 
-# --- how many walks this week ----------------------------------------------
-counter:
-  stride_workouts_this_week:
+# --- how many walks this week, and how long ---------------------------------
+#
+# `history_stats` rather than a counter kept by automations. It derives the
+# answer from history that already exists, so there is nothing to increment,
+# nothing to reset on a Monday, and nothing to drift if Home Assistant is
+# restarted mid-week.
+#
+# A walk counts when the console reaches its summary screen, which is the one
+# moment a session is definitely over.
+sensor:
+  - platform: history_stats
     name: Treadmill workouts this week
-    initial: 0
-    step: 1
+    entity_id: sensor.treadmill_mode
+    state: summary
+    type: count
+    start: >-
+      {{ (now() - timedelta(days=now().weekday())).replace(
+           hour=0, minute=0, second=0, microsecond=0) }}
+    end: "{{ now() }}"
+
+  - platform: history_stats
+    name: Treadmill time walked this week
+    entity_id: sensor.treadmill_mode
+    state: running
+    type: time
+    start: >-
+      {{ (now() - timedelta(days=now().weekday())).replace(
+           hour=0, minute=0, second=0, microsecond=0) }}
+    end: "{{ now() }}"
 
 # --- when things last happened ---------------------------------------------
 #
@@ -97,51 +123,3 @@ input_select:
       - Zen Master
     initial: Supportive Friend
     icon: mdi:account-voice
-
-automation:
-  # Count a walk when the console reaches its summary screen, which is the one
-  # moment a session is definitely over. The 20-second hold is there because
-  # the mode briefly passes through summary during some transitions.
-  - alias: STRIDE — count a finished walk
-    id: stride_count_workout
-    mode: single
-    triggers:
-      - trigger: state
-        entity_id: sensor.treadmill_mode
-        to: summary
-        for:
-          seconds: 20
-    conditions:
-      # Ignore a mis-tap: under 100 m is not a walk.
-      - condition: numeric_state
-        entity_id: sensor.treadmill_distance
-        above: 100
-    actions:
-      - action: counter.increment
-        target:
-          entity_id: counter.stride_workouts_this_week
-
-  - alias: STRIDE — reset the weekly walk count
-    id: stride_reset_workout_count
-    mode: single
-    triggers:
-      - trigger: time
-        at: "00:00:01"
-    conditions:
-      - condition: time
-        weekday:
-          - mon
-    actions:
-      - action: counter.reset
-        target:
-          entity_id: counter.stride_workouts_this_week
-
-template:
-  - sensor:
-      # The scripts ask for `sensor.treadmill_workouts_this_week`; the counter
-      # is called something else because a counter and a sensor cannot share a
-      # name. This is the bridge, and it is the only reason it exists.
-      - name: Treadmill workouts this week
-        unique_id: stride_treadmill_workouts_this_week
-        state: "{{ states('counter.stride_workouts_this_week') | int(0) }}"
-        icon: mdi:counter

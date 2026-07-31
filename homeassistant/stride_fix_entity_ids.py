@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """
-One-shot: un-double the per-person treadmill entity ids, keeping their history.
+One-shot: un-double STRIDE's entity ids, keeping their history.
 
 Home Assistant builds an entity_id from the *device* name plus the *entity*
-name. The console published a device called "STRIDE — Sam" whose sensors were
-called "Sam Treadmill Distance", so the name landed twice:
+name, so a sensor named after its own device gets the word twice. STRIDE did
+this in two places:
 
-    sensor.stride_sam_sam_treadmill_distance
-    sensor.stride_alex_alex_treadmill_distance
+    sensor.stride_sam_sam_treadmill_distance     device "STRIDE — Sam",
+                                                 sensor "Sam Treadmill Distance"
+    sensor.treadmill_treadmill_speed             device "Treadmill",
+                                                 sensor "Treadmill Speed"
+
+The second was found months after the first, sitting next to it.
 
 The console no longer does that — the sensors are called "Treadmill Distance"
 and the device already says whose they are. But an entity_id is assigned once,
@@ -19,6 +23,18 @@ was. Only a registry rename moves it.
 recorder history and long-term statistics when an entity_id changes, which is
 why this is the safe way round and hand-editing the database is not.
 
+**What it does NOT update, and you must:** anything that refers to these
+entities *by id* rather than by registry link — `utility_meter` sources,
+`history_stats` entity_ids, template sensors, automations, dashboard cards.
+Those keep pointing at the old name and go unavailable. On the install this was
+written against that meant four utility_meters and two history_stats sensors,
+which is a five-minute fix and a nasty surprise if nobody says so first.
+
+If you have an existing STRIDE install with rollups built on the old ids, the
+honest answer is that renaming buys you tidier entity ids and costs you an
+afternoon of small edits. A fresh install gets the clean names for free and
+needs none of this.
+
 Run:  python3 ha/stride_fix_person_entities.py            (dry run, lists them)
       python3 ha/stride_fix_person_entities.py --apply    (renames them)
 """
@@ -27,13 +43,16 @@ import os
 import re
 import sys
 
-from stride_config import HA, conf, mqtt, token
+from stride_config import HA, WS, conf, mqtt, token
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 
-PREFIX = "sensor.stride_"
+# Both STRIDE device families. The match is structural — a leading run of
+# name-parts repeated immediately — so it catches any device named after itself,
+# including ones added after this was written.
+PREFIXES = ("sensor.stride_", "sensor.treadmill_")
 
 
 class Socket:
@@ -61,20 +80,28 @@ class Socket:
 
 
 def doubled(entity_id: str) -> str or None:
-    """`sensor.stride_sam_sam_treadmill_time` -> the un-doubled id.
-
-    Matched structurally rather than against a list of names: the point is to
-    catch `<person>_<person>` wherever it occurs, including for anyone added
-    after this was written.
     """
-    if not entity_id.startswith(PREFIX):
+    `sensor.treadmill_treadmill_speed` -> `sensor.treadmill_speed`.
+
+    Finds an adjacent repeated run of name-parts *anywhere* in the id, not just
+    at the front. The first version only looked at the front and reported
+    "nothing to rename" against a database full of doubled ids: the repeat in
+    `stride_sam_sam_treadmill_distance` starts at the second part, not the
+    first.
+
+    Longest run first, so `a_b_a_b_c` collapses to `a_b_c` rather than being
+    half-fixed. Restricted to STRIDE's own prefixes, because "two adjacent
+    identical words" is a shape that occurs innocently elsewhere.
+    """
+    if not any(entity_id.startswith(p) for p in PREFIXES):
         return None
-    rest = entity_id[len(PREFIX):]
-    # Find the longest leading run that repeats immediately.
+    domain, _, rest = entity_id.partition(".")
     parts = rest.split("_")
+
     for n in range(len(parts) // 2, 0, -1):
-        if parts[:n] == parts[n:2 * n]:
-            return PREFIX + "_".join(parts[n:])
+        for i in range(len(parts) - 2 * n + 1):
+            if parts[i:i + n] == parts[i + n:i + 2 * n]:
+                return domain + "." + "_".join(parts[:i + n] + parts[i + 2 * n:])
     return None
 
 

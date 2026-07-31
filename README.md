@@ -59,8 +59,13 @@ Settings → Home Assistant on the treadmill, and a *STRIDE Treadmill* device
 appears in Home Assistant with speed, incline, distance, elapsed time, pulse,
 calories, mode and workout — plus a separate device per person as they walk.
 
-No integration to install, no YAML, no custom component. The `homeassistant/`
-scripts are for the extras.
+No integration to install, no YAML, no custom component. **Build whatever
+dashboard you like from those entities** — there is no STRIDE dashboard you
+have to accept, and a shipped one will come through HACS later rather than
+being a prerequisite now.
+
+The `homeassistant/` scripts are for the extras: the coach, the reminders, and
+an opinionated health dashboard if you want a starting point.
 
 ---
 
