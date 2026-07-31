@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
-# Pull every iFit APK off the console. Run as soon as ADB is available after a
-# factory reset — before disabling or uninstalling anything.
+# Back up the console's original software before you change any of it.
+#
+# Run as soon as ADB is available — before disabling or uninstalling anything.
+# This is a backup of software already on a machine you own, taken off that
+# machine, kept by you. Do not redistribute what it produces: it is somebody
+# else's proprietary software and none of it is yours to pass on.
+#
+# Its real value is recovery. If something goes wrong you have the originals,
+# and you are not relying on a factory reset having gone to plan.
 #
 # Safe to re-run; skips files already pulled.
 set -uo pipefail

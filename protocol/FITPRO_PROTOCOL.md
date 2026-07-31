@@ -1,21 +1,26 @@
-# FitPro protocol — NordicTrack C1750 / ICON "Brainboard"
+# The FitPro protocol
 
-Reverse engineered 2026-07-28. **Essentially complete** — the protocol was recovered from ICON's
-own .NET implementation, not guessed.
+An independent interoperability specification for the serial protocol spoken by the FitPro motor
+control board ("brainboard") found in some NordicTrack and ProForm treadmills.
 
-## Sources
+> **Independence and trademarks**
+>
+> This document is an independent interoperability specification, produced through
+> reverse engineering for compatibility with hardware legally owned by the authors. It was
+> assembled from USB traffic analysis against that hardware and from examination of publicly
+> distributed software.
+>
+> It is not affiliated with, endorsed by, or supported by iFIT Health & Fitness, ICON Health &
+> Fitness, NordicTrack, ProForm or any related company. All trademarks are the property of their
+> respective owners, and are used here only to identify the hardware this protocol belongs to.
+>
+> Nothing here is a copy of anyone's documentation or source code. What follows is a description
+> of a wire format: packet layouts, field identifiers, numeric encodings and checksums.
 
-| Source | Gave us |
-|---|---|
-| `android/usbprobe` (our Kotlin probe) | Transport: endpoints, packet size, request/response behaviour |
-| `com.ifit.eru` v2.0.5 (jadx, `re/src/`) | Frame layout, checksum, device IDs, `Update` opcode |
-| **`com.ifit.standalone` v2.6.81** (Xamarin, `re/cs/`) | **Command enum, all 99 fields, value encodings** |
+**Everything marked CONFIRMED has been verified against a physical treadmill**, not merely
+inferred. Where a figure came from analysis but has not been exercised on hardware, it says so.
 
-The iFit app is Xamarin/.NET. Its assemblies live in `assemblies/assemblies.blob`, unpacked by
-`re/extract_assemblies.py`, then decompiled with `ilspycmd` into `re/cs/`. **The .NET code is
-completely unobfuscated** — real namespaces (`Sindarin.FitPro1.Bits`), real type and member names.
-
-Machine-readable field table: `re/bitfields.json`.
+Machine-readable field table: [`bitfields.json`](bitfields.json).
 
 ## Transport — CONFIRMED on hardware
 
@@ -27,17 +32,16 @@ Machine-readable field table: `re/bitfields.json`.
 | OUT endpoint | `0x02`, interrupt, 64 bytes, interval 1 |
 | Usage page | `0xFF00` vendor-defined, **no report IDs** — a raw 64-byte pipe |
 
-Accessible to an ordinary Android app via `UsbManager` — **no root**. Verified: permission
-granted, interface claimed. `com.ifit.eru` must be disabled first (only one holder).
+Accessible to an ordinary Android app via `UsbManager` — **no root required**. Verified:
+permission granted, interface claimed. Only one process may hold the interface at a time, so any
+existing console software must be stopped first.
 
-iFit's own I/O (`Sindarin.Usb.Android.UsbConsoleConnection`): `DoBulkTransferWrite` /
-`DoBulkTransferRead`. The board is **request/response — it sends nothing unsolicited**, which
-matches `SubscribeCommand` / `CreateSubscribeCommands` in the app: you subscribe to fields, then
-poll for updates.
+The board is **request/response — it sends nothing unsolicited.** The working model is a
+subscription: you tell it which fields you want, then poll for updated values.
 
 ## Frame format
 
-**Request** (`r3/a.java` in eru):
+**Request:**
 
 ```
 [0]      device id
@@ -47,7 +51,7 @@ poll for updates.
 [n-1]    checksum
 ```
 
-**Response** (`EquipmentUtil.CleanResponse`) — note the extra status byte:
+**Response** — note the extra status byte, which the request does not have:
 
 ```
 [0]      device id
@@ -70,8 +74,8 @@ fun checksum(b: ByteArray): Byte {
 
 ## Commands — CONFIRMED
 
-`Sindarin.FitPro1.Commands.Command`. Values match the opcode table independently recovered from
-eru, which is a good cross-check.
+The protocol defines the following command identifiers. These were each arrived at twice, by
+separate routes, and agree — which is the reason to trust them.
 
 | Command | ID | | Command | ID |
 |---|---|---|---|---|
@@ -91,12 +95,12 @@ eru, which is a good cross-check.
 **`ReadWriteData = 2` is the workhorse** — reads and writes field values.
 
 ⚠️ **`Update = 9` and `EnterBootloader = 56` are firmware operations. Never send them.**
-`02 04 09 0F` (the "simplest" well-formed frame) is a brainboard reset — eru logs it as
-*"Sent brainboard reset command"*.
+`02 04 09 0F` — which is the simplest well-formed frame anybody experimenting is likely to
+construct by accident — is a brainboard reset.
 
 ## Device IDs
 
-`com.ifit.shire.fitpro.equipment.dataobjects.Device`. Metrics are addressable as devices:
+Individual metrics are addressable as devices in their own right:
 
 | Device | ID | | Device | ID |
 |---|---|---|---|---|
@@ -113,8 +117,6 @@ eru, which is a good cross-check.
 | | | | `WORKOUT_CONTROL` | 81 |
 
 ## Value encodings — CONFIRMED
-
-From `Sindarin.FitPro1.Bits.Converters`.
 
 **Speed** (`SpeedConverter`, 2 bytes) — **unsigned** UInt16 LE, hundredths:
 

@@ -165,6 +165,12 @@ A few things here are deliberate and look odd until explained:
 [Apache-2.0](LICENSE). No warranty of any kind — see [SAFETY.md](SAFETY.md),
 which you should read anyway.
 
-STRIDE is not affiliated with, endorsed by, or connected to NordicTrack, iFIT,
-ProForm, Apple or Home Assistant. Those names appear here only to describe what
-this works with.
+STRIDE is an independent project, produced for compatibility with hardware its
+authors own. It is not affiliated with, endorsed by, or supported by iFIT
+Health & Fitness, ICON Health & Fitness, NordicTrack, ProForm, Apple or Home
+Assistant. All trademarks are the property of their respective owners and are
+used only to identify what this works with.
+
+This repository contains no code from any of those companies. The protocol
+notes are an independent interoperability specification — a description of a
+wire format, not a copy of anyone's documentation.
