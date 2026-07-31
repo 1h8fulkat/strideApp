@@ -74,7 +74,7 @@ Proven on one Gen 6 NordicTrack with a FitPro board — device id `0x04`, inclin
 −3 to +12 %, speed 1.6 to 20 km/h. Probably fine on other Gen 6 NordicTrack and
 ProForm consoles on the same board, but nobody has tried.
 
-Gen 7 / iFit 2.0 won't work at all.
+Gen 7 / iFit 2.0 won't work at all. (At least that we know of - if you know better, please let us know)
 
 [`console/usbprobe`](console/usbprobe) reads your board and reports what it is,
 without changing anything. **Please open an issue with what it says** — working
