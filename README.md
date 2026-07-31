@@ -2,6 +2,19 @@
 
 **A NordicTrack treadmill, free of its subscription, talking to Home Assistant.**
 
+> # 🚧 WORK IN PROGRESS — not ready for public use
+>
+> **Please do not follow these instructions on your own treadmill yet.**
+>
+> This is published early so it can be read, not so it can be run. It works —
+> it is in daily use — but on exactly one machine, set up by the person who
+> wrote it. The install guides are unfinished, the failure modes on other
+> hardware are unknown, and there is no supported way back if it goes wrong.
+>
+> By all means read the code, take the [protocol notes](protocol/FITPRO_PROTOCOL.md),
+> or tell me what board your treadmill has. Just don't point it at a machine
+> you care about until this banner comes down.
+
 > ⚠️ **This software drives a motorised treadmill.** Read [SAFETY.md](SAFETY.md)
 > before installing anything. The physical safety key remains the stop of
 > record; incline is driven, speed is only ever suggested.
@@ -65,8 +78,9 @@ You will also need the console to be an Android device you can reach with
 
 ## Installing
 
-Full guides are still being written — the honest summary of where they are is
-in the prep document. In outline:
+**Not yet — see the banner at the top.** Full guides are still being written;
+the honest summary of where they are is in the prep document. The outline, so
+you can judge whether it is the kind of thing you want to attempt later:
 
 1. **Enable privilege mode on the console** and get `adb` access.
 2. **Run [`tools/unchain.sh`](tools/unchain.sh)** — disables the iFit software
