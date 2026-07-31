@@ -64,6 +64,10 @@ data class Snapshot(
     val segments: Int = 0,
     val segmentLabel: String = "",
     val segmentLeft: Double = 0.0,
+    /** True when [segmentLeft] is metres rather than seconds — a route is
+     *  driven by distance, so "how much of this stretch is left" is a distance
+     *  too. See MainActivity.routeTick. */
+    val segmentLeftIsDistance: Boolean = false,
     /** The segment after this one, so the coach can warn before it arrives. */
     val nextLabel: String = "",
     val nextIncline: Double = 0.0,
@@ -110,6 +114,7 @@ data class Snapshot(
         append("\"segments\":$segments,")
         append("\"segmentLabel\":\"$segmentLabel\",")
         append("\"segmentLeft\":${"%.0f".format(segmentLeft)},")
+        append("\"segmentLeftIsDistance\":$segmentLeftIsDistance,")
         append("\"nextLabel\":\"$nextLabel\",")
         append("\"nextIncline\":${"%.1f".format(nextIncline)},")
         append("\"planTotalSec\":${"%.0f".format(planTotalSec)},")

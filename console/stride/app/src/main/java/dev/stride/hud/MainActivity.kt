@@ -182,6 +182,16 @@ class MainActivity : Activity() {
     // --- guided walk ---------------------------------------------------------
     /** Empty on a casual walk. Set once at START and never rewritten mid-walk. */
     @Volatile private var planName = ""
+    /**
+     * The route being walked, if this is a route rather than a template.
+     *
+     * Held alongside `planSteps` rather than replacing it: the HUD's sparkline
+     * and segment counter read the steps, so a route fills both — the steps for
+     * anything that wants to draw the ground, and this for the thing that
+     * decides which part of it you are standing on.
+     */
+    @Volatile private var route: Route? = null
+
     @Volatile private var planSteps: List<Plan.Step> = emptyList()
     @Volatile private var stepIndex = -1
 
@@ -355,6 +365,66 @@ class MainActivity : Activity() {
             // The ground is fixed for the whole walk — one lap of it, if this is
             // a circuit — so it goes over once rather than riding along with
             // every frame.
+            pushPlan()
+        }
+
+        /**
+         * The routes cached on this console, for the picker.
+         *
+         * Read from disk at boot, so this answers whether or not there is a
+         * network — which is the whole reason [Routes] writes a file.
+         */
+        @JavascriptInterface fun routes(): String = routes.json()
+
+        /**
+         * Start a walk on a recorded route.
+         *
+         * No `minutes`, unlike [chooseGuided], and that is deliberate rather
+         * than an omission: a route has its own length. Cutting it to fit a
+         * time slot means never reaching the summit, which is the reason for
+         * walking it again.
+         */
+        @JavascriptInterface fun chooseRoute(id: String) {
+            if (dmk) return
+            val r = routes.byId(id) ?: run {
+                Log.w(TAG, "no such route: $id")
+                return
+            }
+
+            route = r
+            planLoops = false
+            planLap = 1
+            planElapsed = 0.0
+            // Steps carry the same ground so the HUD can draw it, expressed in
+            // metres. Nothing reads them as seconds while a route is active —
+            // routeTick owns the position — but the sparkline and the segment
+            // counter both want the shape.
+            planSteps = r.segments.map {
+                Plan.Step(startSec = it.startM, endSec = it.endM,
+                          incline = it.incline.coerceIn(minGrade, maxGrade),
+                          paceDelta = 0.0, label = r.name, note = "")
+            }
+            planName = r.name
+            stepIndex = -1
+            baselineKph = 0.0
+            inclineAuto = true
+            lastInclineMoveAt = 0L
+
+            workout = "walk"
+            resetSession()
+            session = Session.ACTIVE
+            activeSince = SystemClock.elapsedRealtime()
+            phaseEndsAt = 0L
+            targetKph = 0.0
+            targetGrade = 0.0
+            rampTo = cfg.warmupKph()
+            rampReason = "warmup"
+            pendingWrite = mapOf(
+                FitPro.Field.GRADE to 0.0,
+                FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble(),
+            )
+            Log.i(TAG, "route: ${r.name}, ${"%.2f".format(r.distanceM / 1000)} km, " +
+                    "${"%.0f".format(r.climbM)} m climb, ${r.segments.size} segments")
             pushPlan()
         }
 
@@ -760,6 +830,7 @@ class MainActivity : Activity() {
         mqtt.onMessage(mqtt.coachTopic, ::onCoachLine)
         mqtt.onMessage(mqtt.uiTopic, ::onUiCommand)
         mqtt.onMessage(mqtt.personsTopic, ::onPersons)
+        mqtt.onMessage(mqtt.routesTopic, routes::accept)
         mqtt.connect()?.let { Log.w(TAG, "mqtt: $it") }
         if (mqtt.connected) mqtt.publishUi(chosenUi())
     }
@@ -859,6 +930,14 @@ class MainActivity : Activity() {
      * Assistant" and somebody standing in front of it decides — a list arriving
      * over MQTT is not permission to create walkers.
      */
+    /**
+     * Routes from real walks. Unlike [haPersons] this is not a volatile field
+     * holding whatever last arrived — it is cached to disk, because the console
+     * can boot with no network and a route that is not already here cannot be
+     * fetched at the moment somebody is standing on the belt choosing it.
+     */
+    private val routes by lazy { Routes(this) }
+
     @Volatile private var haPersons: String = "[]"
 
     private fun onPersons(payload: String) {
@@ -981,6 +1060,7 @@ class MainActivity : Activity() {
     }
 
     private fun clearPlan() {
+        route = null
         planName = ""
         planSteps = emptyList()
         stepIndex = -1
@@ -1005,6 +1085,50 @@ class MainActivity : Activity() {
      * paused — a walk interrupted for two minutes should still be the walk that
      * was chosen, not two minutes shorter.
      */
+    /**
+     * Run a route: the same job as [planTick], driven by **distance travelled**
+     * rather than by the clock.
+     *
+     * This is the one substantive difference between a route and a template,
+     * and it is not a detail. A route was recorded outdoors, where the hill
+     * arrived at a certain point on the ground. Replay it on a timer while
+     * walking slower indoors than out and the hill arrives late, the walk ends
+     * before the route does, and the summit — the reason for choosing it — is
+     * never reached. Driven by distance, the ground arrives where it did
+     * outdoors however fast it is taken.
+     */
+    private fun routeTick(metres: Double) {
+        val r = route ?: return
+
+        // The HUD's position marker reads planElapsed against the plan steps,
+        // and a route's steps are in metres — so this is metres too. Without
+        // it the walker sat at the start line for the whole walk while the
+        // ground moved under them, which is what the first route showed.
+        planElapsed = metres
+
+        if (metres >= r.distanceM) {
+            if (!stopping) {
+                Log.i(TAG, "route: ${r.name} complete at ${"%.0f".format(metres)} m")
+                clearPlan()
+                requestFinish()
+            }
+            return
+        }
+
+        val idx = r.segments.indexOfFirst { metres < it.endM }.coerceAtLeast(0)
+        if (idx != stepIndex) {
+            if (stepIndex == 0 && baselineKph <= 0.0) {
+                baselineKph = if (targetKph > 0.0) targetKph else cfg.warmupKph()
+                Log.i(TAG, "route: baseline pace ${"%.1f".format(baselineKph)} km/h")
+            }
+            stepIndex = idx
+            inclineAuto = true
+            Log.i(TAG, "route: segment ${idx + 1}/${r.segments.size} at " +
+                    "${"%.0f".format(metres)} m — ${"%.1f".format(r.segments[idx].incline)}%")
+        }
+        driveIncline(r.inclineAt(metres))
+    }
+
     private fun planTick(elapsed: Double) {
         val steps = planSteps
         if (steps.isEmpty()) return
@@ -1322,6 +1446,7 @@ class MainActivity : Activity() {
         mqtt.onMessage(mqtt.coachTopic, ::onCoachLine)
         mqtt.onMessage(mqtt.uiTopic, ::onUiCommand)
         mqtt.onMessage(mqtt.personsTopic, ::onPersons)
+        mqtt.onMessage(mqtt.routesTopic, routes::accept)
         applyMqttSettings()
         mqtt.publishUi(chosenUi())
 
@@ -1506,7 +1631,10 @@ class MainActivity : Activity() {
         }
 
         val elapsedNow = elapsedSec()
-        if (Session.isMoving(session)) planTick(elapsedNow)
+        if (Session.isMoving(session)) {
+            // A route is ground, not a timetable — see routeTick.
+            if (route != null) routeTick(sessionDistance) else planTick(elapsedNow)
+        }
         val step = currentStep()
 
         return Snapshot(
@@ -1536,7 +1664,16 @@ class MainActivity : Activity() {
             segmentLabel = step?.label ?: "",
             // Against plan time, not session time — on a circuit those differ
             // by however many laps have gone by.
-            segmentLeft = if (step != null) (step.endSec - planElapsed).coerceAtLeast(0.0) else 0.0,
+            // Seconds on a template, **metres** on a route — the steps of a
+            // route carry distance in the same fields, which is what let the
+            // HUD render a 275 m opening stretch as "4:35 left". The UI is
+            // told which it is rather than being left to guess.
+            segmentLeft = when {
+                step == null -> 0.0
+                route != null -> (step.endSec - sessionDistance).coerceAtLeast(0.0)
+                else -> (step.endSec - planElapsed).coerceAtLeast(0.0)
+            },
+            segmentLeftIsDistance = route != null,
             // On a circuit the "next" segment after the last one is the first
             // one again, because the ground comes round rather than running out.
             nextLabel = nextStep(stepIndex)?.label ?: "",

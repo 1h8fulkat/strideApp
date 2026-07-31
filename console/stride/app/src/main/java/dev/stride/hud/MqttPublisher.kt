@@ -65,6 +65,19 @@ class MqttPublisher(
     val uiStateTopic get() = "$prefix/ui/state"
 
     /**
+     * Routes converted from real outdoor walks, published by the iOS app via
+     * `homeassistant/stride_health_webhook.py`. Retained, so a console that
+     * boots with a network gets them from the broker whether or not Home
+     * Assistant is up — and cached to disk by [Routes] for when it boots with
+     * neither.
+     *
+     * Not under `treadmill/`: a route belongs to the household, not to this
+     * machine, and a second treadmill on the same broker should see the same
+     * ones.
+     */
+    val routesTopic get() = "$prefix/routes"
+
+    /**
      * Apply settings changed on the console, without a restart.
      *
      * Tears the connection down first: Paho holds the broker URI for the life

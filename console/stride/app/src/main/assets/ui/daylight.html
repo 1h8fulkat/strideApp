@@ -757,7 +757,7 @@ function renderPath(s){
   $('segName').textContent = s.segment.name;
   $('segMeta').textContent = ((s.plan.loops ? 'lap ' + s.plan.lap + ' · ' : '') +
     planName + ' · ' + s.segment.index + ' of ' + s.segment.count + ' · ' +
-    mmss(s.segment.secondsLeft) + ' left').toUpperCase();
+    s.segment.leftLabel + ' left').toUpperCase();
   // Plan time: one lap of ground, and Kotlin wraps the clock into it.
   const t = s.plan.elapsed;
   $('profDone').setAttribute('stroke-dasharray', prof.dashAt(t).toFixed(1) + ' 1000');

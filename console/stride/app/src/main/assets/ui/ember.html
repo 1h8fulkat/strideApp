@@ -899,7 +899,7 @@ window.render = function(raw){
       $('segName').textContent = s.segment.name;
       $('segMeta').textContent = ((s.plan.loops ? 'lap ' + s.plan.lap + ' · ' : '') +
         planName + ' · ' + s.segment.index + ' of ' + s.segment.count + ' · ' +
-        mmss(s.segment.secondsLeft) + ' left').toUpperCase();
+        s.segment.leftLabel + ' left').toUpperCase();
     }
   }
 

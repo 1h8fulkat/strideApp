@@ -853,7 +853,7 @@ function renderPath(s){
   $('walkDot').setAttribute('cy', p.y.toFixed(1));
   $('ftSeg').textContent  = 'SEG ' + s.segment.index + '/' + s.segment.count;
   $('ftName').textContent = s.segment.name.toUpperCase();
-  $('ftLeft').textContent = '−' + mmss(s.segment.secondsLeft);
+  $('ftLeft').textContent = '−' + s.segment.leftLabel;
 }
 
 function renderWarm(s){

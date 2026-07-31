@@ -457,6 +457,17 @@ function adapt(raw) {
     segment:  { index: raw.segment || 0, count: segments,
                 name: raw.segmentLabel || '',
                 secondsLeft: raw.segmentLeft || 0,
+                leftIsDistance: !!raw.segmentLeftIsDistance,
+                /* Preformatted, because a route measures the stretch you are on
+                   in metres and a template measures it in seconds, and five UIs
+                   each writing that conditional is five places to get it wrong.
+                   The first route walked rendered a 275 m opening stretch as
+                   "4:35 left" — the number was the distance, read as a clock. */
+                leftLabel: raw.segmentLeftIsDistance
+                  ? (raw.segmentLeft >= 1000
+                       ? (raw.segmentLeft / 1000).toFixed(2) + ' km'
+                       : Math.round(raw.segmentLeft || 0) + ' m')
+                  : mmss(raw.segmentLeft || 0),
                 nextName: raw.nextLabel || '',
                 nextIncline: raw.nextIncline || 0 },
 
@@ -585,6 +596,8 @@ function flow(onStep) {
     control: 'guided',   // the accented, recommended card on screen 03
     minutes: 30,
     shape: 'rolling',
+    /** A recorded route's id, or null for one of the four templates. */
+    route: null,
 
     go: function (step) {
       f.step = step;
@@ -610,10 +623,28 @@ function flow(onStep) {
       return f.go('control');
     },
 
+    /* Three choices, not two: casual, one of the four shapes, or a route you
+       have walked. Routes are a peer of "free" and "shaped", not a variant of
+       one — and putting them on the screen before keeps the plan step to four
+       entries, which is all it has room for above the BACK button. */
     setControl: function (c) {
       f.control = c;
       if (c === 'casual') return f.commit();
+      // Either picker is entered clean, so a route chosen and backed out of
+      // cannot arm the belt when a shape is picked afterwards.
+      f.route = null;
       return f.go('plan');
+    },
+
+    /** True while the plan step is choosing a route rather than a shape. */
+    pickingRoute: function () { return f.control === 'routes'; },
+
+    setRoute: function (id) { f.route = id; return f; },
+
+    /** The routes cached on this console, or [] when there are none. */
+    routes: function () {
+      try { return JSON.parse(global.Stride.routes() || '[]'); }
+      catch (e) { return []; }
     },
 
     setMinutes: function (m) { f.minutes = m; return f; },
@@ -621,8 +652,13 @@ function flow(onStep) {
 
     /** The one call that arms the belt. */
     commit: function () {
-      if (f.control === 'guided') global.Stride.chooseGuided(f.shape, f.minutes);
-      else global.Stride.choose(f.mode);
+      if (f.control === 'casual') { global.Stride.choose(f.mode); return f; }
+      if (f.control === 'routes') {
+        // Nothing to arm the belt with if no route was picked.
+        if (f.route) global.Stride.chooseRoute(f.route);
+        return f;
+      }
+      global.Stride.chooseGuided(f.shape, f.minutes);
       return f;
     },
 
@@ -908,7 +944,7 @@ function fanLabel(n) { return n ? n + ' OF 4' : 'OFF'; }
    one carrying its own copy of the stub.
    =========================================================================== */
 
-var BRIDGE = ['choose', 'chooseGuided', 'skipWarmup', 'skipCooldown', 'pause',
+var BRIDGE = ['choose', 'chooseGuided', 'chooseRoute', 'skipWarmup', 'skipCooldown', 'pause',
               'setSpeed',
               'resume', 'end', 'home', 'speed', 'incline', 'fan', 'setFan',
               'setWalker', 'ackDmk', 'hushCoach', 'dim', 'setUi'];
@@ -931,6 +967,23 @@ function stub() {
     return '["original","ember","cluster","daylight","pacer"]';
   };
   s.setUi = function (name) { pretendUi = name; console.log('Stride.setUi', name); };
+
+  /* Two routes on the desktop, so the third control card and the route list can
+     be designed and reviewed in a browser. Real ones come from the phone, and
+     the shape matches RouteStore.swift exactly: segments are
+     [startM, endM, incline] triples. */
+  s.routes = function () {
+    return JSON.stringify([
+      { id: 'demo-river', name: 'Friday river loop', distance_m: 5060,
+        climb_m: 18, difficulty: 1.0,
+        segments: [[0,900,0],[900,1400,1],[1400,2100,2],[2100,2600,1],
+                   [2600,3400,0],[3400,3900,-1],[3900,4500,0],[4500,5060,1]] },
+      { id: 'demo-hill', name: 'Thursday the hill', distance_m: 3030,
+        climb_m: 68, difficulty: 1.0,
+        segments: [[0,200,6],[200,700,8],[700,1100,5],[1100,1600,2],
+                   [1600,2100,-2],[2100,2500,-3],[2500,3030,0]] }
+    ]);
+  };
   global.Stride = s;
   return true;
 }

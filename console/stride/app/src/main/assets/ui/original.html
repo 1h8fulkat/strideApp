@@ -452,6 +452,8 @@ button.pulse{animation:pulse .9s ease-out 2}
       <div class="picks">
         <button class="pick" id="pickCasual"><span class="glyph">🚶</span>
           <span class="name">Casual</span><span class="hint">you choose everything</span></button>
+        <button class="pick" id="pickRoutes" style="display:none"><span class="glyph">🗺️</span>
+          <span class="name">My routes</span><span class="hint">a walk you have already done</span></button>
         <button class="pick" id="pickGuided"><span class="glyph">⛰️</span>
           <span class="name">Guided</span><span class="hint">the hill is handled for you</span></button>
       </div>
@@ -459,9 +461,9 @@ button.pulse{animation:pulse .9s ease-out 2}
 
     <!-- step 4 — which shape, how long -->
     <div class="step" id="step4">
-      <div class="ask" style="margin-top:0">How long?</div>
+      <div class="ask" id="askHow" style="margin-top:0">How long?</div>
       <div class="chips" id="durations"></div>
-      <div class="ask" style="margin-top:34px">Pick a shape</div>
+      <div class="ask" id="askShape" style="margin-top:34px">Pick a shape</div>
       <div class="plans" id="plans"></div>
     </div>
 
@@ -755,6 +757,39 @@ const SHAPES = {
 };
 let chosenMinutes = 30;
 let chosenShape = 'rolling';
+/* A route's id when one is picked, or null for a shape. They are alternatives
+   for the same slot, so choosing either clears the other. */
+let chosenRoute = null;
+/* 'shapes' or 'routes' — which set step four is showing. */
+let planMode = 'shapes';
+
+/* The routes cached on this console. Kotlin reads them from disk at boot, so
+   this answers with or without a network — see Routes.kt. */
+function myRoutes(){
+  try { return JSON.parse(Stride.routes() || '[]'); }
+  catch (e) { return []; }
+}
+
+/* Route names are typed on a phone, so they arrive here as untrusted text. */
+function esc(t){
+  return String(t).replace(/[&<>"]/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+/* A route's own profile, sampled for the card sparkline — the ground you are
+   about to walk rather than a shape icon. */
+function routeSpark(r){
+  const segs = r.segments || [];
+  if (!segs.length) return [0,0];
+  const total = segs[segs.length-1][1] || 1, out = [];
+  for (let i = 0; i <= 40; i++){
+    const d = i/40*total;
+    let v = segs[segs.length-1][2];
+    for (const sg of segs) if (d < sg[1]) { v = sg[2]; break; }
+    out.push(v);
+  }
+  return out;
+}
 
 /* who → what → how → which. Purely client side; nothing reaches Kotlin, and the
    belt cannot move, until a walk is actually committed to on the last step.
@@ -815,6 +850,35 @@ function buildGuidedStep(){
 
   const plans = $('plans');
   plans.innerHTML = '';
+  /* Routes get the whole step or none of it, never a fifth card beside the
+     four shapes: five entries push the row into the BACK button, which is what
+     the console showed the first time. They are chosen on the step before. */
+  if (planMode === 'routes') {
+    $('durations').style.display = 'none';
+    $('askHow').style.display = 'none';
+    $('askShape').textContent = 'Which route?';
+    myRoutes().slice(0, 4).forEach(r => {
+      const b = document.createElement('button');
+      b.className = 'plan' + (r.id === chosenRoute ? ' on' : '');
+      b.innerHTML = '<div class="pn">' + esc(r.name || 'Route') + '</div>' +
+                    '<div class="pb">' + (r.distance_m/1000).toFixed(2) + ' km · ' +
+                    Math.round(r.climb_m || 0) + ' m up</div>';
+      const cv = document.createElement('canvas');
+      cv.width = 210; cv.height = 56;
+      b.appendChild(cv);
+      plans.appendChild(b);
+      sparkline(cv, routeSpark(r));
+      tap(b, () => {
+        chosenRoute = r.id;
+        [...plans.children].forEach(c => c.classList.toggle('on', c === b));
+      });
+    });
+    return;
+  }
+
+  $('durations').style.display = '';
+  $('askHow').style.display = '';
+  $('askShape').textContent = 'Pick a shape';
   TEMPLATES.forEach(t => {
     const b = document.createElement('button');
     b.className = 'plan';
@@ -836,16 +900,26 @@ function buildGuidedStep(){
 }
 
 buildPeople();
-tap($('pickWalk'), () => showStep(3));
+tap($('pickWalk'), () => {
+  // Offered only when there is something behind it.
+  $('pickRoutes').style.display = myRoutes().length ? '' : 'none';
+  showStep(3);
+});
 tap($('pickRun'),  () => Stride.choose('run'));
 tap($('pickCasual'), () => Stride.choose('walk'));
-tap($('pickGuided'), () => { buildGuidedStep(); showStep(4); });
+tap($('pickGuided'), () => { planMode = 'shapes'; chosenRoute = null;
+                             buildGuidedStep(); showStep(4); });
+tap($('pickRoutes'), () => { planMode = 'routes'; buildGuidedStep(); showStep(4); });
 tap($('btnBack'), () => showStep(Math.max(1, stepNow - 1)));
 /* Tapping the suggestion takes it. Accepting the coach's number used to
    mean holding + until you reached it. */
 tap($('suggest'), () => { if (suggestKph > 0) Stride.setSpeed(suggestKph); });
 
-tap($('btnBegin'), () => Stride.chooseGuided(chosenShape, chosenMinutes));
+tap($('btnBegin'), () => {
+  // A route carries its own length, so it never takes a duration.
+  if (planMode === 'routes') { if (chosenRoute) Stride.chooseRoute(chosenRoute); }
+  else Stride.chooseGuided(chosenShape, chosenMinutes);
+});
 /* The settings screen is shared by all five interfaces — see
    stride-settings.js. This document keeps the button and nothing else;
    eight sections of real configuration maintained in five places is how
@@ -1520,7 +1594,10 @@ window.render = function(s){
 
     $('segName').textContent = s.segmentLabel || '';
     $('segSub').textContent =
-      `${s.plan} · ${s.segment} of ${s.segments} · ${mmss(s.segmentLeft || 0)} left`;
+      `${s.plan} · ${s.segment} of ${s.segments} · ${s.segmentLeftIsDistance
+        ? (s.segmentLeft >= 1000 ? (s.segmentLeft/1000).toFixed(2) + ' km'
+                                 : Math.round(s.segmentLeft || 0) + ' m')
+        : mmss(s.segmentLeft || 0)} left`;
 
     // Suggested pace, and whether the hill is still the plan's to move.
     const el = $('suggest');

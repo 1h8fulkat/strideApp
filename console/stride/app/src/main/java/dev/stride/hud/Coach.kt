@@ -47,6 +47,39 @@ class Coach {
         const val LOOKAHEAD_S = 15.0
 
         /**
+         * The same look-ahead, in metres, for a route.
+         *
+         * A route is driven by distance, so `segmentLeft` counts down in metres
+         * and comparing it to a number of seconds is a unit error that happens
+         * to be nearly right at walking pace. Twenty-five metres is about
+         * eighteen seconds at 5 km/h — one grid step of the converted profile,
+         * which is the natural unit for "the stretch you are about to enter".
+         */
+        const val LOOKAHEAD_M = 25.0
+
+        /**
+         * How much the ground must change before it is worth warning about.
+         *
+         * Nothing for the four hand-authored templates: their segments are far
+         * apart by design and each is a phase of the walk. Routes are why this
+         * exists — a converted walk has a segment every 25 m of quantisation,
+         * so announcing each one narrates the rounding rather than the terrain.
+         * The first route anybody walked had thirty-five, and the coach talked
+         * through all of it.
+         */
+        const val SEGMENT_MIN_CHANGE = 2.0
+
+        /**
+         * Below this, a walk gets no closing line.
+         *
+         * Keran's rule, from stopping a route four minutes in and landing on a
+         * summary that had nothing to sum up. A walk that short is an
+         * interruption, not a session, and a coach reflecting on it sounds like
+         * it was not paying attention.
+         */
+        const val SUMMARY_MIN_MS = 4 * 60_000L + 30_000L
+
+        /**
          * How far through a plan to ask for the closing line.
          *
          * Not at the end. Home Assistant takes a few seconds to answer and the
@@ -94,6 +127,10 @@ class Coach {
     private var lastSegment = 0
     /** Which segment we have already warned *from*, so it happens once. */
     private var warnedFor = 0
+    /** The incline the coach last spoke about, so it can tell a hill from a
+     *  rounding step on a route. See SEGMENT_MIN_CHANGE. */
+    private var spokenIncline = 0.0
+
     /** The closing line is asked for once per walk. */
     private var summarySent = false
     private var dropSince = 0L
@@ -117,6 +154,7 @@ class Coach {
         dropSince = 0L
         steadySince = 0L
         steadyRef = 0.0
+        spokenIncline = 0.0
         awaitingSince = 0L
         awaitingKind = ""
         said.clear()
@@ -210,6 +248,7 @@ class Coach {
 
         // The closing line, asked for early so it is there when the summary is.
         if (!summarySent && s.segments > 0 && s.planTotalSec > 0 &&
+            s.elapsed * 1000 >= SUMMARY_MIN_MS &&
             s.planElapsed >= s.planTotalSec * SUMMARY_AT) {
             summarySent = true
             return Moment("summary",
@@ -226,9 +265,20 @@ class Coach {
             warnedFor = 0            // the warning belongs to the segment ahead
         }
 
-        if (s.segments > 0 && s.nextLabel.isNotEmpty() &&
-            s.segmentLeft in 0.0..LOOKAHEAD_S && warnedFor != s.segment) {
+        // Metres on a route, seconds on a template — segmentLeft is whichever
+        // the walk is driven by, so the threshold has to match it.
+        val lookahead = if (s.segmentLeftIsDistance) LOOKAHEAD_M else LOOKAHEAD_S
+
+        // On a route, only speak when the ground has actually moved. Every
+        // guarantee below this is about terrain; a one-percent tick between two
+        // 25 m grid steps is the profile rounding, not a hill.
+        val worthSaying = !s.segmentLeftIsDistance ||
+            Math.abs(s.nextIncline - spokenIncline) >= SEGMENT_MIN_CHANGE
+
+        if (s.segments > 0 && s.nextLabel.isNotEmpty() && worthSaying &&
+            s.segmentLeft in 0.0..lookahead && warnedFor != s.segment) {
             warnedFor = s.segment
+            spokenIncline = s.nextIncline
             val climbing = s.nextIncline > s.targetIncline + 0.4
             val dropping = s.nextIncline < s.targetIncline - 0.4
             val shape = when {
@@ -236,10 +286,18 @@ class Coach {
                 dropping -> "the ground drops to ${"%.1f".format(s.nextIncline)}%"
                 else -> "it stays about level at ${"%.1f".format(s.nextIncline)}%"
             }
+            // A route's "label" is its own name repeated once per segment, so
+            // naming it thirty-five times says nothing. The ground is the news.
+            val where = if (s.segmentLeftIsDistance)
+                "in about ${s.segmentLeft.toInt()} metres"
+            else
+                "in about ${s.segmentLeft.toInt()} seconds"
+            val what = if (s.segmentLeftIsDistance) "the walk reaches a point where"
+                       else "the walk moves into \"${s.nextLabel}\", segment " +
+                            "${s.segment + 1} of ${s.segments}, where"
             return Moment("segment",
-                "in about ${s.segmentLeft.toInt()} seconds the walk moves into " +
-                "\"${s.nextLabel}\", segment ${s.segment + 1} of ${s.segments}, " +
-                "where $shape. Tell him what is coming, not what he is doing now")
+                "$where $what $shape. Tell him what is coming, not what he is " +
+                "doing now")
         }
 
         // --- distance: the backbone -----------------------------------------

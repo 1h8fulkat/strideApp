@@ -6,7 +6,7 @@
    **Why this is not five settings screens.** The five interfaces each own their
    whole DOM and CSS and are meant to look nothing like each other, and the
    Interface picker already lived in all five — five copies of one list, which
-   was survivable. Eight sections of real configuration is not: the copy nobody
+   was survivable. Nine sections of real configuration is not: the copy nobody
    opens is the copy that silently stops matching the store.
 
    **Why it brings its own look rather than inheriting.** The five UIs do not
@@ -440,6 +440,7 @@
     coach: 'M4 5h16v11H9l-5 4V5z',
     ui: 'M3 4h18v14H3zM3 9h18M9 9v9',
     screen: 'M3 4h18v12H3zM8 20h8M12 16v4',
+    routes: 'M3 18l6-3 6 3 6-3V6l-6 3-6-3-6 3zM9 15V6M15 18V9',
     about: 'M12 22a10 10 0 100-20 10 10 0 000 20zM12 10v7M12 7h.01'
   };
 
@@ -448,6 +449,7 @@
     ['hr',     'Heart rate',     paneHeart],
     ['ha',     'Home Assistant', paneHa],
     ['deck',   'Treadmill',      paneDeck],
+    ['routes', 'My routes',      paneRoutes],
     ['coach',  'Coach',          paneCoach],
     ['ui',     'Interface',      paneUi],
     ['screen', 'Display',        paneScreen],
@@ -890,6 +892,98 @@
   }
 
   // --- about ---
+  /* Routes converted from real outdoor walks. Read-only here on purpose: they
+     are made on the phone, where the walk and its GPS track are, and a second
+     place to edit a name is a second place for the two to disagree. What this
+     screen is for is answering "did it arrive" without a laptop. */
+  function paneRoutes(pane) {
+    var sc = head(pane, 'My routes',
+      'Walks you have already done outdoors, converted into ground this ' +
+      'treadmill can walk. They arrive from the STRIDE Health app on your ' +
+      'phone and are kept on the console, so they work with the network down.');
+
+    /* Live, because routes arrive while you are looking at this.
+       `rebuild()` runs once per `open()` and builds all nine panes together, so
+       a pane built before the phone synced would say "no routes yet" for as
+       long as the screen stayed open — and clicking the rail only toggles
+       visibility, so it would never correct itself. That is exactly what
+       happened the first time a route was synced with settings already up.
+       The payload is compared as a string and only redrawn when it changes,
+       so an idle pane costs one bridge call every 1.2 s and no DOM work. */
+    var raw = '[]';
+    try { raw = bridge().routes() || '[]'; } catch (e) {}
+
+    /* The payload this pane was drawn from. Compared, not re-parsed: an
+       unchanged pane must cost one bridge call and no DOM work, or a rebuild
+       every 1.2 s would fight the scroll position under your finger. */
+    var seen = raw;
+    pane.sxTick = function () {
+      var now = '[]';
+      try { now = bridge().routes() || '[]'; } catch (e) {}
+      if (now === seen) return;
+      var wasOpen = pane.classList.contains('sx-on');
+      pane.innerHTML = '';
+      paneRoutes(pane);
+      if (wasOpen) pane.classList.add('sx-on');
+    };
+
+    var routes = [];
+    try { routes = JSON.parse(raw); } catch (e) { routes = []; }
+
+    if (!routes.length) {
+      var g0 = group('');
+      g0.appendChild(row('No routes yet',
+        'Open STRIDE Health on your phone, go to Workouts & Routes, convert an ' +
+        'outdoor walk and keep it. It arrives here on the next sync.',
+        el('div', 'sx-ro', '—')));
+      sc.appendChild(g0);
+      return;
+    }
+
+    var g = group(routes.length + (routes.length === 1 ? ' route' : ' routes'));
+    routes.forEach(function (r) {
+      var km = ((r.distance_m || 0) / 1000).toFixed(2);
+      var climb = Math.round(r.climb_m || 0);
+      var changes = (r.segments || []).length;
+      var desc = km + ' km · ' + climb + ' m of climb · ' + changes +
+                 ' incline changes';
+      if (r.difficulty && r.difficulty !== 1) {
+        desc += ' · at ' + Math.round(r.difficulty * 100) + '%';
+      }
+      g.appendChild(row(r.name || 'Route', desc,
+        el('div', 'sx-ro', spark(r))));
+    });
+    sc.appendChild(g);
+
+    var g2 = group('Where they come from');
+    g2.appendChild(row('Home Assistant',
+      'Routes ride the same webhook as your health data and are cached here. ' +
+      'Delete or rename them on the phone; this console follows.',
+      el('div', 'sx-ro', S.ha_enabled ? 'connected' : 'not configured')));
+    sc.appendChild(g2);
+  }
+
+  /* The route's own profile as a small inline SVG — the ground it is, rather
+     than a number saying how much of it there is. Segments are
+     [startM, endM, incline] triples; the deck runs -3..+12. */
+  function spark(r) {
+    var segs = r.segments || [];
+    if (!segs.length) return '';
+    var total = segs[segs.length - 1][1] || 1;
+    var pts = [];
+    for (var i = 0; i <= 40; i++) {
+      var d = i / 40 * total, v = segs[segs.length - 1][2];
+      for (var j = 0; j < segs.length; j++) {
+        if (d < segs[j][1]) { v = segs[j][2]; break; }
+      }
+      pts.push((i / 40 * 120).toFixed(1) + ',' +
+               (34 - (v + 3) / 15 * 30).toFixed(1));
+    }
+    return '<svg width="120" height="36" viewBox="0 0 120 36" ' +
+           'preserveAspectRatio="none"><polyline points="' + pts.join(' ') +
+           '" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
+  }
+
   function paneAbout(pane) {
     var sc = head(pane, 'About', 'What this is talking to, and what it is.');
     var a = {};
