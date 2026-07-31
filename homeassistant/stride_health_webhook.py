@@ -120,6 +120,12 @@ SENSORS = [
 # and a different lifetime from a daily aggregate — see iOS.md.
 WORKOUT_TOPIC = "stride/health/workouts"
 
+# Saved routes, converted on the phone from an outdoor walk's GPS track. The
+# track itself never arrives here — only the gradient profile, which is the
+# privacy decision recorded in the iOS notes. The console subscribes to this
+# topic and caches what it finds to disk, because it can boot with no network.
+ROUTE_TOPIC = "stride/routes"
+
 # `synced_at` is metadata rather than a metric, so it is not in SENSORS and
 # stays in `check_health_contract.py`'s NOT_SENSORS. It gets a sensor anyway,
 # because without it **nothing in Home Assistant can tell a fresh number from a
@@ -217,6 +223,29 @@ def automation() -> dict:
                         "topic": WORKOUT_TOPIC,
                         "retain": True,
                         "payload": "{{ trigger.json.workouts | to_json }}",
+                    },
+                }],
+            },
+            {
+                # Saved routes, same treatment and the same reasoning as the
+                # workout array: a nested list with its own cardinality, kept
+                # off the scalar state topic. Retained, because the console
+                # subscribes on boot and must find the routes already there —
+                # it can start with no network at all and there is nobody to
+                # ask for them.
+                #
+                # Absent-means-unchanged, exactly as with workouts. The phone
+                # only sends `routes` when the set has changed, so republishing
+                # an empty list here would wipe the console's routes on the
+                # first ordinary sync after one was saved.
+                "if": [{"condition": "template",
+                        "value_template": "{{ trigger.json.routes is defined }}"}],
+                "then": [{
+                    "action": "mqtt.publish",
+                    "data": {
+                        "topic": ROUTE_TOPIC,
+                        "retain": True,
+                        "payload": "{{ trigger.json.routes | to_json }}",
                     },
                 }],
             },
