@@ -34,6 +34,11 @@ the Home Assistant side, a rebuilt dashboard, and the companion app on the App
 Store. The software is further along than the version number suggests;
 everything around it is not.
 
+![STRIDE on a NordicTrack console](docs/screenshots/oval-original.png)
+
+**[More screenshots →](docs/GALLERY.md)** — all five interfaces, a guided walk,
+and the settings that live on the treadmill itself.
+
 ---
 
 ## What it is, in three parts
@@ -97,7 +102,8 @@ In outline:
 
 1. **Check your board** with [`console/usbprobe`](console/usbprobe), which
    reads and changes nothing — and please report what it says.
-2. **Enable privilege mode on the console** and get `adb` access.
+2. **Get into the console's privilege mode** — a tap sequence and a
+   challenge-response code — and enable ADB.
 3. **Run [`tools/unchain.sh`](tools/unchain.sh)** — disables the iFit software,
    `com.ifit.eru` first, because that is what re-locks the console on every
    boot.

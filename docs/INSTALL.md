@@ -1,10 +1,20 @@
 # Installing STRIDE
 
-> 🚧 **This guide has not yet been followed by anyone but its author, on
-> hardware that was already set up.** It is written to be tested — see
-> [Testing this guide](#testing-this-guide) at the end. If you are reading it
-> before that has happened, expect to find gaps, and please
-> [say so](https://github.com/keranm/strideApp/issues).
+> 🚧 **DRAFT — being rewritten. Do not follow this yet.**
+>
+> Part 1 in particular is being replaced by someone who has actually done it on
+> a treadmill from scratch. An earlier version of this page described the
+> privilege-mode sequence incorrectly — plausibly, and wrongly, which is worse
+> than saying nothing. Treat every step here as unverified until this banner
+> comes down.
+>
+> Roughly, what is what:
+>
+> | | |
+> |---|---|
+> | **Mechanically true** | the commands, paths and file names — those are read from the repository |
+> | **Verified once** | the checkpoints, on one machine that was already set up |
+> | **Not verified by anybody** | the console procedure in 1.1, and the Home Assistant package in 2.2 |
 
 **Read [SAFETY.md](../SAFETY.md) first.** This software drives a motorised
 treadmill.
@@ -55,17 +65,35 @@ this project could have and it does not exist yet.
 
 ## Part 1 — The console
 
-### 1.1 Get developer access to the console
+### 1.1 Get into privilege mode
 
-This is the part that varies most between models and years, and it is the part
-this guide is least able to help with, because it depends on your console's
-firmware rather than on STRIDE.
+The console has a maintenance mode behind a challenge-response gate. You need
+it to reach Android settings and turn on ADB.
 
-On the machine this was built for: hold the iFit logo on the welcome screen,
-enter privilege mode, and enable ADB over the network.
+**On the machine this was built for:**
 
-> **Gap:** the exact sequence differs by model and firmware. If yours differs,
-> please contribute what worked.
+1. Wait for the welcome screen to finish loading.
+2. **Tap the screen ten times.**
+3. **Wait about seven seconds.** Nothing appears to happen — this pause is part
+   of the sequence, not you having got it wrong.
+4. **Tap ten times again.**
+5. A prompt appears showing a **challenge code** and asking for a response
+   code.
+
+The response code is derived from the challenge. Two ways to get one:
+
+- **Call NordicTrack support** and ask. This is the official route.
+- **<https://getresponsecode.com>** — a third-party calculator. Not affiliated
+  with this project, not endorsed, and not something we can vouch for; it is
+  listed because it is what people use.
+
+Once you are in, enable **ADB over the network** in Android settings.
+
+> **Where this varies:** the tap counts and the pause are what worked on one
+> console. Other models and firmware versions may differ. If yours does, please
+> [say what worked](https://github.com/keranm/strideApp/issues) — this is the
+> single most model-specific step in the whole process and the one most likely
+> to stop somebody.
 
 Check it from your computer:
 
