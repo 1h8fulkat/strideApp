@@ -136,6 +136,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 .pill .lab{position:absolute;left:0;top:28px;width:100%;text-align:center;
            font-size:16px;font-weight:800;letter-spacing:.18em;color:#b6a9cd}
 #btnBack{left:36px;top:690px}
+#btnBegin{right:36px;top:690px}
 #btnSettings{right:36px;top:690px}
 
 /* ===================== live ============================================== */
@@ -384,6 +385,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
   </div>
 
   <button class="pill gone" id="btnBack"><span class="lab">BACK</span></button>
+    <button class="pill gone" id="btnBegin"><span class="lab">BEGIN</span></button>
 </div>
 
 <!-- ===================== 05–09 · LIVE ================================== -->
@@ -545,6 +547,9 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 <script src="stride-settings.js"></script>
 <script>
 const standalone = STRIDE.stub();
+
+/* The coach's suggested pace, so tapping it can take it. */
+let suggestKph = 0;
 const $ = STRIDE.$, tap = STRIDE.tap, mmss = STRIDE.mmss, nf = STRIDE.nf;
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -616,6 +621,9 @@ const STEPS = {profile:'stProfile', mode:'stMode', control:'stControl', plan:'st
 const flow = STRIDE.flow((step, f) => {
   Object.keys(STEPS).forEach(k => $(STEPS[k]).classList.toggle('gone', k !== step));
   $('btnBack').classList.toggle('gone', step === 'profile');
+  // BEGIN only exists on the plan step; every other step commits by
+  // tapping the thing you chose.
+  $('btnBegin').classList.toggle('gone', step !== 'plan');
   if (step === 'mode') $('askMode').textContent = 'Walking or running, ' + f.profile + '?';
 });
 
@@ -662,7 +670,10 @@ STRIDE.SHAPES.forEach(s => {
     '<svg viewBox="0 0 420 60" preserveAspectRatio="none"><polyline points="' + pts +
       '" fill="none" stroke="' + (chosen ? '#c6f24e' : '#6d6088') +
       '" stroke-width="6" stroke-linecap="round"/></svg>';
-  tap(b, () => { flow.setShape(s.id); flow.commit(); });
+  tap(b, () => {
+    flow.setShape(s.id);
+    [].forEach.call(b.parentNode.children, c => c.classList.toggle('pick', c === b));
+  });
   $('shapes').appendChild(b);
 });
 
@@ -671,6 +682,13 @@ tap($('pickRun'),    () => flow.setMode('run'));
 tap($('pickCasual'), () => flow.setControl('casual'));
 tap($('pickGuided'), () => flow.setControl('guided'));
 tap($('btnBack'),    () => flow.back());
+/* Tapping the suggestion takes it. It was read-only, so accepting the
+   coach's number meant holding + until you got there. */
+tap($('suggest'), () => { if (suggestKph > 0) Stride.setSpeed(suggestKph); });
+/* Tapping a plan used to arm the belt immediately, so choosing a shape and
+   then a duration was impossible — the walk had already started. Selection
+   and starting are separate now. */
+tap($('btnBegin'), () => flow.commit());
 
 /* ---- settings ------------------------------------------------------------ */
 function buildUis(){
@@ -825,8 +843,9 @@ window.render = function(raw){
       mmss(s.segment.secondsLeft) + ' left').toUpperCase();
     const suggesting = s.targets.suggest > 0;
     $('suggest').classList.toggle('off', !suggesting);
+    suggestKph = suggesting ? s.targets.suggest : 0;
     if (suggesting) $('suggest').textContent =
-      'try ' + s.targets.suggest.toFixed(1) + ' km/h — up to you';
+      'try ' + s.targets.suggest.toFixed(1) + ' km/h';
   }
   if (guided && timed){
     /* A preview. Not "2 of 9, 1:36 left" — the plan has not started, so it has

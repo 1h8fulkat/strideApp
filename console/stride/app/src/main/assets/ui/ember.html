@@ -382,6 +382,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;
   </div>
 
   <button class="foot left gone" id="btnBack">BACK</button>
+    <button class="foot right gone" id="btnBegin">BEGIN</button>
 </div>
 
 <!-- ===================== 05–09 · LIVE ================================== -->
@@ -622,6 +623,9 @@ const STEPS = {profile:'stProfile', mode:'stMode', control:'stControl', plan:'st
 const flow = STRIDE.flow((step, f) => {
   Object.keys(STEPS).forEach(k => $(STEPS[k]).classList.toggle('gone', k !== step));
   $('btnBack').classList.toggle('gone', step === 'profile');
+  // BEGIN only exists on the plan step; every other step commits by
+  // tapping the thing you chose.
+  $('btnBegin').classList.toggle('gone', step !== 'plan');
   if (step === 'mode') $('askMode').textContent = 'Walk or run, ' + f.profile + '?';
 });
 
@@ -674,7 +678,10 @@ STRIDE.SHAPES.forEach(s => {
     '<svg viewBox="0 0 240 90" preserveAspectRatio="none">' +
       '<polyline points="' + pts + '" fill="none" stroke="' +
       (s.id === flow.shape ? '#e0a458' : '#4a443c') + '" stroke-width="2"/></svg>';
-  tap(b, () => { flow.setShape(s.id); flow.commit(); });
+  tap(b, () => {
+    flow.setShape(s.id);
+    [].forEach.call(b.parentNode.children, c => c.classList.toggle('pick', c === b));
+  });
   $('shapes').appendChild(b);
 });
 
@@ -683,6 +690,10 @@ tap($('pickRun'),    () => flow.setMode('run'));
 tap($('pickCasual'), () => flow.setControl('casual'));
 tap($('pickGuided'), () => flow.setControl('guided'));
 tap($('btnBack'),    () => flow.back());
+/* Tapping a plan used to arm the belt immediately, so choosing a shape and
+   then a duration was impossible — the walk had already started. Selection
+   and starting are separate now. */
+tap($('btnBegin'), () => flow.commit());
 
 /* ---- settings ------------------------------------------------------------ */
 function buildUis(){
@@ -845,7 +856,7 @@ window.render = function(raw){
   /* Speed is a suggestion and nothing may act on it — the person on the
      treadmill decides the pace, always. */
   $('suggest').textContent = (guided && s.targets.suggest > 0 && !timed)
-    ? 'lift to ' + s.targets.suggest.toFixed(1) + ' km/h when you’re ready'
+    ? 'lift to ' + s.targets.suggest.toFixed(1) + ' km/h'
     : '';
 
   $('elapsed').textContent = mmss(s.session.elapsed);

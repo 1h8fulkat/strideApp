@@ -350,6 +350,7 @@ button.pulse{animation:pulse .9s ease-out 2}
   position:absolute;left:38px;bottom:40px;width:150px;height:60px;max-width:none;
   font-size:15px;
 }
+.begin{left:auto;right:56px}
 
 /* ---- settings -----------------------------------------------------------
    One affordance, bottom-right of the profile screen, mirroring BACK on the
@@ -464,6 +465,7 @@ button.pulse{animation:pulse .9s ease-out 2}
 
     <div class="foot" id="wFoot">Clip the safety key on first — the belt eases up to 2 km/h as soon as you choose.</div>
     <button id="btnBack" class="back" style="display:none">← BACK</button>
+    <button id="btnBegin" class="back begin" style="display:none">BEGIN →</button>
     <button id="btnSettings" class="gear">SETTINGS</button>
   </div>
 </div>
@@ -746,6 +748,7 @@ const SHAPES = {
   climb:[0,3,5.5,4.5,7.5,11,6,2.5,0],
 };
 let chosenMinutes = 30;
+let chosenShape = 'rolling';
 
 /* who → what → how → which. Purely client side; nothing reaches Kotlin, and the
    belt cannot move, until a walk is actually committed to on the last step.
@@ -760,6 +763,8 @@ function showStep(n){
   stepNow = n;
   STEPS.forEach((id,i) => $(id).classList.toggle('on', i === n-1));
   $('btnBack').style.display = n > 1 ? 'block' : 'none';
+  // BEGIN belongs to the guided picker and nowhere else.
+  $('btnBegin').style.display = n === 4 ? 'block' : 'none';
   $('wFoot').style.display = n === 1 ? 'block' : 'none';
   // The interface question belongs with "who is walking", not halfway into
   // choosing a plan.
@@ -814,7 +819,13 @@ function buildGuidedStep(){
     b.appendChild(cv);
     plans.appendChild(b);
     sparkline(cv, SHAPES[t.id]);
-    tap(b, () => Stride.chooseGuided(t.id, chosenMinutes));
+    b.classList.toggle('on', t.id === chosenShape);
+    /* Selecting, not starting. Tapping a plan used to arm the belt, so picking
+       a shape and then a duration was impossible — the walk had already begun. */
+    tap(b, () => {
+      chosenShape = t.id;
+      [...plans.children].forEach(c => c.classList.toggle('on', c === b));
+    });
   });
 }
 
@@ -824,6 +835,7 @@ tap($('pickRun'),  () => Stride.choose('run'));
 tap($('pickCasual'), () => Stride.choose('walk'));
 tap($('pickGuided'), () => { buildGuidedStep(); showStep(4); });
 tap($('btnBack'), () => showStep(Math.max(1, stepNow - 1)));
+tap($('btnBegin'), () => Stride.chooseGuided(chosenShape, chosenMinutes));
 /* The settings screen is shared by all five interfaces — see
    stride-settings.js. This document keeps the button and nothing else;
    eight sections of real configuration maintained in five places is how

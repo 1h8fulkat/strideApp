@@ -32,6 +32,20 @@ class Coach {
         /** A segment change may interrupt almost anything — see allowed(). */
         const val SEGMENT_GAP_MS = 15_000L
 
+        /**
+         * How far ahead of a segment change to speak.
+         *
+         * The coach used to fire *on* the change, which put the line behind the
+         * event: Home Assistant takes about three and a half seconds to answer
+         * — measured at 3.75 s on a real walk — and then the sentence has to be
+         * spoken. "Descent coming up" arrived while already descending.
+         *
+         * Fifteen seconds puts the words in front of the ground. It is also
+         * long enough that the line can say what is about to happen rather than
+         * narrating what just did.
+         */
+        const val LOOKAHEAD_S = 15.0
+
         /** Say something if nothing else has come up for this long. */
         const val CHECKIN_MS = 5 * 60_000L
 
@@ -66,6 +80,8 @@ class Coach {
     private val kindLastAt = HashMap<String, Long>()
 
     private var lastSegment = 0
+    /** Which segment we have already warned *from*, so it happens once. */
+    private var warnedFor = 0
     private var dropSince = 0L
     private var steadySince = 0L
     private var steadyRef = 0.0
@@ -179,20 +195,27 @@ class Coach {
         if (s.session != Session.ACTIVE) return null
 
         // A guided walk changing segment is the strongest moment there is — the
-        // ground is about to change under him and he should hear why.
+        // ground is about to change under him and he should hear why. Said
+        // *before* it happens, not after: see LOOKAHEAD_S.
         if (s.segments > 0 && s.segment != lastSegment) {
-            val previous = lastSegment
             lastSegment = s.segment
-            // Segment one is the opening settle; he does not need telling that
-            // the walk he just started has started.
-            if (previous != 0) {
-                return Moment("segment",
-                    "the walk has moved into segment ${s.segment} of ${s.segments}, " +
-                    "\"${s.segmentLabel}\", where the incline goes to " +
-                    "${"%.1f".format(s.targetIncline)}%" +
-                    if (s.suggestPace > 0) " and the suggested pace is " +
-                        "${"%.1f".format(s.suggestPace)} km/h" else "")
+            warnedFor = 0            // the warning belongs to the segment ahead
+        }
+
+        if (s.segments > 0 && s.nextLabel.isNotEmpty() &&
+            s.segmentLeft in 0.0..LOOKAHEAD_S && warnedFor != s.segment) {
+            warnedFor = s.segment
+            val climbing = s.nextIncline > s.targetIncline + 0.4
+            val dropping = s.nextIncline < s.targetIncline - 0.4
+            val shape = when {
+                climbing -> "the ground rises to ${"%.1f".format(s.nextIncline)}%"
+                dropping -> "the ground drops to ${"%.1f".format(s.nextIncline)}%"
+                else -> "it stays about level at ${"%.1f".format(s.nextIncline)}%"
             }
+            return Moment("segment",
+                "in about ${s.segmentLeft.toInt()} seconds the walk moves into " +
+                "\"${s.nextLabel}\", segment ${s.segment + 1} of ${s.segments}, " +
+                "where $shape. Tell him what is coming, not what he is doing now")
         }
 
         // --- distance: the backbone -----------------------------------------

@@ -471,6 +471,25 @@ class MainActivity : Activity() {
             pendingWrite = mapOf(FitPro.Field.KPH to targetKph)
         }
 
+        /**
+         * Take the coach's suggested pace, by tapping it.
+         *
+         * The suggestion was previously read-only — "try 6.8 km/h" and then you
+         * held the + button until you got there. Accepting an offer should be
+         * one tap.
+         *
+         * Still a suggestion: this only runs because somebody touched it. The
+         * plan never sets the belt speed on its own, which is the rule the
+         * whole guided walk is built on.
+         */
+        @JavascriptInterface fun setSpeed(kph: Double) {
+            if (!Session.isMoving(session) || dmk) return
+            rampTo = 0.0; rampReason = ""   // as with any manual change
+            targetKph = if (kph < minKph) 0.0 else kph.coerceIn(0.0, maxKph)
+            pendingWrite = mapOf(FitPro.Field.KPH to targetKph)
+            Log.i(TAG, "pace: took the suggestion, ${"%.1f".format(targetKph)} km/h")
+        }
+
         /** Incline has no interlock — the board services it in any state. */
         @JavascriptInterface fun incline(delta: Double) {
             // Touching the hill takes it back from the plan until the next
@@ -941,6 +960,14 @@ class MainActivity : Activity() {
         )
         Log.i(TAG, "workout ended: ${"%.0f".format(sessionDistance)} m in " +
                 "${accumulatedMs / 1000} s, ${"%.0f".format(sessionCalories)} kcal")
+    }
+
+    /** The segment after [idx], wrapping on a circuit and null at the end. */
+    private fun nextStep(idx: Int): Plan.Step? {
+        val steps = planSteps
+        if (steps.isEmpty() || idx < 0) return null
+        if (idx + 1 < steps.size) return steps[idx + 1]
+        return if (planLoops) steps.firstOrNull() else null
     }
 
     private fun clearPlan() {
@@ -1463,6 +1490,10 @@ class MainActivity : Activity() {
             // Against plan time, not session time — on a circuit those differ
             // by however many laps have gone by.
             segmentLeft = if (step != null) (step.endSec - planElapsed).coerceAtLeast(0.0) else 0.0,
+            // On a circuit the "next" segment after the last one is the first
+            // one again, because the ground comes round rather than running out.
+            nextLabel = nextStep(stepIndex)?.label ?: "",
+            nextIncline = nextStep(stepIndex)?.incline ?: 0.0,
             planElapsed = planElapsed,
             planLap = planLap,
             planLoops = planLoops,

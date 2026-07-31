@@ -64,6 +64,9 @@ data class Snapshot(
     val segments: Int = 0,
     val segmentLabel: String = "",
     val segmentLeft: Double = 0.0,
+    /** The segment after this one, so the coach can warn before it arrives. */
+    val nextLabel: String = "",
+    val nextIncline: Double = 0.0,
     /** Plan time wrapped into the current lap. Equals elapsed unless looping. */
     val planElapsed: Double = 0.0,
     /** Which lap of an open-ended circuit; 1 for an ordinary walk. */
@@ -103,6 +106,8 @@ data class Snapshot(
         append("\"segments\":$segments,")
         append("\"segmentLabel\":\"$segmentLabel\",")
         append("\"segmentLeft\":${"%.0f".format(segmentLeft)},")
+        append("\"nextLabel\":\"$nextLabel\",")
+        append("\"nextIncline\":${"%.1f".format(nextIncline)},")
         append("\"planElapsed\":${"%.0f".format(planElapsed)},")
         append("\"planLap\":$planLap,")
         append("\"planLoops\":$planLoops,")

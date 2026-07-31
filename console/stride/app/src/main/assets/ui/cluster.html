@@ -127,6 +127,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 .key2 .lab{position:absolute;left:0;top:38px;width:100%;text-align:center;
            font-size:17px;letter-spacing:.2em;color:var(--soft)}
 #btnBack{left:34px;top:660px}
+#btnBegin{right:34px;top:660px}
 #btnSettings{right:34px;top:660px}
 
 /* ===================== live =============================================== */
@@ -358,6 +359,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
   </div>
 
   <button class="key2 gone" id="btnBack"><span class="lab">BACK</span></button>
+    <button class="key2 gone" id="btnBegin"><span class="lab">BEGIN</span></button>
 </div>
 
 <!-- ===================== 05–09 · LIVE ================================== -->
@@ -546,6 +548,9 @@ const STEPS = {profile:'stProfile', mode:'stMode', control:'stControl', plan:'st
 const flow = STRIDE.flow(step => {
   Object.keys(STEPS).forEach(k => $(STEPS[k]).classList.toggle('gone', k !== step));
   $('btnBack').classList.toggle('gone', step === 'profile');
+  // BEGIN only exists on the plan step; every other step commits by
+  // tapping the thing you chose.
+  $('btnBegin').classList.toggle('gone', step !== 'plan');
 });
 
 /* Read from Settings, never written here. A name offered on this picker
@@ -598,7 +603,10 @@ STRIDE.SHAPES.forEach(s => {
     '<span class="sub mono">PEAK ' + hi.toFixed(1) + '% · GAIN ' + gain + ' M</span>' +
     '<svg viewBox="0 0 250 100" preserveAspectRatio="none"><polyline points="' + pts +
       '" fill="none" stroke="' + (chosen ? '#6fd0e0' : '#4a5257') + '" stroke-width="2"/></svg>';
-  tap(b, () => { flow.setShape(s.id); flow.commit(); });
+  tap(b, () => {
+    flow.setShape(s.id);
+    [].forEach.call(b.parentNode.children, c => c.classList.toggle('pick', c === b));
+  });
   $('shapes').appendChild(b);
 });
 
@@ -607,6 +615,10 @@ tap($('pickRun'),    () => flow.setMode('run'));
 tap($('pickCasual'), () => flow.setControl('casual'));
 tap($('pickGuided'), () => flow.setControl('guided'));
 tap($('btnBack'),    () => flow.back());
+/* Tapping a plan used to arm the belt immediately, so choosing a shape and
+   then a duration was impossible — the walk had already started. Selection
+   and starting are separate now. */
+tap($('btnBegin'), () => flow.commit());
 
 /* ---- settings -------------------------------------------------------------- */
 function buildUis(){
