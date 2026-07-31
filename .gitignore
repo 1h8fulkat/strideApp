@@ -17,6 +17,14 @@ ios/StrideHealth.xcodeproj/
 ios/build/
 ios/DerivedData/
 
+# --- private working notes --------------------------------------------------
+# The build journal, session plans and the v1.0 prep document. Kept locally
+# because they are useful, out of git because every one of them names people,
+# quotes health data, and works through a specific house's setup. The prep
+# document is the worst offender: it lists exactly which personal facts had to
+# come out of the code, which rather defeats the point of taking them out.
+docs/journal/
+
 # --- anything archived out of the public tree -------------------------------
 archive/
 

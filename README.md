@@ -28,9 +28,11 @@ belt and deck work without a login, without a subscription, and without an
 internet connection — and everything the machine knows appears in Home
 Assistant as ordinary entities.
 
-**Status: v0.5.** Working and in daily use on one treadmill. Not yet packaged
-for strangers — see [`docs/journal/publicPrepDoc.md`](docs/journal/publicPrepDoc.md)
-for exactly what stands between here and v1.0.
+**Status: v0.5.** Working and in daily use on one treadmill. What v1.0 needs is
+not more features — it is install guides with photographs, HACS packaging for
+the Home Assistant side, a rebuilt dashboard, and the companion app on the App
+Store. The software is further along than the version number suggests;
+everything around it is not.
 
 ---
 
