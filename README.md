@@ -1,6 +1,6 @@
 # STRIDE
 
-**A NordicTrack treadmill, free of its subscription, talking to Home Assistant.**
+**A NordicTrack treadmill, free of its iFit subscription prison, talking to Home Assistant.**
 
 > # 🚧 Work in progress — don't run this yet
 >
