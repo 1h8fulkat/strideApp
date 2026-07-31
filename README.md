@@ -8,8 +8,12 @@
 >
 > This is published early so it can be read, not so it can be run. It works —
 > it is in daily use — but on exactly one machine, set up by the person who
-> wrote it. The install guides are unfinished, the failure modes on other
-> hardware are unknown, and there is no supported way back if it goes wrong.
+> wrote it. The install guides are unfinished and the failure modes on other
+> hardware are unknown.
+>
+> **Nothing here is supported.** Use it at your own risk. That said, the change
+> is reversible: a factory reset restores the treadmill's original software,
+> which has been verified on the machine this was built against.
 >
 > By all means read the code, take the [protocol notes](protocol/FITPRO_PROTOCOL.md),
 > or tell me what board your treadmill has. Just don't point it at a machine

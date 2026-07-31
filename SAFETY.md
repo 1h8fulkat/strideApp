@@ -89,11 +89,18 @@ Installing this means disabling the manufacturer's software on the console.
 - **You are working with the console's operating system.** It is possible to
   make it unbootable. Read the install guide fully before starting, not while
   stuck halfway.
-- **There is no supported way back.** Restoring the original software is not
-  something this project can do for you.
 
-Do not do this to a treadmill you cannot afford to break, or to one you do not
-own.
+**This is reversible.** A factory reset from the console's own recovery restores
+the manufacturer's software, and that has been verified on the machine STRIDE
+was built against. Installing STRIDE is not a one-way door, and it does not
+touch the motor controller, the belt or the deck — only the screen on the front.
+
+Reversible is not the same as supported. Nothing here is supported by anybody,
+and a factory reset verified on one console is not a promise about yours. But
+the honest risk is "you may have to reset the console and start again", not
+"you may end up with a treadmill you cannot use".
+
+Still: do not do this to a treadmill you do not own.
 
 ---
 
@@ -106,6 +113,11 @@ own.
 If the console misbehaves — a screen that will not respond, a plan that does
 something unexpected — the key and the wall switch are both still there and
 both still work. STRIDE cannot disable either.
+
+**If you want the treadmill back as it was**, a factory reset from the
+console's recovery restores the manufacturer's software. Verified on the
+machine this was built against. You will have to set up iFit again from
+scratch, and you will be back where you started — which is the point.
 
 ---
 
