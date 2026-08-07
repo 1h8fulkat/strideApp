@@ -32,12 +32,24 @@ from stride_config import HA, conf, mqtt, token
 STATE_TOPIC = "stride/health/state"
 DEVICE_ID = "stride_health"
 
-# Every key the iOS app can send. **This list is a contract with
-# ios/StrideHealth/Metrics.swift** — the app names a field, this publishes an
-# MQTT discovery config for it, and HA turns it into a sensor. A key with no
-# sensor here is published to MQTT and silently ignored; a sensor here with no
-# key keeps its last value forever. `ha/check_health_contract.py` diffs the two
-# so the drift is caught rather than discovered months later.
+# Every key the iOS app can send. The app names a field, this publishes an MQTT
+# discovery config for it, and HA turns it into a sensor. A key with no sensor
+# here is published to MQTT and silently ignored; a sensor here with no key
+# keeps its last value forever, which is worse — a stale number looks exactly
+# like a live one.
+#
+# **The app that feeds this is no longer in this repo.** It left on 2026-08-08
+# to become AH for HA (github.com/keranm/ah-for-ha), which generates its own
+# discovery configs and needs no receiver installed. `check_health_contract.py`
+# went with it: it diffed this list against the app's metric table, and there is
+# no longer a copy of that table here to diff against.
+#
+# So this file is now **frozen, and still live**. The STRIDE Health app is still
+# on the phone and still posting to it, and that keeps working until AH for HA
+# replaces it deliberately — at which point these sensors are retired by
+# publishing an empty retained payload to each discovery topic. Do not add
+# metrics here. Nothing checks this list any more, and nothing will tell you if
+# you get one wrong.
 #
 # The original six are first and unchanged, so anything already recording keeps
 # its history.

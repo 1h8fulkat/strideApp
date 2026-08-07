@@ -4,9 +4,6 @@ homeassistant/stride.conf
 # Broker credentials injected into the console build, and the Android SDK
 # path, which is a home directory and differs per machine.
 console/*/local.properties
-# This machine's DEVELOPMENT_TEAM. Not a secret — a team id ships inside every
-# app — but committing it makes a project that signs as somebody else.
-ios/Signing.local.xcconfig
 
 # --- build output -----------------------------------------------------------
 console/*/build/
@@ -14,9 +11,6 @@ console/*/app/build/
 console/*/.gradle/
 *.iml
 .idea/
-ios/StrideHealth.xcodeproj/
-ios/build/
-ios/DerivedData/
 
 # --- private working notes --------------------------------------------------
 # The build journal, session plans and the v1.0 prep document. Kept locally

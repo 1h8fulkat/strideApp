@@ -44,7 +44,17 @@ App Store.
 |---|---|
 | **`console/`** | An Android app for the treadmill's own screen. Talks to the motor board over USB, drives incline, runs guided walks, and offers five completely different interfaces. |
 | **`homeassistant/`** | Scripts that install the coach, the reminders and a health dashboard. **Optional** — the treadmill registers itself in Home Assistant without any of it. |
-| **`ios/`** | A companion app that syncs Apple Health into your own Home Assistant. No account, no third-party server, no subscription. |
+
+There used to be a third part, `ios/`. It is now its own product,
+**[AH for HA](https://github.com/keranm/ah-for-ha)** — Apple Health into Home
+Assistant, with no treadmill in it at all. It grew to 39 metrics, rings, sleep
+stages and workouts, none of which are about walking on a belt, and most people
+who want that will never own a treadmill.
+
+STRIDE keeps the half that matters to it. An outdoor walk can still become a
+gradient profile the deck replays, because that arrives over MQTT as a published
+contract and the console has never known who publishes it. Swap the publisher
+and it cannot tell.
 
 Plus [`protocol/`](protocol/FITPRO_PROTOCOL.md) — the FitPro serial protocol,
 decoded and written down. Probably the most useful thing here if you're working
