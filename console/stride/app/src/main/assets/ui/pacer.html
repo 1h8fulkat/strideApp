@@ -609,13 +609,16 @@ window.plan = function(p){
     const y = prof.yFor(v).toFixed(1);
     $(id).setAttribute('y1', y); $(id).setAttribute('y2', y);
   });
-  // The lower label marks level ground, which is the line that means
-  // something — not the walk's lowest dip, which is just where this template
-  // happens to bottom out.
-  $('axHi').textContent = '+' + prof.hi + '%';
-  $('axLo').textContent = '0%';
+  // On a template the lower label marks level ground — the line that means
+  // something, not the walk's lowest dip, which is just where this template
+  // happens to bottom out. A route has no such line: its axis is metres of
+  // elevation, so the labels are the high and low ground themselves, and "0%"
+  // over them would be nonsense.
+  const lowMark = prof.byDistance ? prof.lo : 0;
+  $('axHi').textContent = (prof.byDistance ? Math.round(prof.hi) : '+' + prof.hi) + prof.unit;
+  $('axLo').textContent = (prof.byDistance ? Math.round(prof.lo) : 0) + prof.unit;
   $('axHi').style.top = (prof.yFor(prof.hi) - 6).toFixed(0) + 'px';
-  $('axLo').style.top = (prof.yFor(0) - 6).toFixed(0) + 'px';
+  $('axLo').style.top = (prof.yFor(lowMark) - 6).toFixed(0) + 'px';
 
   // One bead per stretch, lit as it is passed.
   const g = $('beads');

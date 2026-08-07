@@ -37,6 +37,38 @@ class MainActivity : Activity() {
         const val TAG = FitProConnection.TAG
         const val ACTION_USB_PERMISSION = "dev.stride.hud.USB_PERMISSION"
         const val POLL_MS = 200L
+
+        /** How long to wait before answering a securityBlock again. The board
+         *  can refuse for a moment while it settles; hammering VerifySecurity
+         *  at 5 Hz would be its own kind of denial of service. */
+        const val UNLOCK_RETRY_MS = 2000L
+
+        /** How long our own write owns the target before the board's echo is
+         *  believed again. Six polls — comfortably longer than the board takes
+         *  to reflect a write, short enough that a physical press still feels
+         *  immediate. */
+        const val FOLLOW_SETTLE_MS = 1200L
+
+        /** The grid the speed keys move on. An adopted value snaps to it, so a
+         *  board reporting 6.499 cannot render as 6.4 and then take two presses
+         *  to reach 6.5. Grade is deliberately not quantised — its step size is
+         *  not settled here and incline is not what was reported broken. */
+        const val KPH_STEP = 0.1
+
+        /** Fan is polled on its own exchange, not folded into TELEMETRY —
+         *  see [readFan]. */
+        const val FAN_EVERY_MS = 1000L
+
+        /** How many times to command the fan off before letting it go. On a
+         *  board that will not report fan state there is nothing to confirm
+         *  against, so this cannot be "until it agrees" the way levelling is. */
+        const val FAN_OFF_NAGS = 25
+
+        /** How many consecutive rejections before a queued write is abandoned.
+         *  Generous — a real command deserves persistence — but finite, because
+         *  a write the board will never accept otherwise blocks the loop for
+         *  ever. At 200 ms a poll this is about ten seconds of trying. */
+        const val WRITE_TRIES = 50
         const val MQTT_EVERY_MS = 1000L
 
         /**
@@ -135,6 +167,8 @@ class MainActivity : Activity() {
             FitPro.Field.MIN_KPH, FitPro.Field.MAX_KPH,
             FitPro.Field.MIN_GRADE, FitPro.Field.MAX_GRADE,
         )
+        /** Kept out of TELEMETRY on purpose — see [readFan]. */
+        val FAN_READ = listOf(FitPro.Field.FAN_STATE)
 
         /** KPH/GRADE are the board's *targets* — read so physical buttons don't desync us. */
         val READS = listOf(FitPro.Field.KPH, FitPro.Field.GRADE) + TELEMETRY
@@ -160,6 +194,31 @@ class MainActivity : Activity() {
     @Volatile private var targetGrade = 0.0
     @Volatile private var fanState = 0
     @Volatile private var pendingWrite: Map<FitPro.Field, Double>? = null
+
+    /** True while the board is refusing traffic pending VerifySecurity. The
+     *  HUD shows this rather than sitting silently unable to act. */
+    @Volatile private var boardLocked = false
+    private var unlockAttempts = 0
+    private var lastUnlockMs = 0L
+
+    /** When we last wrote a target. Until this settles, our value outranks the
+     *  board's echo of it — see the follow block in [pollLoop]. */
+    private var lastWriteMs = 0L
+    private var sinceFan = 0L
+    private var fanStopping = false
+    private var fanOffNags = 0
+
+    /** Consecutive rejections of the same queued write, and the last snapshot
+     *  that came off a good frame — what the HUD keeps showing while the board
+     *  is refusing. */
+    private var writeTries = 0
+    @Volatile private var lastSnap: Snapshot? = null
+    /** Null until the board has answered a fan read once. Stays null on a board
+     *  that does not report fan state, and the HUD keeps its local value. */
+    private var fanReadable: Boolean? = null
+
+    /** Snap to a step grid, killing float drift like 6.500000000000001. */
+    private fun quantise(v: Double, step: Double) = Math.round(v / step) * step
 
     /** Pace at the moment of pausing, and the speed the resume ramp is climbing
      *  towards. Zero for either means no ramp is in progress. */
@@ -1071,6 +1130,40 @@ class MainActivity : Activity() {
         return mapOf(FitPro.Field.GRADE to 0.0)
     }
 
+    /**
+     * Turn the fan off after the walk, and keep asking until it is.
+     *
+     * The belt stops and the deck levels, both of them enforced rather than
+     * asked once — and the fan was left out of that. It ran on after a walk
+     * ended on 2026-08-07. It is not a safety interlock like the belt, but it
+     * is the same promise: what the walk turned on, the end of the walk turns
+     * off, and it is *seen* to turn off.
+     *
+     * Gives up after [FAN_OFF_NAGS] rather than nagging for ever, because on a
+     * board that does not report FAN_STATE there is nothing to confirm against
+     * and a silent forever-loop of writes is its own bug.
+     */
+    private fun enforceFanOff(): Map<FitPro.Field, Double>? {
+        if (!fanStopping) return null
+        if (Session.isMoving(session)) { fanStopping = false; return null }
+        // Confirmed off by the board, where the board will say.
+        if (fanReadable == true && fanState == 0) {
+            fanStopping = false
+            Log.i(TAG, "fan: confirmed off")
+            return null
+        }
+        fanOffNags++
+        if (fanOffNags > FAN_OFF_NAGS) {
+            fanStopping = false
+            // Not readable means not confirmable — say so rather than claim it.
+            if (fanReadable == true) Log.w(TAG, "fan: still on after $fanOffNags attempts")
+            else Log.i(TAG, "fan: off commanded (board does not report fan state)")
+            return null
+        }
+        fanState = 0
+        return mapOf(FitPro.Field.FAN_STATE to 0.0)
+    }
+
     /** Stop everything and show the recap. Reached by the cool-down expiring or SKIP. */
     private fun finishWorkout() {
         if (Session.isMoving(session)) {
@@ -1092,6 +1185,10 @@ class MainActivity : Activity() {
         // and keep asking until the board agrees it is level.
         levelling = true
         levelNags = 0
+        // The fan goes off with everything else. It was running on after the
+        // walk ended because nothing here ever told it to stop.
+        fanStopping = true
+        fanOffNags = 0
         Log.i(TAG, "workout ended: ${"%.0f".format(sessionDistance)} m in " +
                 "${accumulatedMs / 1000} s, ${"%.0f".format(sessionCalories)} kcal")
     }
@@ -1487,6 +1584,9 @@ class MainActivity : Activity() {
 
     private fun pollLoop() {
         if (!resolveDeviceId()) { Log.e(TAG, "board did not answer on 4 or 2"); return }
+        // Before anything else. A locked board refuses reads too, so limits,
+        // telemetry and every workout command all depend on this.
+        unlockWithRetries()
         readLimits()
         mqtt.onMessage(mqtt.coachTopic, ::onCoachLine)
         mqtt.onMessage(mqtt.uiTopic, ::onUiCommand)
@@ -1504,10 +1604,32 @@ class MainActivity : Activity() {
             val queued = pendingWrite
             val writes = enforceStopped(lastActualKph)
                 ?: enforceLevel(lastActualGrade)
+                ?: enforceFanOff()
                 ?: queued ?: decelStep() ?: rampStep()
 
+            if (writes != null) lastWriteMs = SystemClock.elapsedRealtime()
             val reply = conn.exchange(FitPro.readWrite(deviceId, READS, writes ?: emptyMap()))
             if (reply == null) { Thread.sleep(POLL_MS); continue }
+
+            // The board asking to be unlocked is not a dropped frame — it is a
+            // request, and the only correct answer is to authenticate again.
+            // Ignoring it costs everything: reads are refused too, so the HUD
+            // goes quiet, every workout command is silently rejected, and the
+            // console can still navigate while being unable to act.
+            if (FitPro.isSecurityBlock(reply)) {
+                boardLocked = true
+                if (unlockAttempts == 0 || SystemClock.elapsedRealtime() - lastUnlockMs > UNLOCK_RETRY_MS) {
+                    unlockAttempts++
+                    lastUnlockMs = SystemClock.elapsedRealtime()
+                    Log.w(TAG, "board locked (attempt $unlockAttempts) — authenticating again")
+                    if (unlockWithRetries()) {
+                        rejects = 0
+                        unlockAttempts = 0
+                    }
+                }
+                Thread.sleep(POLL_MS)
+                continue
+            }
 
             val why = FitPro.rejectReason(reply, READS)
             if (why != null) {
@@ -1517,9 +1639,37 @@ class MainActivity : Activity() {
                     Log.w(TAG, "dropped frame ($why): ${FitPro.hex(reply)}")
                 }
                 rejects++
+
+                // A write the board will never accept must not be retried for
+                // ever. pendingWrite is deliberately kept until a frame lands,
+                // so one dropped frame cannot spend a command — but if the
+                // board is refusing this particular write, that same rule turns
+                // into an infinite retry that blocks everything queued behind
+                // it. On 2026-08-07 finishWorkout's {KPH 0, GRADE 0, PAUSE} was
+                // refused the instant the deck finished levelling, and the
+                // console spent twelve minutes retrying it at 5 Hz.
+                if (queued != null && writes === queued) {
+                    writeTries++
+                    if (writeTries > WRITE_TRIES) {
+                        Log.w(TAG, "giving up on a write the board keeps refusing ($why): " +
+                                   queued.keys.joinToString { it.name })
+                        pendingWrite = null
+                        writeTries = 0
+                    }
+                }
+
+                // Keep the screen alive. The HUD used to repaint only after a
+                // good frame, so a board that refused everything froze the
+                // console mid-render — buttons appeared dead, and the last
+                // thing painted stayed up. The board being unhappy is worth
+                // saying out loud; it is not a reason to stop drawing.
+                lastSnap?.let { push(it.copy(boardOk = false)) }
+
                 Thread.sleep(POLL_MS)
                 continue
             }
+            boardLocked = false
+            writeTries = 0
 
             // Only now is the queued write known to have landed. Clearing it
             // before the exchange is what lost the deck-levelling command on
@@ -1544,15 +1694,31 @@ class MainActivity : Activity() {
 
             // Follow the board rather than our own idea of the target —
             // physical button presses never reach this app.
-            if (writes == null) {
-                v[FitPro.Field.KPH]?.let { targetKph = it }
+            //
+            // But not straight away. A write takes a few polls to appear in the
+            // board's own KPH field, and adopting the echo before it lands puts
+            // the old value back: press + at 6.4, we write 6.5, the next frame
+            // still says 6.4, and the target snaps back. Press again and the
+            // step is added to a stale number, so the display dances and settles
+            // somewhere that was never asked for — 6.4 + 0.1 arriving at 6.6 by
+            // way of 5.2, which is the board's ramp being echoed into a target.
+            //
+            // So the board only gets to speak once ours has had time to land.
+            // Physical presses still come through: they are not writes of ours,
+            // so nothing is holding the window open.
+            if (writes == null && SystemClock.elapsedRealtime() - lastWriteMs > FOLLOW_SETTLE_MS) {
+                v[FitPro.Field.KPH]?.let { targetKph = quantise(it, KPH_STEP) }
                 v[FitPro.Field.GRADE]?.let { targetGrade = it }
             }
 
             val snap = accumulate(v)
+            lastSnap = snap
             push(snap)
             coachTick(snap)
             speakSummary()
+
+            sinceFan += POLL_MS
+            if (sinceFan >= FAN_EVERY_MS) { sinceFan = 0; readFan() }
 
             sinceMqtt += POLL_MS
             if (sinceMqtt >= MQTT_EVERY_MS) {
@@ -1767,6 +1933,12 @@ class MainActivity : Activity() {
         return org.json.JSONObject()
             .put("name", planName)
             .put("loops", planLoops)
+            // Route steps are metres, template steps are seconds. They share
+            // the field names (`startSec`/`endSec`) for historical reasons, so
+            // the drawing cannot tell them apart without being told — and it
+            // has to, because only one of the two can be integrated into an
+            // elevation profile. See profile() in stride-core.js.
+            .put("byDistance", route != null)
             .put("steps", arr)
             .toString()
     }
@@ -1854,6 +2026,117 @@ class MainActivity : Activity() {
             Thread.sleep(200)
         }
         return false
+    }
+
+    /**
+     * Authenticate with the board.
+     *
+     * A locked board answers *every* ReadWriteData with securityBlock — reads
+     * included — so this must succeed before the poll loop can do anything at
+     * all. It is not one-off setup: the board re-locks on its own schedule,
+     * across power cycles and idle days, and ICON's console re-runs the same
+     * sequence every time it sees a securityBlock.
+     *
+     * Identity comes off the board itself rather than being configured, so a
+     * different machine needs no changes: DeviceInfo gives the serial number,
+     * SystemInfo the model and part number, VersionInfo the library version
+     * that seeds the secret key.
+     *
+     * Returns true if the board accepted the challenge.
+     */
+    private fun unlockBoard(): Boolean {
+        val dev = FitPro.Dev.MAIN
+
+        val idReply = conn.exchange(FitPro.command(dev, FitPro.Cmd.DEVICE_INFO))
+        val id = idReply?.let { FitPro.parseDeviceInfo(it) }
+        if (id == null) { Log.w(TAG, "unlock: no DeviceInfo from the board"); return false }
+
+        // ICON only unlocks above software version 75; below that the board has
+        // no security to satisfy and VerifySecurity is not supported.
+        if (id.softwareVersion <= 75) {
+            Log.i(TAG, "unlock: board sw ${id.softwareVersion} predates security — nothing to do")
+            boardLocked = false
+            return true
+        }
+
+        val sysReply = conn.exchange(FitPro.command(dev, FitPro.Cmd.SYSTEM_INFO, byteArrayOf(0, 0)))
+        val sys = sysReply?.let { FitPro.parseSystemInfo(it) }
+        if (sys == null) { Log.w(TAG, "unlock: no SystemInfo from the board"); return false }
+
+        val verReply = conn.exchange(FitPro.command(dev, FitPro.Cmd.VERSION_INFO, byteArrayOf(0, 0)))
+        val mlv = verReply?.let { FitPro.parseMasterLibraryVersion(it) }
+        if (mlv == null) { Log.w(TAG, "unlock: no VersionInfo from the board"); return false }
+
+        val hash = FitPro.securityHash(id.serialNumber, sys.partNumber, sys.model)
+        val reply = conn.exchange(FitPro.verifySecurity(dev, hash, mlv))
+        if (reply == null || !FitPro.isValid(reply)) {
+            Log.w(TAG, "unlock: no answer to VerifySecurity"); return false
+        }
+        val status = reply[3].toInt() and 0xFF
+        val ok = status == FitPro.Status.DONE
+        boardLocked = !ok
+        Log.i(TAG, "unlock: serial=${id.serialNumber} part=${sys.partNumber} " +
+                   "model=${sys.model} mlv=$mlv -> ${FitPro.Status.name(status)}")
+        return ok
+    }
+
+    /**
+     * Unlock, retrying a few times before giving up on this attempt.
+     *
+     * The board can answer a command with nothing at all while it is settling
+     * after a power cycle, and one silent frame should not cost a walk.
+     */
+    private fun unlockWithRetries(attempts: Int = 3): Boolean {
+        for (i in 1..attempts) {
+            if (unlockBoard()) {
+                if (i > 1) Log.i(TAG, "unlock: succeeded on attempt $i")
+                return true
+            }
+            Thread.sleep(300)
+        }
+        Log.w(TAG, "unlock: failed after $attempts attempts")
+        return false
+    }
+
+    /**
+     * Read the fan back off the board, so the physical buttons show on screen.
+     *
+     * FAN_STATE is writable and we have been writing it since the fan tile
+     * existed, but it was never in the read list — so pressing the console's
+     * own fan button changed the machine and the HUD never found out. The soft
+     * tile and the hardware disagreed, and the tile was the one that was wrong.
+     *
+     * Deliberately its own exchange rather than another entry in TELEMETRY.
+     * FAN_STATE is field 98, which widens the read bitmask from 4 bytes to 13,
+     * and if this board turns out not to report it then a sentinel or a length
+     * mismatch would reject *every* frame — losing speed, incline and the whole
+     * HUD to a cosmetic feature. Today already showed what a board refusing
+     * every frame looks like. On its own exchange the worst case is a fan tile
+     * that does not track, which is exactly where we are now.
+     */
+    private fun readFan() {
+        if (fanReadable == false) return
+        val reply = conn.exchange(FitPro.readWrite(deviceId, FAN_READ)) ?: return
+        val why = FitPro.rejectReason(reply, FAN_READ)
+        if (why != null) {
+            if (fanReadable == null) {
+                fanReadable = false
+                Log.i(TAG, "fan: board will not report FAN_STATE ($why) — tile stays local")
+            }
+            return
+        }
+        val v = FitPro.parse(reply, FAN_READ)[FitPro.Field.FAN_STATE] ?: return
+        if (fanReadable == null) {
+            fanReadable = true
+            Log.i(TAG, "fan: board reports FAN_STATE — tile now follows the hardware")
+        }
+        // Same settle rule as speed: our own write owns the value until it lands.
+        if (SystemClock.elapsedRealtime() - lastWriteMs <= FOLLOW_SETTLE_MS) return
+        val level = v.toInt().coerceIn(0, 4)
+        if (level != fanState) {
+            fanState = level
+            Log.i(TAG, "fan: board says $level")
+        }
     }
 
     private fun readLimits() {

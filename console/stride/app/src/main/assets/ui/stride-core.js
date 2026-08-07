@@ -290,15 +290,51 @@ function profile(steps, opts) {
     here = got;
   }
 
-  /* The axis comes off the grades that get drawn, not the ones that were
-     asked for — an axis topped at 9.5% over a line that only reaches 6 is
-     three separate lies in one label. */
-  var hi = 4, lo = 0;
-  for (i = 0; i < reach.length; i++) {
-    if (reach[i].to > hi) hi = reach[i].to;
-    if (reach[i].to < lo) lo = reach[i].to;
+  /* ---- gradient, or the ground it describes? --------------------------
+     A template's x axis is seconds and its y axis is grade: the plan is a
+     shape in time, and there is no distance to integrate over until somebody
+     picks a pace.
+
+     A route is different. Its steps are metres of real ground, so the honest
+     drawing is the ground — cumulative elevation — and plotting grade there
+     misleads. Reported from a walk on 2026-08-07: a steady -3% drew as a flat
+     line, because an unchanging gradient *is* flat on a gradient axis, and it
+     read as level ground. Worse, a decline easing -3 → -2 → -1 drew as a
+     rising line and looked like a climb, while the walker was still going down
+     and the coach was correctly saying the decline was ending. Two readings of
+     one picture, and the picture was the one that was wrong.
+
+     Integrating settles the jaggedness too: a 1% rung is a visible step on a
+     gradient axis, but on an elevation axis it is a change of slope — which is
+     what a hill actually looks like. */
+  var byDistance = opts.byDistance != null ? !!opts.byDistance : planByDistance;
+  var hi, lo, elevAt = null;
+
+  if (byDistance) {
+    // Elevation in metres at the end of each segment: rise = grade% × run.
+    var elev = 0;
+    elevAt = [0];
+    for (i = 0; i < steps.length; i++) {
+      elev += (reach[i].to / 100) * (steps[i].end - steps[i].start);
+      elevAt.push(elev);
+    }
+    hi = lo = elevAt[0];
+    for (i = 1; i < elevAt.length; i++) {
+      if (elevAt[i] > hi) hi = elevAt[i];
+      if (elevAt[i] < lo) lo = elevAt[i];
+    }
+    if (hi - lo < 1) hi = lo + 1;             // never a zero-height axis
+  } else {
+    /* The axis comes off the grades that get drawn, not the ones that were
+       asked for — an axis topped at 9.5% over a line that only reaches 6 is
+       three separate lies in one label. */
+    hi = 4; lo = 0;
+    for (i = 0; i < reach.length; i++) {
+      if (reach[i].to > hi) hi = reach[i].to;
+      if (reach[i].to < lo) lo = reach[i].to;
+    }
+    hi = Math.ceil(hi * 2) / 2;               // to the nearest half percent
   }
-  hi = Math.ceil(hi * 2) / 2;                 // to the nearest half percent
 
   function yFor(v) {
     return H - ((v - lo) / (hi - lo)) * (H - headroom);
@@ -309,16 +345,26 @@ function profile(steps, opts) {
     return { t: t, v: v, x: xFor(t), y: yFor(v), label: label };
   }
 
-  var pts = [vertex(0, from)];
+  /** Elevation partway through segment [i], by linear interpolation. */
+  function elevAtT(i, t) {
+    var s = steps[i];
+    var span = s.end - s.start || 1;
+    var f = Math.max(0, Math.min(1, (t - s.start) / span));
+    return elevAt[i] + (elevAt[i + 1] - elevAt[i]) * f;
+  }
+
+  var pts = [vertex(0, byDistance ? elevAt[0] : from)];
   var crests = [];
   for (i = 0; i < steps.length; i++) {
     var r = reach[i];
-    var arrive = vertex(steps[i].start + r.ramp, r.to, steps[i].label);
+    var arriveT = steps[i].start + r.ramp;
+    var arrive = vertex(arriveT, byDistance ? elevAtT(i, arriveT) : r.to, steps[i].label);
     // A zero-length ramp would put two vertices on the same spot; skip it.
     if (r.ramp > 0) pts.push(arrive);
     crests.push(arrive);
     if (steps[i].start + r.ramp < steps[i].end) {
-      pts.push(vertex(steps[i].end, r.to, steps[i].label));
+      pts.push(vertex(steps[i].end,
+                      byDistance ? elevAt[i + 1] : r.to, steps[i].label));
     }
   }
 
@@ -361,6 +407,10 @@ function profile(steps, opts) {
   return {
     empty: false,
     total: total, hi: hi, lo: lo, width: W, height: H, length: length,
+    /** What the y axis means: 'm' of elevation for a route, '%' of grade for
+     *  a template. A caller labelling the axis must read this, not assume. */
+    unit: byDistance ? 'm' : '%',
+    byDistance: byDistance,
     d: d,
     fill: d + ' L ' + W + ' ' + H.toFixed(1) + ' L 0 ' + H.toFixed(1) + ' Z',
     /**
@@ -499,8 +549,14 @@ function adapt(raw) {
 
 /* The path ahead, sent once per walk by window.plan(), not per frame. */
 var planSteps = [];
+/* Whether those steps are metres of ground or seconds of plan. Remembered
+   here rather than passed by each UI, so all five get an elevation profile for
+   a route without five separate edits — and so a UI that forgets to ask still
+   gets the right drawing. */
+var planByDistance = false;
 function setPlan(p) {
   planSteps = (p && p.steps) || [];
+  planByDistance = !!(p && p.byDistance);
   return planSteps;
 }
 

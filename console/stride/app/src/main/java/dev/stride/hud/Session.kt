@@ -91,6 +91,12 @@ data class Snapshot(
     val suggestPace: Double = 0.0,
     /** False once a manual incline press has taken the deck back for this segment. */
     val inclineAuto: Boolean = false,
+    /** False while the board is refusing frames. The numbers here are then the
+     *  last good ones rather than current, and the page can say so instead of
+     *  presenting stale values as live. The console keeps drawing either way:
+     *  repainting only after a good frame froze the HUD mid-render on
+     *  2026-08-07 and made every button look dead. */
+    val boardOk: Boolean = true,
 ) {
     val mode: String get() = Session.name(session)
 
@@ -110,6 +116,7 @@ data class Snapshot(
         append("\"ramping\":\"$ramping\",")
         append("\"phaseLeft\":${"%.0f".format(phaseLeft)},")
         append("\"boardMode\":$boardMode,")
+        append("\"boardOk\":$boardOk,")
         append("\"avgSpeed\":${"%.1f".format(avgSpeed)},")
         append("\"maxSpeed\":${"%.1f".format(maxSpeed)},")
         append("\"avgIncline\":${"%.1f".format(avgIncline)},")

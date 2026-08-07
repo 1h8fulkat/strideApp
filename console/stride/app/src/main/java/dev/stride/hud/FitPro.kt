@@ -17,7 +17,10 @@ object FitPro {
         const val CONNECT = 4
         const val DISCONNECT = 5
         const val SUPPORTED_DEVICES = 128
+        const val DEVICE_INFO = 129
+        const val SYSTEM_INFO = 130
         const val VERSION_INFO = 132
+        const val VERIFY_SECURITY = 144
         const val SPEED_GRADE_LIMIT = 146
         // DELIBERATELY ABSENT: Update(9) and EnterBootloader(56) are firmware
         // operations. `02 04 09 0F` resets the board. Never expose them here.
@@ -45,11 +48,14 @@ object FitPro {
         const val DONE = 2
         const val IN_PROGRESS = 3
         const val FAILED = 4
+        /** Not a failure: the board wants VerifySecurity. See [securityHash]. */
+        const val SECURITY_BLOCK = 8
 
         fun name(v: Int) = when (v) {
             DEV_NOT_SUPPORTED -> "devNotSupported"; CMD_NOT_SUPPORTED -> "cmdNotSupported"
             DONE -> "done"; IN_PROGRESS -> "inProgress"; FAILED -> "failed"
-            5 -> "timeLeft"; 7 -> "unknownFailure"; 8 -> "securityBlock"; 9 -> "commFailed"
+            SECURITY_BLOCK -> "securityBlock"
+            5 -> "timeLeft"; 7 -> "unknownFailure"; 9 -> "commFailed"
             else -> "status$v"
         }
     }
@@ -213,6 +219,137 @@ object FitPro {
         frame[2] = command.toByte()
         frame[3] = checksum(frame, 4)
         return frame
+    }
+
+    /** A command with a payload: `[device][length][cmd][content…][checksum]`. */
+    fun command(device: Byte, cmd: Int, content: ByteArray = ByteArray(0)): ByteArray {
+        val length = content.size + 4
+        require(length <= MAX_MSG) { "frame too long: $length" }
+        val frame = ByteArray(length)
+        frame[0] = device
+        frame[1] = length.toByte()
+        frame[2] = cmd.toByte()
+        content.copyInto(frame, 3)
+        frame[length - 1] = checksum(frame, length)
+        return frame
+    }
+
+    /* ---------------------------------------------------------------- *
+     * Security
+     * ---------------------------------------------------------------- *
+     *
+     * The board locks itself, and a locked board answers *every* ReadWriteData
+     * with status 8 ([Status.SECURITY_BLOCK]) — reads included. It is not a
+     * failure and it is not about the safety key: it means "authenticate".
+     *
+     * ICON's own console treats it exactly that way. FitPro1Console.cs:386:
+     *
+     *     if (command2 != null && command2.Status == CmdStatus.SecurityBlock)
+     *     {
+     *         Log.Trace("FitnessConsole", "Unlocking again", null);
+     *         await Unlock().ConfigureAwait(false);
+     *     }
+     *
+     * — and it re-unlocks again on any transition into ConsoleState.Locked
+     * (line 103). Unlocking is routine housekeeping, not a one-off setup step.
+     *
+     * We did not implement it, and got away with it for months because the
+     * board was still holding an unlock from a stock-app session. On
+     * 2026-08-07 that lapsed: every frame came back securityBlock, the poll
+     * loop rejected all of them, and the console became a HUD that could
+     * navigate but could not act. Nothing had changed but time and power
+     * cycles.
+     */
+
+    /**
+     * The 32-byte challenge (`EquipmentUtil.CalculateSecurityHash`).
+     *
+     * Each byte starts as its own 1-based index, then mixes in either the part
+     * number or the model depending on the corresponding bit of the serial
+     * number. Byte-truncating arithmetic throughout — the intermediate values
+     * overflow deliberately, which is why every step is masked back to 8 bits.
+     */
+    fun securityHash(serialNumber: Int, partNumber: Int, modelNumber: Int): ByteArray {
+        val out = ByteArray(32)
+        for (b in 0 until 32) {
+            var v = (b + 1) and 0xFF
+            if ((serialNumber ushr b) and 1 == 1) {
+                val p = if (b < 16) ((partNumber shl 16) or (partNumber ushr 16)) ushr b
+                        else partNumber ushr b
+                v = v xor (p and 0xFF)
+            } else {
+                v = v xor ((v * (b + modelNumber)) and 0xFF)
+            }
+            out[b] = v.toByte()
+        }
+        return out
+    }
+
+    /** VerifySecurity: the 32-byte hash, then `8 * masterLibraryVersion` LE. */
+    fun verifySecurity(device: Byte, hash: ByteArray, masterLibraryVersion: Int): ByteArray {
+        require(hash.size == 32) { "hash must be 32 bytes, was ${hash.size}" }
+        val content = ByteArray(36)
+        hash.copyInto(content, 0)
+        putIntLe(content, 32, 8 * masterLibraryVersion)
+        return command(device, Cmd.VERIFY_SECURITY, content)
+    }
+
+    /** True if this reply is the board asking to be unlocked. */
+    fun isSecurityBlock(reply: ByteArray): Boolean =
+        reply.size >= 5 && isValid(reply) && (reply[3].toInt() and 0xFF) == Status.SECURITY_BLOCK
+
+    private fun putIntLe(b: ByteArray, off: Int, v: Int) {
+        b[off] = (v and 0xFF).toByte()
+        b[off + 1] = ((v ushr 8) and 0xFF).toByte()
+        b[off + 2] = ((v ushr 16) and 0xFF).toByte()
+        b[off + 3] = ((v ushr 24) and 0xFF).toByte()
+    }
+
+    private fun u8(b: ByteArray, off: Int) = b[off].toInt() and 0xFF
+    private fun u32le(b: ByteArray, off: Int) =
+        u8(b, off) or (u8(b, off + 1) shl 8) or (u8(b, off + 2) shl 16) or (u8(b, off + 3) shl 24)
+
+    /**
+     * The three identity reads the hash is built from. Response data begins at
+     * offset 4 in every case, after device / length / command / status, and
+     * every multi-byte value is little-endian.
+     *
+     * Returns null rather than guessing when the frame is short or not Done —
+     * a hash built from a misread serial number is not a hash, it is a lockout.
+     */
+    private fun payload(reply: ByteArray, need: Int): ByteArray? {
+        if (!isValid(reply)) return null
+        if ((reply[3].toInt() and 0xFF) != Status.DONE) return null
+        val len = reply[1].toInt() and 0xFF
+        if (len < 4 + need + 1) return null
+        return reply
+    }
+
+    /** DeviceInfo (129) → software version and the board serial number. */
+    class DeviceIdentity(val softwareVersion: Int, val serialNumber: Int)
+
+    fun parseDeviceInfo(reply: ByteArray): DeviceIdentity? {
+        val f = payload(reply, 6) ?: return null
+        return DeviceIdentity(softwareVersion = u8(f, 4), serialNumber = u32le(f, 6))
+    }
+
+    /** SystemInfo (130) → model and part number. */
+    class SystemIdentity(val model: Int, val partNumber: Int)
+
+    fun parseSystemInfo(reply: ByteArray): SystemIdentity? {
+        val f = payload(reply, 11) ?: return null
+        val model = u32le(f, 7)
+        var part = u32le(f, 11)
+        // ICON's own fix-up, carried across verbatim: one production run
+        // reports a part number that does not match its own security hash.
+        if (part == 370357 && model == 39915) part = 374677
+        return SystemIdentity(model = model, partNumber = part)
+    }
+
+    /** VersionInfo (132) → the master library version the secret key derives from. */
+    fun parseMasterLibraryVersion(reply: ByteArray): Int? {
+        val f = payload(reply, 1) ?: return null
+        return u8(f, 4)
     }
 
     /**
