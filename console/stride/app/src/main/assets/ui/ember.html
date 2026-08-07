@@ -614,7 +614,10 @@ function drawProfile(){
       $(lineId).setAttribute('y2', y.toFixed(1));
       // +22 puts the label beside its own line: the svg is inset that far.
       $(axId).style.top = (y + 22 - 6).toFixed(0) + 'px';
-      $(axId).textContent = (Math.round(v * 10) / 10) + '%';
+      // A route's axis is metres of elevation, a template's is percent of
+      // grade. prof.unit says which; assuming '%' labelled real terrain wrong.
+      $(axId).textContent = (prof.byDistance ? Math.round(v)
+                                             : Math.round(v * 10) / 10) + prof.unit;
     });
 
   const pins = $('profPins');

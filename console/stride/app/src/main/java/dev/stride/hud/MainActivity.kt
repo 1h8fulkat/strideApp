@@ -65,10 +65,17 @@ class MainActivity : Activity() {
         const val FAN_OFF_NAGS = 25
 
         /** How many consecutive rejections before a queued write is abandoned.
-         *  Generous — a real command deserves persistence — but finite, because
-         *  a write the board will never accept otherwise blocks the loop for
-         *  ever. At 200 ms a poll this is about ten seconds of trying. */
-        const val WRITE_TRIES = 50
+         *
+         *  This is a responsiveness number, not just a safety valve. PAUSE and
+         *  STOP are queued writes, so however long we keep retrying is how long
+         *  the console feels unresponsive when the board is refusing — the
+         *  first attempt at fifty tries meant ten seconds of nothing happening
+         *  after a tap, which read as broken rather than busy.
+         *
+         *  Fifteen is three seconds: still far more than the "one dropped frame
+         *  must not spend a command" rule needs, and short enough that a
+         *  refusal surfaces while the person is still looking at the button. */
+        const val WRITE_TRIES = 15
         const val MQTT_EVERY_MS = 1000L
 
         /**
@@ -1601,7 +1608,30 @@ class MainActivity : Activity() {
             // enforceStopped comes first and outranks everything, including a
             // queued write: nothing is more important than a belt that should
             // not be moving.
-            val queued = pendingWrite
+            /* A mode change travels alone.
+             *
+             * The board rejects the *whole* frame if any one field in it is
+             * invalid, and WORKOUT_MODE is the field most likely to be: it is
+             * a state machine, and a transition the board does not accept from
+             * where it currently is fails the speed write riding alongside it.
+             * On 2026-08-07 starting a run against a board wedged in
+             * WorkoutMode 2 refused {KPH, WORKOUT_MODE} together, over and
+             * over, and the console cycled start → refuse → end → start.
+             *
+             * Sending the mode by itself also gets the order right, which
+             * matters on this hardware: FitPro.Mode notes that the belt will
+             * not act on a speed write while the console is IDLE. Mode first,
+             * then the speed it enables — and if the mode is refused, the
+             * speed is still queued rather than lost with it. */
+            var queued = pendingWrite
+            var rest: Map<FitPro.Field, Double>? = null
+            if (queued != null && queued.size > 1 &&
+                queued.containsKey(FitPro.Field.WORKOUT_MODE)) {
+                rest = queued.filterKeys { it != FitPro.Field.WORKOUT_MODE }
+                queued = mapOf(FitPro.Field.WORKOUT_MODE to
+                               queued.getValue(FitPro.Field.WORKOUT_MODE))
+            }
+
             val writes = enforceStopped(lastActualKph)
                 ?: enforceLevel(lastActualGrade)
                 ?: enforceFanOff()
@@ -1653,7 +1683,9 @@ class MainActivity : Activity() {
                     if (writeTries > WRITE_TRIES) {
                         Log.w(TAG, "giving up on a write the board keeps refusing ($why): " +
                                    queued.keys.joinToString { it.name })
-                        pendingWrite = null
+                        // A refused mode change must not take the rest of the
+                        // command down with it. The speed still wants sending.
+                        pendingWrite = rest
                         writeTries = 0
                     }
                 }
@@ -1678,7 +1710,11 @@ class MainActivity : Activity() {
             // gone — so the belt stopped (the decel ramp had it) and the deck
             // stayed at -3% until somebody noticed. One dropped USB frame
             // should not be able to spend a command.
-            if (queued != null && writes === queued) pendingWrite = null
+            // When a mode change was split off, landing it promotes the rest of
+            // the command rather than clearing the queue — the speed that was
+            // asked for alongside it still has to be sent, on the very next
+            // poll, now that the board is in a state that will accept it.
+            if (queued != null && writes === queued) pendingWrite = rest
 
             val v = FitPro.parse(reply, READS).filter { (f, value) ->
                 // Reject anything outside what the machine says it can do.
@@ -1917,6 +1953,7 @@ class MainActivity : Activity() {
                 (baselineKph + step.paceDelta).coerceIn(minKph, maxKph)
             } else 0.0,
             inclineAuto = inclineAuto,
+            boardLocked = boardLocked,
         )
     }
 

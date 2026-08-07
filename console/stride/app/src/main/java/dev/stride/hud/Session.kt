@@ -97,6 +97,11 @@ data class Snapshot(
      *  repainting only after a good frame froze the HUD mid-render on
      *  2026-08-07 and made every button look dead. */
     val boardOk: Boolean = true,
+    /** True while the board is refusing everything pending VerifySecurity. A
+     *  different thing from [boardOk] being false, and worth saying differently:
+     *  one is "the board is not answering", the other is "the board wants us to
+     *  authenticate and we are doing it". */
+    val boardLocked: Boolean = false,
 ) {
     val mode: String get() = Session.name(session)
 
@@ -117,6 +122,7 @@ data class Snapshot(
         append("\"phaseLeft\":${"%.0f".format(phaseLeft)},")
         append("\"boardMode\":$boardMode,")
         append("\"boardOk\":$boardOk,")
+        append("\"boardLocked\":$boardLocked,")
         append("\"avgSpeed\":${"%.1f".format(avgSpeed)},")
         append("\"maxSpeed\":${"%.1f".format(maxSpeed)},")
         append("\"avgIncline\":${"%.1f".format(avgIncline)},")

@@ -283,6 +283,16 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
                   font-size:24px;font-weight:800;letter-spacing:.14em}
 .paused .row .slab.quiet{background:var(--control)}
 
+/* ---- board trouble --------------------------------------------------------
+   Below the safety overlay in the stack (z 55 against 60): if the key is out,
+   that is the thing to read, and a board complaining underneath it is noise. */
+.boardnote{position:absolute;left:0;top:0;width:1280px;height:44px;display:none;
+           z-index:55;background:#3a2a08;border-bottom:2px solid #d98a11;
+           color:#ffd98a;font-size:19px;font-weight:600;letter-spacing:.06em;
+           line-height:42px;text-align:center}
+.boardnote.on{display:block}
+.boardnote.quiet{background:#3a1010;border-bottom-color:#ff4d3d;color:#ffc4bd}
+
 /* ---- safety key ----------------------------------------------------------- */
 .safety{position:absolute;top:0;right:0;bottom:0;left:0;display:none;
         background:#1c0603;z-index:60}
@@ -527,10 +537,22 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
     <div class="cell"><div class="kk">CLIMBED</div><div class="vv" id="sumClimb">0</div></div>
   </div>
   <div class="foot">
-    <button class="slab pick" id="btnDone"><span class="lab">NICE ONE</span></button>
+    <!-- Says where it goes, not how the walk went. "NICE ONE" was a reaction,
+         and it repeated the headline directly above it — two ways of reading
+         it as decoration rather than the way off this screen. Every other
+         button on the console names its action ("BACK TO IT", "I'M DONE"). -->
+    <button class="slab pick" id="btnDone"><span class="lab">BACK TO START</span></button>
     <div class="note" id="sumNote"></div>
   </div>
 </div>
+
+<!-- ===================== 9b · BOARD TROUBLE ============================
+     Deliberately a strip and not an overlay. The safety key takes the whole
+     screen because it is an interrupt; this is a status, and the console stays
+     usable — the numbers behind it are simply the last good ones. It exists at
+     all because a board refusing frames used to look exactly like a console
+     that had died, with nothing anywhere saying otherwise. -->
+<div class="boardnote" id="boardNote"></div>
 
 <!-- ===================== 10 · SAFETY KEY =============================== -->
 <div class="safety" id="safety">
@@ -855,6 +877,19 @@ window.render = function(raw){
 
   $('safety').classList.toggle('on', s.safetyKey === 'out');
 
+  // Say what the board is doing when it is not doing what it should. 'locked'
+  // clears itself in about a second, so it reads as activity rather than
+  // alarm; 'quiet' means the numbers on screen have stopped being current,
+  // which the person is entitled to know before they trust them.
+  const bn = $('boardNote');
+  bn.classList.toggle('on', s.board !== 'ok');
+  bn.classList.toggle('quiet', s.board === 'quiet');
+  if (s.board !== 'ok') {
+    bn.textContent = s.board === 'locked'
+      ? 'BOARD LOCKED · AUTHENTICATING'
+      : 'BOARD NOT ANSWERING · SHOWING LAST KNOWN READINGS';
+  }
+
   if (screen === 'welcome'){ showScreen('scSetup'); shownPhase = s.phase; return; }
   if (screen === 'summary'){ showScreen('scSummary'); renderSummary(s); shownPhase = s.phase; return; }
 
@@ -983,10 +1018,14 @@ function renderWarm(s){
 function renderSummary(s){
   $('sumKind').textContent = ((s.plan.name || (s.mode === 'run' ? 'A run' : 'A walk')) +
     ' · ' + Math.round(s.session.elapsed / 60) + ' minutes').toUpperCase();
-  const hills = s.plan.steps.filter(st => st.incline > 0).length;
-  $('sumHead').textContent = hills
-    ? 'That’s ' + hills + ' hills, ' + (s.profile || 'you')
-    : 'Nice one, ' + (s.profile || 'you');
+  // Runs of climbing, not segments that happen to tilt upward — see
+  // STRIDE.hillCount. One hill on a route arrives as a dozen 25 m steps.
+  const hills = STRIDE.hillCount(s.plan.steps);
+  $('sumHead').textContent = !hills
+    ? 'Nice one, ' + (s.profile || 'you')
+    : hills === 1
+      ? 'One hill, and you took it, ' + (s.profile || 'you')
+      : 'That’s ' + hills + ' hills, ' + (s.profile || 'you');
   $('sumCoach').textContent = s.summaryLine || '';
   $('sumTime').textContent  = mmss(s.session.elapsed);
   $('sumDist').textContent  = STRIDE.km(s.session.distance);

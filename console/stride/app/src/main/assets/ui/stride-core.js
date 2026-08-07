@@ -538,6 +538,21 @@ function adapt(raw) {
     safetyKey: raw.dmk ? 'out' : 'in',
     fan:       raw.fan || 0,
 
+    /* How the control board is behaving. 'ok', or one of two kinds of trouble
+       that deserve different words:
+
+         'locked' — it wants VerifySecurity and the console is authenticating.
+                    Recoverable, usually within a second, and nothing the person
+                    needs to do.
+         'quiet'  — it is refusing frames for some other reason. The numbers on
+                    screen are the last good ones, not current.
+
+       Both used to be invisible. On 2026-08-07 a locked board produced a
+       console that could navigate but not act, with nothing on screen to say
+       so, and the morning went into guessing at hardware. A UI that shows this
+       turns that into a sentence anyone can read. */
+    board:     raw.boardLocked ? 'locked' : (raw.boardOk === false ? 'quiet' : 'ok'),
+
     /* Seconds left in a timed phase, and which ramp is in flight ("warmup",
        "resuming", "cooldown", "stopping" or ""). */
     phaseLeft: raw.phaseLeft || 0,
@@ -545,6 +560,33 @@ function adapt(raw) {
 
     raw: raw
   };
+}
+
+/**
+ * How many hills a plan actually contains.
+ *
+ * Not the number of segments with a positive gradient, which is what the
+ * summary counted until 2026-08-07 and which produced "That's 24 hills" for a
+ * 3 km route with three climbs in it. A route is a resampled GPS track cut into
+ * 25 m steps and quantised to 1% rungs, so one hill arrives as a dozen
+ * consecutive rising segments. Counting them is counting the sampling grid, and
+ * a number that big and that wrong is worse than no number: it reads as an
+ * achievement and it is an artefact.
+ *
+ * A hill is a *run* of climbing — the transitions from not-going-up to
+ * going-up. The 0.5% floor keeps the profile's own rounding between two grid
+ * steps from registering as terrain, which is the same reasoning the coach uses
+ * before it will speak about a gradient change.
+ */
+function hillCount(steps) {
+  var hills = 0, climbing = false;
+  steps = steps || [];
+  for (var i = 0; i < steps.length; i++) {
+    var up = steps[i].incline > 0.5;
+    if (up && !climbing) hills++;
+    climbing = up;
+  }
+  return hills;
 }
 
 /* The path ahead, sent once per walk by window.plan(), not per frame. */
@@ -1189,6 +1231,7 @@ function esc(t) {
 global.STRIDE = {
   track: track,
   profile: profile,
+  hillCount: hillCount,
   adapt: adapt,
   setPlan: setPlan,
   screenFor: screenFor,
