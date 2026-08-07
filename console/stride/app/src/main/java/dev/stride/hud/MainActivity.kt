@@ -2112,8 +2112,14 @@ class MainActivity : Activity() {
         val status = reply[3].toInt() and 0xFF
         val ok = status == FitPro.Status.DONE
         boardLocked = !ok
-        Log.i(TAG, "unlock: serial=${id.serialNumber} part=${sys.partNumber} " +
-                   "model=${sys.model} mlv=$mlv -> ${FitPro.Status.name(status)}")
+        // The serial, part and model ARE the unlock secret — with the public
+        // hash algorithm, those three numbers authenticate this specific board.
+        // So the log confirms they were read (non-zero) without printing them;
+        // the identity never leaves the device. If you need the raw values for
+        // debugging, read them off the board yourself, do not paste a log.
+        val gotIdentity = id.serialNumber != 0 && sys.partNumber != 0 && sys.model != 0
+        Log.i(TAG, "unlock: identity ${if (gotIdentity) "read" else "MISSING"}, " +
+                   "mlv=$mlv -> ${FitPro.Status.name(status)}")
         return ok
     }
 

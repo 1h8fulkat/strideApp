@@ -242,6 +242,83 @@ Practical consequence for any implementation: **track console state and surface 
 write that vanishes without error is otherwise indistinguishable from a broken transport — read
 field 12 alongside the telemetry so the failure mode is visible.
 
+## Security — CONFIRMED on hardware, 2026-08-07
+
+**The board locks itself, and a locked board refuses everything — reads included.** This is the
+one thing most likely to make an otherwise correct implementation work for months and then stop,
+so it is worth reading before anything else here.
+
+A locked board answers every `ReadWriteData` with a five-byte frame carrying **status 8,
+`SecurityBlock`**:
+
+```
+04 05 02 08 13        device, length 5, ReadWriteData, SecurityBlock, checksum
+```
+
+That status is **not a failure, and has nothing to do with the safety key.** It means
+*authenticate*. ICON's own console treats it as routine housekeeping: on `SecurityBlock` it logs
+"Unlocking again" and re-runs its unlock, and it unlocks again on any transition into
+`ConsoleState.Locked`.
+
+### The unlock
+
+Send `VerifySecurity` (144) with a 36-byte payload — a 32-byte hash, then
+`8 × masterLibraryVersion` as a little-endian `int32`. The reply's first data byte is an unlock
+key; status `Done` (2) means unlocked.
+
+The hash is built from numbers the board will tell you. Data begins at offset 4 in every response,
+after device / length / command / status, and every multi-byte value is little-endian:
+
+| Value | Command | Where |
+|---|---|---|
+| `softwareVersion` | `DeviceInfo` (129), no content | byte 4 |
+| `serialNumber` | `DeviceInfo` (129) | `uint32` at 6 |
+| `model` | `SystemInfo` (130), content `00 00` | `uint32` at 7 |
+| `partNumber` | `SystemInfo` (130) | `uint32` at 11 |
+| `masterLibraryVersion` | `VersionInfo` (132), content `00 00` | byte 4 |
+
+```
+hash[32]
+for b in 0..31:
+    hash[b] = (b + 1) & 0xFF
+    if (serialNumber >> b) & 1:
+        p = b < 16 ? ((partNumber << 16) | (partNumber >>> 16)) >>> b
+                   : partNumber >>> b
+        hash[b] ^= p & 0xFF
+    else:
+        hash[b] ^= (hash[b] * (b + model)) & 0xFF
+```
+
+All arithmetic is byte-truncating; the intermediate values overflow deliberately.
+
+Two details that are easy to miss:
+
+- **Only unlock above software version 75.** Below that the board has no security to satisfy and
+  does not support the command.
+- One production run reports a part number that does not match its own hash. ICON's code carries
+  the fix-up verbatim and so should yours: if `partNumber == 370357` and `model == 39915`, use
+  `374677`.
+
+### Why this matters more than it looks
+
+Unlocking is not first-run setup. **The board re-locks on its own, across power cycles and idle
+days.** An implementation that unlocks once will appear to work for as long as some earlier
+console's unlock is still current, and will then present as hardware failure: a UI that can
+navigate but cannot act, a physical START that beeps and does nothing, a belt that will not move.
+Because reads are refused too, telemetry stops — and a display driven by successful frames freezes
+mid-render, so every button looks dead as well.
+
+**Unlock at startup before reading anything, and again on every `SecurityBlock`.** Rate-limit the
+retry rather than answering at poll frequency.
+
+### One frame, one refusal
+
+Related, and the same class of surprise: **the board rejects the entire frame if any single field
+in it is invalid.** `WorkoutMode` is the usual culprit, being a state machine — a transition it
+will not accept from its current state fails the `KPH` write travelling alongside it, with no
+indication which field was at fault. Send mode changes in their own frame. That also gets the
+ordering right for the interlock above: mode first, then the speed it enables.
+
 ## Remaining unknowns
 
 1. Whether FitPro**2** framing differs from FitPro**1**; the console answers FitPro1 framing, so
