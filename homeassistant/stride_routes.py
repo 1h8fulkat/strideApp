@@ -2,10 +2,17 @@
 """
 Inspect and curate the routes the console has.
 
-    python3 stride_routes.py                 list what the console holds
+    python3 stride_routes.py                 what the broker is retaining
+    python3 stride_routes.py console         what the treadmill actually has
     python3 stride_routes.py drop "Friday"   remove routes matching a name
     python3 stride_routes.py keep "Hospital" remove everything else
     python3 stride_routes.py clear           remove all of them
+
+`console` exists because the two can disagree, and when they do the treadmill
+is what matters. The console caches to disk and only replaces that cache when a
+payload arrives, so one that was asleep, offline or mid-reboot keeps yesterday's
+list while the broker holds today's — and nothing in Home Assistant can see the
+difference.
 
 A route reaches the treadmill by a path with three hops and one surprise:
 
@@ -62,11 +69,40 @@ def read() -> list:
         sys.exit(f"the retained payload is not JSON ({e}). Left alone.")
 
 
-def show(routes: list):
+def console(serial: str = "192.168.0.159:5555") -> list:
+    """What the treadmill has on disk, read over ADB.
+
+    The console's copy is the one that decides what you can actually walk, and
+    it is not derivable from the broker: it updates only when a payload
+    arrives, so a console that was asleep or offline keeps an older list
+    indefinitely and nothing upstream can tell.
+    """
+    pkg = "dev.stride.hud"
+    try:
+        out = subprocess.run(
+            ["adb", "-s", serial, "shell",
+             f"run-as {pkg} cat files/routes.json"],
+            capture_output=True, text=True, timeout=25).stdout.strip()
+    except FileNotFoundError:
+        sys.exit("adb not found. brew install android-platform-tools.")
+    except subprocess.TimeoutExpired:
+        sys.exit(f"no answer from {serial}. The console re-locks ADB after a "
+                 "power cycle — see the notes on iFit eru.")
+    if not out:
+        sys.exit(f"could not read {pkg}'s cache on {serial}. Is the console "
+                 "awake, and is ADB still authorised?")
+    try:
+        return json.loads(out)
+    except json.JSONDecodeError as e:
+        sys.exit(f"the console's cache is not JSON ({e}).")
+
+
+def show(routes: list, where: str = None):
+    where = where or f"retained on {TOPIC}"
     if not routes:
-        print(f"{TOPIC} is empty — the console has no routes.")
+        print(f"no routes {where}.")
         return
-    print(f"{len(routes)} route(s) retained on {TOPIC}:\n")
+    print(f"{len(routes)} route(s) {where}:\n")
     for r in routes:
         segs = r.get("segments") or []
         km = (r.get("distance_m") or 0) / 1000
@@ -100,6 +136,21 @@ def main():
 
     cmd = args[0].lower()
     term = " ".join(args[1:]).strip().lower()
+
+    if cmd == "console":
+        on_device = console(*args[1:2])
+        show(on_device, "cached on the treadmill")
+        ids = {str(r.get("id")): r.get("name") for r in routes}
+        theirs = {str(r.get("id")): r.get("name") for r in on_device}
+        if ids == theirs:
+            print("\nbroker and console agree.")
+        else:
+            print("\nthey DISAGREE — the console is what you can actually walk:")
+            for i in set(ids) | set(theirs):
+                if ids.get(i) != theirs.get(i):
+                    print(f"   {i[:8]}  broker={ids.get(i, '—')!r}  "
+                          f"console={theirs.get(i, '—')!r}")
+        return
 
     if cmd == "clear":
         show(routes)
