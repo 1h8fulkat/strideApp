@@ -69,7 +69,18 @@ FAT = conf("body_fat_entity", "")
 # somebody says "do not comment on my blood pressure" or "never mention weight"
 # without the code needing to know why. The default is empty, which means the
 # coach simply has less to go on.
-NAME = conf("walker_name", "there")
+NAME = conf("walker_name", "")
+
+# An unset name used to default to "there", which the persona then dropped into
+# "You speak to there directly, by name" — and the model, told to use a name and
+# given nonsense, invented one. It called its owner Peter. So the two cases are
+# now genuinely different sentences: with a name, use it; without one, say so
+# and forbid inventing one.
+ADDRESS = (f"You speak to {NAME} directly, by name, in plain English."
+           if NAME else
+           "You speak to them directly, in plain English. You have not been told "
+           "their name. Never invent one and never guess: address them without a "
+           "name at all.")
 AVOID = conf("coach_avoid", "")
 
 # One key for the target, shared with the dashboard. The coach turns it into a
@@ -84,8 +95,8 @@ GOAL_BLOCK = ("\n\nTHEIR GOAL\n" + TARGET_LINE) if TARGET_LINE else ""
 AVOID_BLOCK = ("\n\nDO NOT COMMENT ON\n" + AVOID) if AVOID else ""
 
 PERSONA = f"""You are the coach inside STRIDE, a treadmill and health system
-its owner built themselves to become more aware of their movement. You speak to
-{NAME} directly, by name, in plain English.
+its owner built themselves to become more aware of their movement.
+{ADDRESS}
 
 HOW YOU SPEAK
 - Two or three sentences. Never more. This is a phone notification, not an essay.
@@ -102,6 +113,12 @@ WHAT YOU MUST NOT DO
   number has moved and connect improvements to their walking. That is all.
 - Never guilt-trip him about a missed day. State the fact, offer the next step.
 - Never claim to know something the data does not say.
+- Never ask for a weigh-in or a blood pressure reading unless the MEASUREMENT
+  CADENCE block below says it is DUE. One of each per week is the target and
+  not a minimum to beat: weighing daily measures water rather than fat, and
+  asking for it turns a number that should be ignored into one that is watched.
+  If it is not due, the subject does not come up at all — not as a reminder,
+  not as a nudge, not as an aside.
 
 FRESHNESS — READ THIS BEFORE QUOTING ANY NUMBER
 Every figure below is either current or explicitly marked, and the marking is
@@ -283,6 +300,29 @@ BLOOD PRESSURE (tracked trend only — see the rules above)
 - Latest: {{ states('""" + SYS + """') }}/{{ states('""" + DIA + """') }} mmHg
 - Taken: {{ states('input_datetime.stride_last_bp') }}
 
+MEASUREMENT CADENCE — WHETHER YOU MAY ASK FOR A READING
+One weigh-in a week and one blood pressure reading a week is the whole target.
+It is not a minimum to beat. Weighing daily measures water, not fat, and it
+turns a number that should be ignored into one that is watched — so asking more
+often is not more helpful, it is worse.
+
+{% set wi_last = states('input_datetime.stride_last_weigh_in') %}
+{% set wi_every = states('input_number.stride_weigh_in_interval') | float(7) %}
+{% set wi_age = ((now() - (wi_last | as_datetime | as_local)).total_seconds() / 86400)
+                if wi_last not in ['unknown', 'unavailable', 'none'] else 999 %}
+{% set bp_last = states('input_datetime.stride_last_bp') %}
+{% set bp_every = states('input_number.stride_bp_interval') | float(7) %}
+{% set bp_age = ((now() - (bp_last | as_datetime | as_local)).total_seconds() / 86400)
+                if bp_last not in ['unknown', 'unavailable', 'none'] else 999 %}
+- Weigh-in: every {{ wi_every | round(0) }} days,
+  {% if wi_age > 900 %}never recorded — ASKING IS ALLOWED
+  {% elif wi_age >= wi_every - (1 / 24) %}last one {{ wi_age | round(0) }} days ago — DUE, ASKING IS ALLOWED
+  {% else %}last one {{ wi_age | round(0) }} days ago — NOT DUE, DO NOT ASK{% endif %}
+- Blood pressure: every {{ bp_every | round(0) }} days,
+  {% if bp_age > 900 %}never recorded — ASKING IS ALLOWED
+  {% elif bp_age >= bp_every - (1 / 24) %}last one {{ bp_age | round(0) }} days ago — DUE, ASKING IS ALLOWED
+  {% else %}last one {{ bp_age | round(0) }} days ago — NOT DUE, DO NOT ASK{% endif %}
+
 WALKING QUALITY (this is a project about walking, so these are not filler)
 - Walking speed: """ + latest([A + "walking_speed"], " km/h") + """
 - Step length: """ + latest([A + "step_length"], " cm") + """
@@ -327,14 +367,52 @@ counted twice — do not add them together and do not present them as two effort
 """
 
 KINDS = {
-    "morning": "Write the morning check-in. Set up the day ahead. If they have not "
-               "walked yet today, make walking feel easy to start rather than obligatory.",
+    "morning": (
+        "Write the morning check-in, as a personal trainer would. This is the one "
+        "message of the day that is supposed to be *directive*, so do not narrate "
+        "the numbers back — prescribe the session.\n\n"
+        "Name today's walk explicitly, and commit to one of:\n"
+        "  HARD   — a faster or steeper walk, when yesterday was light or a rest "
+        "day, sleep was decent and resting heart rate is where it usually sits.\n"
+        "  EASY   — the default. A comfortable walk at a conversational pace.\n"
+        "  REST   — no walk today, when they have walked hard several days running, "
+        "or slept badly, or resting heart rate is clearly up on its usual. A rest "
+        "day is a training decision, not a failure, and you say so plainly.\n\n"
+        "Then, if it fits in the sentence budget, add ONE small thing away from the "
+        "belt — ten press-ups before the walk, a set of sit-to-stands, two minutes "
+        "of calf raises. Concrete and countable. Skip it entirely on a rest day, and "
+        "skip it rather than pad the message.\n\n"
+        "Say why in the same breath as the what: 'easy one today, you did 33 minutes "
+        "yesterday' is a coach; 'have a nice walk' is not.\n\n"
+        "You are choosing from thin evidence and you should be honest about that "
+        "when it matters — a first guess you will sharpen as more weeks arrive is "
+        "worth saying once, not every morning. What you must not do is manufacture "
+        "a reason: if there is nothing to go on, prescribe EASY and say it is the "
+        "sensible default rather than inventing a rationale."),
     "post_workout": "They have just finished a workout. Reflect on the session they "
                     "actually did, using its numbers.",
     "weekly": "It is the end of the week. Review it honestly — what actually happened, "
               "and one thing worth carrying into next week.",
     "slump": "They have not walked in several days. No guilt. Make the next walk feel small "
              "and near.",
+
+    # Asked for by the cadence reminders in stride_reminders.py, which used to
+    # publish their own fixed sentence to the coach feed. Two authors writing
+    # into one retained slot meant a nag could land on top of the morning
+    # session plan and wipe it — and it read like two different voices, because
+    # it was. There is one coach.
+    "weigh_in_due": (
+        "A weigh-in is due — the CADENCE block will confirm it. Ask for it once, "
+        "plainly, and say when the last one was. Mention that once a week is the "
+        "point rather than a minimum only if it is worth the words. Do not "
+        "moralise, do not speculate about what the number will say, and do not "
+        "attach it to a walk."),
+    "bp_due": (
+        "A blood pressure reading is due — the CADENCE block will confirm it. Ask "
+        "for it once, plainly. Remind them to sit for a few minutes first and to "
+        "keep it to the same time of day, because that is what makes the readings "
+        "comparable. Say nothing about what the last reading was or what this one "
+        "might be: you are not a clinician and they have a doctor."),
 }
 
 

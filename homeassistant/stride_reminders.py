@@ -18,19 +18,15 @@ medication and his GP's advice outranks any default we pick.
 Run:  python3 ha/stride_reminders.py
 """
 import json
-import os
-import re
-import sys
 import urllib.request
 
-from stride_config import HA, conf, mqtt, token
+from stride_coach_llm import KINDS
+from stride_config import HA, conf, token
 
 
 WEIGHT = conf("weight_entity", "")
 SYSTOLIC = conf("systolic_entity", "")
 DIASTOLIC = conf("diastolic_entity", "")
-NOTIFY = conf("notify_service", "persistent_notification.create")
-COACH_DASHBOARD = "/stride-health/today"
 
 
 def post(path: str, payload: dict, tok: str):
@@ -42,22 +38,6 @@ def post(path: str, payload: dict, tok: str):
     )
     return urllib.request.urlopen(req).read().decode()
 
-
-def coach_message(headline: str, body: str, kind: str) -> dict:
-    """Every coach utterance goes to the same retained topic, whoever wrote it."""
-    return {
-        "action": "mqtt.publish",
-        "data": {
-            "topic": "stride/coach/message",
-            "retain": True,
-            "payload": (
-                "{{ %s | to_json }}"
-                % json.dumps(
-                    {"headline": headline, "body": body, "kind": kind, "source": "rules"}
-                ).replace('"', "'")
-            ),
-        },
-    }
 
 
 def stamp(slug: str, entity: str, target: str) -> dict:
@@ -86,7 +66,7 @@ def stamp(slug: str, entity: str, target: str) -> dict:
 
 
 def remind(slug: str, label: str, at: str, last: str, interval: str,
-           headline: str, body: str) -> dict:
+           task: str) -> dict:
     return {
         "alias": f"STRIDE — {label} reminder",
         "description": "Nudges only when one is actually due. A fixed cadence is "
@@ -106,22 +86,19 @@ def remind(slug: str, label: str, at: str, last: str, interval: str,
                 ),
             }
         ],
+        # There is one coach, and it speaks in one voice to both the dashboard
+        # card and the phone. This used to publish its own fixed sentence
+        # straight to the coach feed and send its own notification, which meant
+        # two authors writing into one retained slot: a nag would land on top of
+        # the morning session plan and wipe it, in noticeably different prose.
+        #
+        # Now the reminder decides *that* something is due and the coach decides
+        # what to say about it. The script publishes the message and sends the
+        # push itself, so this stays a trigger rather than a second author.
         "actions": [
-            coach_message(headline, body, f"{slug}_due"),
             {
-                "action": NOTIFY,
-                "data": {
-                    "title": headline,
-                    "message": body,
-                    # Tapping lands on the coach dashboard rather than wherever
-                    # the companion app was last. See COACH_DASHBOARD in
-                    # stride_coach_llm.py for why.
-                    "data": {
-                        "group": "stride-coach",
-                        "tag": f"stride-{slug}-due",
-                        "url": COACH_DASHBOARD,
-                    },
-                },
+                "action": "script.stride_coach",
+                "data": {"kind": f"{slug}_due", "task": task},
             },
         ],
     }
@@ -133,24 +110,31 @@ AUTOMATIONS = {
     "stride_remind_weigh_in": remind(
         "weigh_in", "weigh-in", "input_datetime.stride_weigh_in_time",
         "input_datetime.stride_last_weigh_in", "input_number.stride_weigh_in_interval",
-        "Time to weigh in",
-        "Same time each morning is what makes the trend mean anything. "
-        "Last reading {{ relative_time(states.input_datetime.stride_last_weigh_in.state "
-        "| as_datetime | as_local) }} ago.",
+        KINDS["weigh_in_due"],
     ),
     "stride_remind_bp": remind(
         "bp", "BP", "input_datetime.stride_bp_time",
         "input_datetime.stride_last_bp", "input_number.stride_bp_interval",
-        "Blood pressure check due",
-        "Sit for a few minutes first, and keep it to the same time of day so the "
-        "readings are comparable.",
+        KINDS["bp_due"],
     ),
 }
 
 
 def main():
     tok = token()
+    # An unconfigured entity would post a stamp automation watching nothing,
+    # which Home Assistant rejects with a message that names neither the
+    # automation nor the missing setting. Say which, and leave whatever is
+    # already installed alone rather than replacing it with something broken.
+    missing = [k for k, v in (("weight_entity", WEIGHT),
+                              ("systolic_entity", SYSTOLIC)) if not v]
+    if missing:
+        print("  not configured, skipping the stamps that need them: "
+              + ", ".join(missing))
+
     for slug, cfg in AUTOMATIONS.items():
+        if slug.startswith("stride_stamp_") and not cfg["triggers"][0].get("entity_id"):
+            continue
         print(f"  {slug:<26} {post(f'/api/config/automation/config/{slug}', cfg, tok)}")
     post("/api/services/automation/reload", {}, tok)
     print("reloaded")
