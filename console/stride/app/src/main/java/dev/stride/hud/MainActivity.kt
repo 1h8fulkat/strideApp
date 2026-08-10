@@ -108,10 +108,40 @@ class MainActivity : Activity() {
          * sudden: 2 km/h per second brings a brisk walk to a stop in about two
          * seconds and a hard run in five.
          *
-         * Deliberately *not* applied to the STOP button. That is a deliberate
-         * act by someone expecting it, and it needs to be immediate.
+         * The STOP button has its own, brisker one — see [STOP_DECEL_KPH_PER_SEC].
          */
         const val DECEL_KPH_PER_SEC = 2.0
+
+        /**
+         * The STOP button, above a walking pace.
+         *
+         * STOP used to hand the board a bare {KPH 0, PAUSE}, which is the
+         * machine's own rapid stop. At a walk that is exactly right: somebody
+         * reaching for STOP wants the belt to stop, now. Above about 6 km/h it
+         * is enough to pitch you forward — reported on 2026-08-10 after a
+         * stumble.
+         *
+         * So a stop from a run sheds the speed a run cannot absorb first, and
+         * hands over to that same rapid stop once the belt is down to
+         * [STOP_EASE_ABOVE_KPH] — the speed it is already fine from. From
+         * 10 km/h that is a second and a bit of easing before the stop; below
+         * the threshold nothing changes at all.
+         *
+         * Brisker than [DECEL_KPH_PER_SEC], because this is a person asking to
+         * stop rather than a plan running out.
+         */
+        const val STOP_DECEL_KPH_PER_SEC = 3.0
+        const val STOP_EASE_ABOVE_KPH = 6.0
+
+        /**
+         * How long a wind-down may hold [enforceStopped] off.
+         *
+         * A wind-down is the stop being carried out, so the safety net stands
+         * aside while one is in flight — but not indefinitely. Every wind-down
+         * only ever takes speed off and reaches its floor within a few seconds,
+         * so anything still running after this has stuck, and the net wins.
+         */
+        const val WIND_DOWN_MAX_MS = 10_000L
 
         /**
          * Below this the belt counts as stopped. Not zero: the board reports
@@ -349,8 +379,18 @@ class MainActivity : Activity() {
     @Volatile private var levelling = false
     @Volatile private var levelNags = 0
 
-    /** True while the belt is winding down towards an automatic finish. */
+    /**
+     * The wind-down: true while the belt is being eased to a stop, with the
+     * rate it is being eased at, the speed it hands over to the machine's own
+     * stop at, and when it started. See [beginWindDown] and [decelStep].
+     *
+     * One mechanism for both kinds of stop — a workout ending and the STOP
+     * button — because they differ only in those two numbers.
+     */
     @Volatile private var stopping = false
+    @Volatile private var stopRate = DECEL_KPH_PER_SEC
+    @Volatile private var stopFloor = 0.0
+    @Volatile private var stopSince = 0L
 
     /** Wall time is unusable here — the console's clock is years out and may
      *  jump if NTP ever reaches it. elapsedRealtime() only ever moves forward. */
@@ -580,15 +620,39 @@ class MainActivity : Activity() {
         /** Belt to a halt, timer held. The board's own Pause is the legal exit
          *  from Running — writing Idle while running is silently ignored. */
         @JavascriptInterface fun pause() {
+            // Pressed again while the belt is still easing down: that is
+            // somebody asking a second time, and the answer to asking twice is
+            // the stop they would have got before any of this existed.
+            if (session == Session.PAUSED && stopping) {
+                stopping = false
+                targetKph = 0.0
+                pendingWrite = mapOf(
+                    FitPro.Field.KPH to 0.0,
+                    FitPro.Field.WORKOUT_MODE to FitPro.Mode.PAUSE.toDouble(),
+                )
+                Log.i(TAG, "stop pressed again — stopping the belt outright")
+                repaint()
+                return
+            }
             if (Session.isMoving(session)) {
                 accumulatedMs += SystemClock.elapsedRealtime() - activeSince
                 session = Session.PAUSED
                 phaseEndsAt = 0L
             }
-            // Remember the pace so RESUME can climb back to it.
+            // Remember the pace so RESUME can climb back to it. Taken before the
+            // wind-down starts eating it.
             if (targetKph > 0.0) pausedKph = targetKph
             rampTo = 0.0
             rampReason = ""
+            // Above a walk the speed is shed first — see STOP_EASE_ABOVE_KPH.
+            // The screen still answers the press immediately: the clock stops
+            // here and the overlay goes up while the belt is still moving,
+            // which is the right way round. A STOP that took two seconds to
+            // acknowledge would read as a console that had missed it.
+            if (beginWindDown(STOP_DECEL_KPH_PER_SEC, STOP_EASE_ABOVE_KPH, "stop pressed")) {
+                repaint()
+                return
+            }
             targetKph = 0.0
             pendingWrite = mapOf(
                 FitPro.Field.KPH to 0.0,
@@ -608,7 +672,16 @@ class MainActivity : Activity() {
             if (session != Session.PAUSED) return
             session = Session.ACTIVE
             activeSince = SystemClock.elapsedRealtime()
-            targetKph = 0.0
+            // RESUME during a STOP's wind-down catches the belt where it is and
+            // climbs from there. Zeroing the target would drop it to a
+            // standstill first, which is a lurch in each direction for someone
+            // who has changed their mind a second after pressing STOP.
+            if (stopping) {
+                stopping = false
+                Log.i(TAG, "resumed mid wind-down at ${"%.1f".format(targetKph)} km/h")
+            } else {
+                targetKph = 0.0
+            }
             rampTo = if (pausedKph > 0.0) pausedKph else cfg.warmupKph()
             rampReason = "resuming"
             pendingWrite = mapOf(FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble())
@@ -628,8 +701,11 @@ class MainActivity : Activity() {
             // down again, which is disconcerting and faintly alarming — the
             // workout was over the moment STOP was pressed.
             if (session == Session.PAUSED) {
-                Log.i(TAG, "ended from a pause — no cool-down, belt already stopped")
-                clearPlan()
+                Log.i(TAG, "ended from a pause — no cool-down, belt already stopping")
+                // The plan is deliberately left standing: the summary is a
+                // summary *of* it, and clearing it here is what used to put
+                // "manual walk" at the top of a guided walk's recap. It goes on
+                // the way out of the summary — see home().
                 finishWorkout()
                 repaint()
                 return
@@ -672,10 +748,27 @@ class MainActivity : Activity() {
             summarySpoken = false
             clearPlan()
             resetSession()
-            pendingWrite = mapOf(
-                FitPro.Field.KPH to 0.0,
-                FitPro.Field.WORKOUT_MODE to FitPro.Mode.IDLE.toDouble(),
-            )
+            // Leaving the summary ends any easing still in flight. The console
+            // is about to say "welcome", and a belt still winding down behind
+            // that screen is worse than a stop that nobody is standing on the
+            // belt for. Taking the wind-down away also takes its tidy-up away,
+            // so that is done here instead — otherwise leaving the summary in
+            // the first second or two would strand the deck on a hill.
+            val parked = stopping
+            if (parked) {
+                stopping = false
+                Log.i(TAG, "left the summary mid wind-down — stopping the belt outright")
+                parkDeckAndFan()
+            }
+            targetKph = 0.0
+            pendingWrite = buildMap {
+                put(FitPro.Field.KPH, 0.0)
+                put(FitPro.Field.WORKOUT_MODE, FitPro.Mode.IDLE.toDouble())
+                // Only when we are the ones levelling the deck. An incline set
+                // by hand on the summary screen is a choice about the next
+                // walk, and DONE is not the moment to throw it away.
+                if (parked) put(FitPro.Field.GRADE, 0.0)
+            }
             repaint()
         }
 
@@ -1102,45 +1195,85 @@ class MainActivity : Activity() {
     }
 
     /**
-     * Finish, but bring the belt to a stop first.
+     * Start easing the belt down, and say whether there was anything to ease.
+     *
+     * Both deliberate stops arm one of these: a workout ending, at
+     * [DECEL_KPH_PER_SEC] all the way to a standstill, and the STOP button, at
+     * [STOP_DECEL_KPH_PER_SEC] as far as [STOP_EASE_ABOVE_KPH]. False means the
+     * belt is already at or below the floor, and the caller should command the
+     * stop itself in the ordinary way.
+     *
+     * @param floor the speed to hand over to the machine's own stop at.
+     */
+    private fun beginWindDown(rate: Double, floor: Double, why: String): Boolean {
+        // Nothing to wind down from — and a pulled safety key has already
+        // stopped the belt more decisively than this ever could.
+        if (targetKph <= floor || dmk) return false
+        stopping = true
+        stopRate = rate
+        stopFloor = floor
+        stopSince = SystemClock.elapsedRealtime()
+        rampTo = 0.0
+        rampReason = "stopping"
+        // Whatever was queued is superseded: an incline nudge has nothing to say
+        // to a belt that is stopping, and a write the board is refusing sits in
+        // front of decelStep in the poll loop's order until it gives up on it —
+        // seconds during which nothing would be taking speed off.
+        pendingWrite = null
+        Log.i(TAG, "$why — winding down from ${"%.1f".format(targetKph)} km/h " +
+                "at ${"%.1f".format(rate)} km/h/s" +
+                if (floor > 0.0) " to ${"%.1f".format(floor)} km/h" else "")
+        return true
+    }
+
+    /**
+     * Finish now, and let the belt catch up.
      *
      * Every automatic route to the summary comes through here — the plan
      * expiring, the cool-down expiring, SKIP — so none of them can drop the belt
-     * out from under someone. [decelStep] does the winding down and calls
-     * [finishWorkout] once the belt has actually stopped.
+     * out from under someone.
+     *
+     * The summary goes up at the moment of ending rather than when the belt
+     * arrives at zero. Waiting meant the live screen stayed up through the
+     * wind-down, and on a guided walk or a route that had just run out that
+     * screen was the casual lap counter — a walk ending on the one display that
+     * had nothing to do with it. Ending is a decision; the screen answers it
+     * immediately and the belt eases down underneath.
      */
     private fun requestFinish() {
-        if (targetKph <= 0.0 || !Session.isMoving(session)) {
-            finishWorkout()
-            return
-        }
-        stopping = true
-        rampTo = 0.0
-        rampReason = "stopping"
-        Log.i(TAG, "winding down from ${"%.1f".format(targetKph)} km/h")
+        beginWindDown(DECEL_KPH_PER_SEC, 0.0, "workout ended")
+        // Reads the wind-down it just armed, and leaves the belt to it.
+        finishWorkout()
     }
 
     /**
      * One tick of the wind-down, or null if nothing is stopping.
      *
      * Below the machine's minimum there is no "slow", only stopped, so the last
-     * step goes straight to zero rather than trying to hold 1.5 km/h.
+     * step goes straight to zero rather than trying to hold 1.5 km/h. Reaching
+     * the floor commands the stop: a wind-down is only ever the approach to one.
      */
     private fun decelStep(): Map<FitPro.Field, Double>? {
         if (!stopping) return null
-        val step = DECEL_KPH_PER_SEC * POLL_MS / 1000.0
+        val step = stopRate * POLL_MS / 1000.0
         targetKph = (targetKph - step).coerceAtLeast(0.0)
-        if (targetKph < minKph) targetKph = 0.0
-        if (targetKph <= 0.0) {
+        if (targetKph <= stopFloor || targetKph < minKph) {
             stopping = false
             rampTo = 0.0
             rampReason = ""
+            targetKph = 0.0
             // "Commanded zero", not "stopped". The belt takes a moment to come
             // to rest, and the write that tells it to may not even arrive —
             // see enforceStopped, which is what actually finishes the job.
             Log.i(TAG, "wind-down complete — commanding stop")
-            finishWorkout()
-            return null
+            // A workout that ended while the belt was still easing down left
+            // its tidy-up to us — see finishWorkout. It goes out behind the
+            // stop, never in front of it.
+            if (session == Session.SUMMARY) parkDeckAndFan()
+            return mapOf(
+                FitPro.Field.KPH to 0.0,
+                FitPro.Field.WORKOUT_MODE to FitPro.Mode.PAUSE.toDouble(),
+            )
         }
         return mapOf(FitPro.Field.KPH to targetKph)
     }
@@ -1167,6 +1300,17 @@ class MainActivity : Activity() {
     private fun enforceStopped(actualKph: Double): Map<FitPro.Field, Double>? {
         if (Session.isMoving(session)) return null
         if (actualKph < STOPPED_KPH) return null
+        // A wind-down *is* the stop being carried out, deliberately gradually —
+        // slamming zero over it would undo the one thing it exists for. Bounded,
+        // because this is the net and the net cannot be held off for ever: a
+        // wind-down only ever takes speed off and reaches its floor in a few
+        // seconds, so one still running after WIND_DOWN_MAX_MS has stuck.
+        if (stopping) {
+            if (SystemClock.elapsedRealtime() - stopSince < WIND_DOWN_MAX_MS) return null
+            stopping = false
+            Log.w(TAG, "wind-down still running after ${WIND_DOWN_MAX_MS / 1000}s " +
+                    "— stopping the belt outright")
+        }
         stopNags++
         if (stopNags == 1 || stopNags % 25 == 0) {
             Log.w(TAG, "belt still moving at ${"%.1f".format(actualKph)} km/h " +
@@ -1239,33 +1383,62 @@ class MainActivity : Activity() {
         return mapOf(FitPro.Field.FAN_STATE to 0.0)
     }
 
-    /** Stop everything and show the recap. Reached by the cool-down expiring or SKIP. */
+    /**
+     * Show the recap and put the machine back how it should be found.
+     *
+     * A wind-down still in flight owns the board, and this hands it everything:
+     * no speed write, no deck write, no levelling nag. Those all outrank
+     * [decelStep] in the poll loop's order, and a belt still at running pace
+     * must not queue behind a deck that moves one percent every three seconds.
+     * The wind-down does the tidying when it lands — see [parkDeckAndFan].
+     *
+     * The numbers are those of the moment of ending, not of the moment the belt
+     * finally rests. A summary whose distance kept climbing while it was being
+     * read would be a stranger thing than a couple of coasting metres missing
+     * from it.
+     */
     private fun finishWorkout() {
         if (Session.isMoving(session)) {
             accumulatedMs += SystemClock.elapsedRealtime() - activeSince
         }
         session = Session.SUMMARY
         phaseEndsAt = 0L
-        stopping = false
-        targetKph = 0.0
-        targetGrade = 0.0
         rampTo = 0.0
-        rampReason = ""
         pausedKph = 0.0
+        Log.i(TAG, "workout ended: ${"%.0f".format(sessionDistance)} m in " +
+                "${accumulatedMs / 1000} s, ${"%.0f".format(sessionCalories)} kcal")
+        if (stopping) return          // the wind-down parks the machine after it
+        rampReason = ""
+        targetKph = 0.0
+        parkDeckAndFan()
+        // The belt goes in the same write. This is the one path where no
+        // wind-down has commanded the stop already, so it must be commanded
+        // here — and it must not be left out of the write parkDeckAndFan
+        // queued, which would drop it.
         pendingWrite = mapOf(
             FitPro.Field.KPH to 0.0,
             FitPro.Field.GRADE to 0.0,
             FitPro.Field.WORKOUT_MODE to FitPro.Mode.PAUSE.toDouble(),
         )
-        // and keep asking until the board agrees it is level.
+    }
+
+    /**
+     * Put the deck back to level and the fan off, and keep asking until the
+     * board agrees on both — [enforceLevel] and [enforceFanOff] do the asking.
+     *
+     * Split out of [finishWorkout] because it does not always run there: a
+     * workout can end while the belt is still winding down, and everything in
+     * here has to wait until it has stopped.
+     */
+    private fun parkDeckAndFan() {
+        targetGrade = 0.0
+        pendingWrite = mapOf(FitPro.Field.GRADE to 0.0)
         levelling = true
         levelNags = 0
         // The fan goes off with everything else. It was running on after the
         // walk ended because nothing here ever told it to stop.
         fanStopping = true
         fanOffNags = 0
-        Log.i(TAG, "workout ended: ${"%.0f".format(sessionDistance)} m in " +
-                "${accumulatedMs / 1000} s, ${"%.0f".format(sessionCalories)} kcal")
     }
 
     /** The segment after [idx], wrapping on a circuit and null at the end. */
@@ -1326,7 +1499,11 @@ class MainActivity : Activity() {
         if (metres >= r.distanceM) {
             if (!stopping) {
                 Log.i(TAG, "route: ${r.name} complete at ${"%.0f".format(metres)} m")
-                clearPlan()
+                // The route is *not* cleared here, for the same reason a
+                // template is not — see planTick. Clearing it dropped the guided
+                // view, and what the console fell back to was the casual lap
+                // counter, which is where a finished route used to spend its
+                // last few seconds. It goes on the way out of the summary.
                 requestFinish()
             }
             return
@@ -1369,10 +1546,9 @@ class MainActivity : Activity() {
                     Log.i(TAG, "guided: plan complete — winding the belt down")
                     // The plan is deliberately *not* cleared here. Clearing it
                     // drops the guided view and the console falls back to the
-                    // casual oval for the two or three seconds the belt takes
-                    // to wind down — which reads as a cool-down screen that
-                    // then vanishes. It is cleared on the way out of the
-                    // summary instead.
+                    // casual oval; it is also what the summary reads its name
+                    // off, so a guided walk would be recapped as a manual one.
+                    // It is cleared on the way out of the summary instead.
                     requestFinish()
                 }
                 return
@@ -1937,6 +2113,10 @@ class MainActivity : Activity() {
             session = Session.PAUSED
             phaseEndsAt = 0L
             targetKph = 0.0
+            // Nothing gradual survives the safety key. The belt is already
+            // stopped by the machine itself; a wind-down still counting down
+            // towards a stop it has been beaten to is only in the way.
+            stopping = false
             // Deliberately *not* remembered for the resume ramp. Someone pulled
             // the safety key; whatever happens next should start from a
             // standstill and be asked for explicitly.
