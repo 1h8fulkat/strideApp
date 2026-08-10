@@ -50,27 +50,31 @@ sh_ settings put global development_settings_enabled 1
 # keep the screen alive while we work
 sh_ settings put global stay_on_while_plugged_in 7
 
-# ADB *over Wi-Fi* is the part that does not persist. `adb tcpip 5555` sets
-# service.adb.tcp.port, which is a runtime property and gone at the next boot;
-# only persist.adb.tcp.port survives, and writing it needs root, which a locked
-# console does not give the shell user. The setprop below is therefore expected
-# to fail on most consoles — so it is checked rather than assumed, because
-# quietly believing it worked is how you end up walking to the treadmill with a
-# USB cable wondering why nothing answers.
+# ADB over Wi-Fi is the part whose persistence varies by console.
+#
+# `adb tcpip 5555` sets service.adb.tcp.port, a runtime property that init
+# clears at every boot. persist.adb.tcp.port is the one that survives, and
+# writing it usually needs root. So we try, and then check — but a failed
+# setprop is NOT proof that Wi-Fi ADB is about to disappear: on the console
+# this was developed against it comes back after a power cycle regardless,
+# without the persist property ever being set. Some builds restore it
+# themselves. Rather than assert which yours is, this says what is true and
+# tells you the one command that fixes it if yours forgets.
 sh_ setprop persist.adb.tcp.port 5555 2>/dev/null || true
 if [ "$(sh_ getprop persist.adb.tcp.port | tr -d '\r')" = "5555" ]; then
-    say "ADB over Wi-Fi will survive a reboot"
+    say "ADB over Wi-Fi pinned by property — it will survive a reboot"
 else
     cat <<'EOF'
 
-  NOTE: ADB over Wi-Fi will NOT survive a reboot on this console.
-  After any power cycle, plug in USB and run:
+  NOTE: could not pin ADB over Wi-Fi with a property (this usually needs root).
+  Many consoles bring it back after a power cycle anyway. If yours does not,
+  plug in USB once and run:
 
       adb tcpip 5555
       adb connect <console-ip>:5555
 
-  The console itself does not need this — STRIDE comes back on its own.
-  It is only your remote access that goes.
+  Either way the treadmill is fine: STRIDE comes back on its own. This is only
+  about your remote access to it.
 
 EOF
 fi

@@ -181,11 +181,12 @@ rely on a factory reset.
 
 Read it before you run it. It operates on your treadmill.
 
-> **Your remote access does not survive a reboot; the console does.** Enabling
-> ADB over Wi-Fi sets a property that is wiped at every boot, and making it
-> permanent needs root that a locked console will not give you. After a power
-> cycle, plug the USB cable back in and run `adb tcpip 5555` to get back in
-> remotely. STRIDE itself needs none of this — it starts on its own.
+> **If ADB over Wi-Fi ever goes missing after a power cycle**, plug the USB
+> cable back in and run `adb tcpip 5555`. Whether it returns on its own varies
+> by console: the property that pins it (`persist.adb.tcp.port`) usually needs
+> root to set, but some builds — including the one this was developed on —
+> restore it themselves. Either way the treadmill is unaffected. STRIDE starts
+> on its own and needs no ADB to run.
 
 ### 1.7 Build and install
 
@@ -300,33 +301,24 @@ knows.
 
 ## Part 3 — Apple Health (iPhone)
 
-Optional, and only if you want Apple Health data in your own Home Assistant.
+Optional, and nothing here depends on it.
 
-```sh
-cd homeassistant
-python3 stride_health_webhook.py    # creates the sensors and the webhook
-```
+Apple Health is its own project now:
+**[AH for HA](https://github.com/keranm/ah-for-ha)** — Apple Health into Home
+Assistant, with no treadmill in it at all. It grew to 39 metrics, rings, sleep
+stages and workouts, and it publishes its own discovery configs, so there is
+nothing in *this* repository to install for it. Follow its guide instead of
+this one.
 
-Then build the app:
+It is also how an outdoor walk becomes an indoor one. A route you actually
+walked arrives over MQTT as a gradient profile, and STRIDE replays that on the
+deck for the days you cannot get out. The console has never known or cared who
+publishes those — swap the publisher and it carries on.
 
-```sh
-cd ios
-./build.sh open                     # generates the project and opens Xcode
-```
-
-Run it on your phone. On first launch, paste the webhook URL — printed by
-`stride_health_webhook.py --show-url`.
-
-> **Read that URL off your own screen.** The webhook id is the only thing
-> protecting that endpoint, so do not paste it into a chat window, an issue, or
-> a screenshot.
-
-✅ **Checkpoint:** press **Sync now**. `sensor.apple_health_steps` gets a value
-and `sensor.apple_health_last_sync` shows the current time.
-
-Set **Sync at least** to how fresh you want the data. Hourly is roughly
-twenty-four background wakes a day against one; the app says so under the
-picker.
+> `homeassistant/stride_health_webhook.py` is the receiver from when the iOS
+> app lived in this repository. It is frozen, and still live for the phone
+> already posting to it. **Setting this up for the first time? You do not need
+> it** — use AH for HA.
 
 ---
 
