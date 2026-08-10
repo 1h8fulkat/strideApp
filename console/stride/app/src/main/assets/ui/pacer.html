@@ -881,22 +881,29 @@ window.coach = function(c){
 
 /* ---- sleep --------------------------------------------------------------- */
 const SLEEP_AFTER_MS = 5 * 60 * 1000;
-let lastTouch = Date.now(), asleep = false;
+/* performance.now(), not Date.now(): this is a duration, and the console's
+   clock is not a reliable way to measure one. The board boots with its RTC at
+   2009 and NTP corrects it a minute or two later — a seventeen-year jump, mid
+   session, that made "time since the last touch" dwarf any threshold and put
+   the screen to sleep on the spot. STRIDE now starts at boot, so it is awake
+   for that jump every single time. Monotonic here for the same reason the
+   Kotlin uses elapsedRealtime() everywhere. */
+let lastTouch = performance.now(), asleep = false;
 $('sleep').addEventListener('touchstart', e => { e.preventDefault(); wake(); }, {passive:false});
 $('sleep').addEventListener('mousedown',  e => { e.preventDefault(); wake(); });
 function wake(){
-  lastTouch = Date.now();
+  lastTouch = performance.now();
   if (!asleep) return;
   asleep = false;
   STRIDE.suppress(500);
   $('sleep').classList.remove('on');
   Stride.dim(false);
 }
-document.addEventListener('touchstart', () => { lastTouch = Date.now(); }, {capture:true, passive:true});
-document.addEventListener('mousedown',  () => { lastTouch = Date.now(); }, {capture:true});
+document.addEventListener('touchstart', () => { lastTouch = performance.now(); }, {capture:true, passive:true});
+document.addEventListener('mousedown',  () => { lastTouch = performance.now(); }, {capture:true});
 setInterval(() => {
   const restful = shownScreen === 'scSetup' || shownScreen === 'scSummary' || shownScreen === null;
-  if (!asleep && restful && Date.now() - lastTouch > SLEEP_AFTER_MS){
+  if (!asleep && restful && performance.now() - lastTouch > SLEEP_AFTER_MS){
     asleep = true;
     $('sleep').classList.add('on');
     Stride.dim(true);
@@ -910,7 +917,7 @@ function showScreen(id){
   if (id === 'scSetup'){ flow.reset(); STRIDE.resetDerived(); }
   if (id !== 'scSetup') STRIDE_SETTINGS.close();
   if (id !== 'scLive'){ $('paused').classList.remove('on'); $('coach').classList.remove('show'); }
-  lastTouch = Date.now();
+  lastTouch = performance.now();
   shownScreen = id;
 }
 

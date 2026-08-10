@@ -123,14 +123,26 @@ class MainActivity : Activity() {
          *
          * So a stop from a run sheds the speed a run cannot absorb first, and
          * hands over to that same rapid stop once the belt is down to
-         * [STOP_EASE_ABOVE_KPH] — the speed it is already fine from. From
-         * 10 km/h that is a second and a bit of easing before the stop; below
-         * the threshold nothing changes at all.
+         * [STOP_EASE_ABOVE_KPH] — the speed it is already fine from. Below that
+         * threshold nothing changes at all.
          *
-         * Brisker than [DECEL_KPH_PER_SEC], because this is a person asking to
-         * stop rather than a plan running out.
+         * **The rate is set by what pressing STOP means.** It is a decision,
+         * not a stumble: unlike the safety key, the person has chosen this and
+         * is braced for it, so easing must not read as the console dithering.
+         * At 6 km/h per second the belt is off the top of its range in about a
+         * second and into the ordinary stop — quick enough to feel answered,
+         * gradual enough not to throw anyone forward. Raised from 3.0 on
+         * 2026-08-10: the first rate on real legs was safe and slow.
+         *
+         *     from 12 km/h   1.0 s of easing, then the stop
+         *     from 10 km/h   0.8 s
+         *     from  8 km/h   0.4 s
+         *
+         * Three times [DECEL_KPH_PER_SEC], which is the same trade seen from
+         * the other end: a plan running out has not asked for anything, so it
+         * gets the gentler wind-down and the whole way to a standstill.
          */
-        const val STOP_DECEL_KPH_PER_SEC = 3.0
+        const val STOP_DECEL_KPH_PER_SEC = 6.0
         const val STOP_EASE_ABOVE_KPH = 6.0
 
         /**

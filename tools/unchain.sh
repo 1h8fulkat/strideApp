@@ -105,10 +105,21 @@ done
 # icon first" is one instruction too many.
 #
 # Set STRIDE_KIOSK=0 to install the app and leave the home app alone.
-APK="$HERE/../console/stride/app/build/outputs/apk/debug/app-debug.apk"
+APK="$HERE/../console/stride/app/build/outputs/apk/release/app-release.apk"
+[ -f "$APK" ] || APK="$HERE/../console/stride/app/build/outputs/apk/debug/app-debug.apk"
 if [ -f "$APK" ]; then
     say "Installing STRIDE"
     adb -s "$DEV" install -r "$APK"
+    # And launch it, which is not decoration.
+    #
+    # Installing force-stops the app, and Android puts a force-stopped app into
+    # the "stopped state", where it receives no broadcasts at all — including
+    # BOOT_COMPLETED. Install and walk away and the boot receiver never fires,
+    # for ever, and the console comes up to a launcher every time with no clue
+    # why. Launching once clears the flag. Found on 2026-08-10 by installing a
+    # build and not restarting it.
+    say "Launching STRIDE (clears the stopped state, so it will start at boot)"
+    adb -s "$DEV" shell am start -n dev.stride.hud/.MainActivity >/dev/null
 else
     say "No STRIDE APK yet — build it with console/stride/run.sh, then re-run this"
 fi

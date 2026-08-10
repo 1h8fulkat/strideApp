@@ -1069,7 +1069,7 @@ function showScreen(mode){
      straight onto the summary with half an hour of "idle" already banked — the
      panel dimmed to sleep the instant the first walk ended, before it could be
      read. */
-  lastTouch = Date.now();
+  lastTouch = performance.now();
   shownMode = mode;
 }
 
@@ -1077,10 +1077,17 @@ function showScreen(mode){
    Console lives in the room; at rest it should be dark, not a glowing slab.
    Only sleeps when no workout is in progress. */
 const SLEEP_AFTER_MS = 5 * 60 * 1000;
-let lastTouch = Date.now(), asleep = false;
+/* performance.now(), not Date.now(): this is a duration, and the console's
+   clock is not a reliable way to measure one. The board boots with its RTC at
+   2009 and NTP corrects it a minute or two later — a seventeen-year jump, mid
+   session, that made "time since the last touch" dwarf any threshold and put
+   the screen to sleep on the spot. STRIDE now starts at boot, so it is awake
+   for that jump every single time. Monotonic here for the same reason the
+   Kotlin uses elapsedRealtime() everywhere. */
+let lastTouch = performance.now(), asleep = false;
 
 function wake(){
-  lastTouch = Date.now();
+  lastTouch = performance.now();
   if (!asleep) return;
   asleep = false;
   STRIDE.suppress(500);
@@ -1099,12 +1106,12 @@ sleepEl.addEventListener('mousedown',  e => { e.preventDefault(); wake(); });
 
 /* Everything else only resets the idle timer; it must never wake, or it would
    tear the overlay away mid-gesture and let the press through again. */
-function markActivity(){ lastTouch = Date.now(); }
+function markActivity(){ lastTouch = performance.now(); }
 document.addEventListener('touchstart', markActivity, {capture:true, passive:true});
 document.addEventListener('mousedown',  markActivity, {capture:true});
 
 setInterval(() => {
-  const idle = Date.now() - lastTouch;
+  const idle = performance.now() - lastTouch;
   const restful = shownMode === 'welcome' || shownMode === 'summary' || shownMode === null;
   if (!asleep && restful && idle > SLEEP_AFTER_MS){
     asleep = true;
