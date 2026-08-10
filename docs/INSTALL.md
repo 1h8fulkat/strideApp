@@ -166,16 +166,26 @@ rely on a factory reset.
 
 ### 1.6 Understand what you are about to run
 
-`tools/unchain.sh` does four things, in this order:
+`tools/unchain.sh` does five things, in this order:
 
 1. **Disables `com.ifit.eru`.** This is the piece that re-locks the console on
    every boot. It goes first, before anything else, because it is the thing
    that will undo the rest.
 2. Disables the remaining iFit packages.
-3. Installs a launcher, so there is something to go back to.
-4. Installs STRIDE and sets it as home.
+3. Turns on developer settings and keeps the screen awake while you work.
+4. Installs a launcher, so there is something to go back to.
+5. Installs STRIDE — if you have built it — and makes it the console's home
+   app, so a power cycle comes back to the treadmill rather than to a grid of
+   icons. Run it with `STRIDE_KIOSK=0` to skip that last part; the script
+   prints the one command that undoes it either way.
 
-Read it before you run it. It is 80 lines and it operates on your treadmill.
+Read it before you run it. It operates on your treadmill.
+
+> **Your remote access does not survive a reboot; the console does.** Enabling
+> ADB over Wi-Fi sets a property that is wiped at every boot, and making it
+> permanent needs root that a locked console will not give you. After a power
+> cycle, plug the USB cable back in and run `adb tcpip 5555` to get back in
+> remotely. STRIDE itself needs none of this — it starts on its own.
 
 ### 1.7 Build and install
 

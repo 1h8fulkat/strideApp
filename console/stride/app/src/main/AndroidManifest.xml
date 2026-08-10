@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- A treadmill is switched off at the wall. Coming back to the console
+         after a power cycle is the normal case, not a recovery case — see
+         BootReceiver. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- Bluetooth heart rate straps.
 
          Not required: the console works without Bluetooth hardware, reading the
@@ -56,5 +61,40 @@
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/device_filter" />
         </activity>
+
+        <!-- Kiosk mode, off until asked for.
+
+             Enabling this alias makes STRIDE the console's home app, so it
+             comes back not just after a reboot but after being dismissed or
+             killed. It is disabled in the manifest on purpose: two home apps
+             and no preference between them means Android asks "which one?" at
+             every boot, which is a worse first experience than the launcher
+             it replaces. `tools/unchain.sh` turns it on and sets the
+             preference in the same breath, which is the only order that is
+             ever right. See that script for the two commands that enable it,
+             and for the one that hands the console back to its launcher. -->
+        <activity-alias
+            android:name=".HomeAlias"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity-alias>
+
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!-- MediaTek's quick-boot path sends this one instead. -->
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
