@@ -181,12 +181,17 @@ rely on a factory reset.
 
 Read it before you run it. It operates on your treadmill.
 
-> **If ADB over Wi-Fi ever goes missing after a power cycle**, plug the USB
-> cable back in and run `adb tcpip 5555`. Whether it returns on its own varies
-> by console: the property that pins it (`persist.adb.tcp.port`) usually needs
-> root to set, but some builds — including the one this was developed on —
-> restore it themselves. Either way the treadmill is unaffected. STRIDE starts
-> on its own and needs no ADB to run.
+> **Treat ADB over Wi-Fi as your only way in, because it probably is.** The
+> console's USB port is the host link to the motor board, and the unit is built
+> into the treadmill — on most machines there is nothing to plug a laptop into.
+> Whether Wi-Fi ADB returns after a power cycle varies by console: the property
+> that pins it (`persist.adb.tcp.port`) usually needs root, but some builds,
+> including the one this was developed on, restore it themselves. Check that
+> yours does before you rely on it, and do not turn off USB debugging in
+> Developer Options afterwards — that is the switch that would lock you out.
+>
+> The treadmill itself is unaffected either way. STRIDE starts on its own and
+> needs no ADB to run.
 
 ### 1.7 Build and install
 

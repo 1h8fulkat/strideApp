@@ -199,6 +199,17 @@ class MainActivity : Activity() {
         const val TRIM_MAX_KPH = 4.0
 
         /**
+         * How close the model must be to the commanded pace before the odometer
+         * is allowed to correct it at all.
+         *
+         * Wider than one step of the model's own ramp (BELT_UP_KPH_PER_SEC at
+         * POLL_MS is 0.24 km/h), so "arrived" is not a state it can skip over
+         * between two polls, and far below the smallest change anyone can ask
+         * for by hand. See beltSpeed() for what this protects against.
+         */
+        const val TRIM_ARRIVED_KPH = 0.30
+
+        /**
          * Fallbacks only. The live values are in [Settings] — warm-up length,
          * cool-down length and warm-up speed are all set on the console now,
          * and these are what a fresh install starts from.
@@ -2348,8 +2359,31 @@ class MainActivity : Activity() {
         // number the console asked for.
         val residual = (rawDistance + 0.5) - modelMetres
         modelMetres += TRIM_POSITION * residual
-        trimResidual += TRIM_SMOOTH * (residual - trimResidual)
-        trimKph += TRIM_SPEED * trimResidual / dt * 3.6
+
+        // But only while the model has arrived.
+        //
+        // The model climbs at BELT_UP_KPH_PER_SEC, deliberately slower than the
+        // machine. While it is still climbing, the ground disagreeing with it
+        // says nothing about how fast the belt is going — only that the model
+        // has not caught up yet. Integrating that is integrating a known lag,
+        // and it winds up: pressing + from 3 to 8 km/h on 2026-08-10 put five
+        // km/h of climb into the correction, and the readout reached 8, kept
+        // going to 9, and then walked back down as the trim unwound. Exactly
+        // the wobble the estimator's own notes set out to avoid, arriving by
+        // the one route they did not consider.
+        //
+        // So the correction is frozen — not reset — for the couple of seconds
+        // the model spends catching up, and resumes untouched once it has.
+        // This costs nothing that matters: the model always converges on the
+        // target regardless of what the belt does, so a belt that genuinely
+        // cannot reach the commanded pace still ends up arrived, still gets
+        // corrected, and the odometer still outvotes the setpoint. That was
+        // the behaviour worth protecting and it is untouched.
+        val arrived = Math.abs(targetKph - modelKph) <= TRIM_ARRIVED_KPH
+        if (arrived) {
+            trimResidual += TRIM_SMOOTH * (residual - trimResidual)
+            trimKph += TRIM_SPEED * trimResidual / dt * 3.6
+        }
 
         // A small disagreement is noise or belt calibration. Let it bleed away
         // rather than sit there moving the last digit — see TRIM_SETTLE_KPH.

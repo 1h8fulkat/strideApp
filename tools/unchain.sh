@@ -67,14 +67,15 @@ else
     cat <<'EOF'
 
   NOTE: could not pin ADB over Wi-Fi with a property (this usually needs root).
-  Many consoles bring it back after a power cycle anyway. If yours does not,
-  plug in USB once and run:
+  Many consoles bring it back after a power cycle anyway — check that yours
+  does, because on a console built into a treadmill there is usually no USB
+  port to fall back on, and Wi-Fi ADB is the only way in.
 
-      adb tcpip 5555
-      adb connect <console-ip>:5555
+  Leave USB debugging enabled in Developer Options. That is the switch that
+  would lock you out.
 
-  Either way the treadmill is fine: STRIDE comes back on its own. This is only
-  about your remote access to it.
+  The treadmill itself is fine either way: STRIDE comes back on its own. This
+  is only about your remote access to it.
 
 EOF
 fi
