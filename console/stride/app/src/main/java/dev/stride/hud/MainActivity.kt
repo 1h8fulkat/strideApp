@@ -1646,7 +1646,12 @@ class MainActivity : Activity() {
 
         // Lets the HUD be inspected and driven from a laptop over adb, so
         // layout can be checked against fake state without arming the belt.
-        WebView.setWebContentsDebuggingEnabled(true)
+        //
+        // Debug builds only. The DevTools socket this opens will execute
+        // anything in the page's context — including the `Stride` bridge,
+        // which is to say the belt — for whoever can reach it. That is a fair
+        // trade on a bench and no trade at all on a treadmill in a hallway.
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
 
         cfg.seedFromBuildConfig()
         walker = cfg.defaultWalker()

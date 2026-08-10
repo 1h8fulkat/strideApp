@@ -283,18 +283,41 @@
     return s;
   }
 
+  /* What a stored password looks like from here. The console does not send
+     the password itself — Settings.json() sends `mqtt_pass_set` instead — so
+     this is a statement that one exists, never the thing itself. */
+  var SECRET_MASK = '••••••••';
+
   function field(key, value, short, type) {
     var f = el('input', 'sx-fld' + (short ? ' sx-short' : ''));
     f.value = value == null ? '' : value;
     if (type) f.type = type;
+    var secret = type === 'password';
+    var hadOne = secret && f.value === SECRET_MASK;
     // readonly: the caret and the (never-appearing) system keyboard are both
     // noise here. The on-screen keyboard owns the value.
     f.setAttribute('readonly', 'readonly');
     // Saved when the keyboard closes, not per keystroke — a bridge call per
     // character would write a broker host of "1", "19", "192"… and try to
     // connect to each one.
-    f.sxCommit = function () { save(key, f.value.trim()); };
-    press(f, function () { openKeyboard(f); });
+    f.sxCommit = function () {
+      var v = f.value.trim();
+      // A password box that was left alone must not wipe the password. This
+      // page is never given the stored one, so "empty" here means "nothing
+      // was typed", not "clear it" — and putting the mask back keeps the
+      // screen honest about the fact that one is still stored.
+      if (secret && (v === '' || v === SECRET_MASK)) {
+        if (hadOne) f.value = SECRET_MASK;
+        return;
+      }
+      save(key, v);
+    };
+    press(f, function () {
+      // Clear the mask before the keyboard opens, or the first thing typed
+      // lands on the end of eight bullets and gets saved that way.
+      if (secret && f.value === SECRET_MASK) f.value = '';
+      openKeyboard(f);
+    });
     return f;
   }
 
@@ -740,7 +763,8 @@
     g.appendChild(row('Port', '1883 plain, 8883 with TLS.',
       field('mqtt_port', S.mqtt_port, true)));
     g.appendChild(row('Username', '', field('mqtt_user', S.mqtt_user)));
-    g.appendChild(row('Password', '', field('mqtt_pass', S.mqtt_pass, false, 'password')));
+    g.appendChild(row('Password', '',
+      field('mqtt_pass', S.mqtt_pass_set ? SECRET_MASK : '', false, 'password')));
     g.appendChild(row('Use TLS', 'Off is reasonable on a home network you control.',
       toggle('mqtt_tls', !!S.mqtt_tls)));
     g.appendChild(row('Topic prefix',

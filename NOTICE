@@ -1,0 +1,56 @@
+STRIDE
+Copyright 2026 The Idea Works — https://theidea.works
+
+This product includes software developed as part of the STRIDE project,
+licensed under the Apache License, Version 2.0. You may obtain a copy of the
+License at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+See LICENSE for the full text.
+
+
+================================================================================
+Third-party components
+================================================================================
+
+Eclipse Paho Java Client — org.eclipse.paho.client.mqttv3, version 1.2.5
+--------------------------------------------------------------------------------
+Bundled unmodified in the console application (console/stride), where it is the
+MQTT client that talks to Home Assistant.
+
+Provided by the Eclipse Foundation under the terms of the Eclipse Public
+License Version 2.0 ("EPL") and the Eclipse Distribution License Version 1.0
+("EDL"):
+
+    https://www.eclipse.org/legal/epl-2.0
+    https://www.eclipse.org/org/documents/edl-v10.php
+
+Neither licence is the Apache License under which the rest of this project is
+released, and this notice is here because the EPL asks for it: if you
+redistribute a build of the console, the Paho terms travel with the copy of
+Paho inside it. Source for the library is available from the Eclipse
+Foundation at https://github.com/eclipse/paho.mqtt.java.
+
+
+Gradle Wrapper — gradle/wrapper/gradle-wrapper.jar
+--------------------------------------------------------------------------------
+Checked into console/stride and console/usbprobe so a clone can build without
+first installing Gradle. Part of the Gradle build tool, copyright Gradle Inc.,
+licensed under the Apache License, Version 2.0. It is build tooling and forms
+no part of the application installed on a treadmill.
+
+
+================================================================================
+What is not here
+================================================================================
+
+Nothing in this repository is derived from, or contains, iFit or NordicTrack
+software. The FitPro protocol notes in protocol/ record the observed behaviour
+of a serial link — what bytes were sent and what came back — and were written
+from that observation. No decompiled or disassembled vendor code is included,
+and none is required to build or run any of this.
+
+The treadmill, its firmware and its trademarks belong to their owners. This
+project is not affiliated with, endorsed by, or supported by iFit Health &
+Fitness Inc., NordicTrack, or any of their subsidiaries.

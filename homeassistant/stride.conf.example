@@ -62,6 +62,14 @@ notify_service:
 # the sources in packages/stride.yaml to match.
 treadmill_prefix: treadmill
 
+# The console's ADB address, for the tools that read the treadmill directly
+# rather than going through the broker — `stride_routes.py console`, mainly.
+# Leave it blank and they ask adb what is attached, which is usually right.
+# Fill it in if you keep more than one Android device plugged into this
+# machine. Remember it is only reachable while ADB over Wi-Fi is up, which
+# does not survive a power cycle — see docs/INSTALL.md.
+console_adb:
+
 
 # === Apple Health, via the iOS companion app ===============================
 # Only needed if you use the app. Skip all of this otherwise.

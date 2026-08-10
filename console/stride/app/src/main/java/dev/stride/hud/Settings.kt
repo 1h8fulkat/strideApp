@@ -375,7 +375,17 @@ class Settings(context: Context) {
         .put(MQTT_HOST, mqttHost())
         .put(MQTT_PORT, mqttPort())
         .put(MQTT_USER, mqttUser())
-        .put(MQTT_PASS, mqttPass())
+        // Deliberately not the password.
+        //
+        // This object is handed to the settings page, and anything that can
+        // read the page can read it — which on a debug build is anyone with
+        // the DevTools socket. The screen only ever needed to know *whether*
+        // a password is stored, so that is all it gets. The key is absent
+        // rather than empty on purpose: a reader that wants the password now
+        // gets `undefined` and fails loudly, where "" would quietly read as
+        // "no password set". See field() in stride-settings.js for the other
+        // half — an untouched box does not clear what it cannot see.
+        .put("mqtt_pass_set", mqttPass().isNotEmpty())
         .put(MQTT_TLS, mqttTls())
         .put(MQTT_PREFIX, mqttPrefix())
         .put(WARMUP_MIN, prefs.getInt(WARMUP_MIN, 2))

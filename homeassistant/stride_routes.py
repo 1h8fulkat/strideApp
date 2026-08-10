@@ -69,7 +69,40 @@ def read() -> list:
         sys.exit(f"the retained payload is not JSON ({e}). Left alone.")
 
 
-def console(serial: str = "192.168.0.159:5555") -> list:
+def adb_target(serial: str = "") -> str:
+    """Which console to talk to.
+
+    In order: what you named on the command line, what `console_adb:` names in
+    stride.conf, or whatever adb has attached — which is right far more often
+    than a fixed address, and is the difference between this working on one
+    bench and working on anyone's. It used to be a hardcoded IP, which was one
+    house's LAN baked into a published tool.
+    """
+    if serial:
+        return serial
+    named = conf("console_adb", "")
+    if named:
+        return named
+    try:
+        out = subprocess.run(["adb", "devices"],
+                             capture_output=True, text=True, timeout=10).stdout
+    except FileNotFoundError:
+        sys.exit("adb not found. brew install android-platform-tools.")
+    except subprocess.TimeoutExpired:
+        sys.exit("adb did not answer.")
+    found = [line.split()[0] for line in out.splitlines()[1:]
+             if line.strip().endswith("device")]
+    if len(found) == 1:
+        return found[0]
+    if not found:
+        sys.exit("No console attached. Plug in over USB, or set console_adb: "
+                 "in stride.conf, or name one:\n"
+                 "    stride_routes.py console <ip>:5555")
+    sys.exit("More than one device attached. Name the one you mean:\n" +
+             "\n".join(f"    stride_routes.py console {d}" for d in found))
+
+
+def console(serial: str = "") -> list:
     """What the treadmill has on disk, read over ADB.
 
     The console's copy is the one that decides what you can actually walk, and
@@ -77,6 +110,7 @@ def console(serial: str = "192.168.0.159:5555") -> list:
     arrives, so a console that was asleep or offline keeps an older list
     indefinitely and nothing upstream can tell.
     """
+    serial = adb_target(serial)
     pkg = "dev.stride.hud"
     try:
         out = subprocess.run(
