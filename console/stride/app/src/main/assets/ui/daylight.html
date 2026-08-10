@@ -123,6 +123,22 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 .shapes .card.pick .nm{color:#2a4a33}
 .shapes .card.pick .bl{color:#4a6b52}
 .shapes svg{position:absolute;left:0;bottom:0;width:100%;height:130px}
+/* The loop mark, top-right of a route card — see stride-core loopMark(). Its own
+   corner, and a 60px target: it is pressed by somebody about to stand on a
+   treadmill, and catching it by accident sets off twice the walk they chose.
+   Ink border like every other affordance here; a tint would vanish in the sun. */
+.shapes .loop{position:absolute;right:18px;top:18px;width:60px;height:60px;
+              background:var(--card);border:2px solid var(--ink);border-radius:4px}
+.shapes .loop svg{position:absolute;left:15px;top:15px;width:28px;height:28px;
+                  bottom:auto;fill:var(--dim)}
+.shapes .loop.on{background:var(--accent);border-color:var(--accent)}
+.shapes .loop.on svg{fill:#fff}
+/* Room for it. A route's name is somebody's typing on a phone, not a designed
+   label, so it wraps — and every child of this card is absolutely positioned,
+   which means a second line lands on the blurb rather than pushing it down. The
+   blurb drops on the routes step and the card can then take a two-line name. */
+.routes .shapes .nm{width:180px;line-height:1.15}
+.routes .shapes .bl{top:92px}
 
 .btn{position:absolute;width:200px;height:90px}
 .btn .lab{position:absolute;left:0;top:32px;width:100%;text-align:center;
@@ -261,6 +277,14 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 .sum .k{position:absolute;left:44px;top:80px;font-size:13px;letter-spacing:.3em;color:var(--dim)}
 .sum .h{position:absolute;left:44px;top:126px;width:1000px;font-size:96px;font-weight:600;
         line-height:1.04;letter-spacing:-.03em}
+/* The coach's closing line, under the headline and left-aligned with it —
+   editorial, like the rest of this one. It carried nothing but `margin-top`
+   until 2026-08-10, and every one of its siblings on this screen is absolutely
+   positioned, so it fell out of the flow they had all left and rendered at
+   0,0, on top of the kicker. Same fault in Ember, Cluster and Pacer, and only
+   the Original escaped it because its summary is an ordinary flex column. */
+.sum .sumcoach{position:absolute;left:44px;top:236px;width:1000px;height:58px;
+               overflow:hidden;font-size:20px;line-height:1.45;color:#3f6b52}
 .sum svg{position:absolute;left:44px;top:300px;width:1192px;height:150px}
 .sum .rule{top:474px}
 .sum .grid{position:absolute;left:44px;top:496px;width:1192px;display:flex}
@@ -297,8 +321,6 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
           font-size:112px;font-weight:200;color:#2b2822;font-variant-numeric:tabular-nums}
 .sleep .w{position:absolute;left:0;top:452px;width:1280px;text-align:center;
           font-size:17px;letter-spacing:.3em;text-transform:uppercase;color:#201d19}
-/* The coach's closing line on the summary. */
-.sumcoach{margin-top:12px;max-width:780px;font-size:20px;line-height:1.45;color:#3f6b52}
 </style>
 </head>
 <body>
@@ -566,7 +588,9 @@ STRIDE.DURATIONS.forEach(m => {
 
 /* Filled sparklines, because on paper a filled shape reads as ground and a
    bare line reads as a graph. */
-function groundCard(name, blurb, points, chosen, onPick) {
+/* `routeId` is set only for the route cards, and is what earns the loop mark:
+   a template has no direction to reverse. */
+function groundCard(name, blurb, points, chosen, onPick, routeId) {
   const lo = Math.min.apply(null, points), hi = Math.max.apply(null, points);
   const span = (hi - lo) || 1;
   const pts = points.map((v, i) =>
@@ -577,12 +601,16 @@ function groundCard(name, blurb, points, chosen, onPick) {
   b.innerHTML =
     '<span class="nm">' + STRIDE.esc(name) + '</span>' +
     '<span class="bl">' + STRIDE.esc(blurb) + '</span>' +
+    (routeId ? STRIDE.loopMark(flow.looped(routeId)) : '') +
     '<svg viewBox="0 0 260 110" preserveAspectRatio="none">' +
       '<polygon points="' + pts.join(' ') + ' 260,110 0,110" fill="' +
         (chosen ? '#c3d4c6' : '#dcd7c9') + '"/>' +
       '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' +
         (chosen ? '#3d6b4a' : '#1b1a17') + '" stroke-width="2"/></svg>';
-  tap(b, () => {
+  tap(b, (e) => {
+    // One handler for both halves of the card — the mark cannot be a button of
+    // its own inside this one. See stride-core tappedLoop().
+    if (routeId && STRIDE.tappedLoop(e)) { flow.toggleLoop(routeId); renderPlan(); return; }
     onPick();
     [].forEach.call(b.parentNode.children, c => c.classList.toggle('pick', c === b));
   });
@@ -598,10 +626,18 @@ function renderPlan() {
   if (picking) {
     $('planAsk').textContent = 'Which route?';
     flow.routes().slice(0, 4).forEach(r => {
+      /* Looped, the card describes the walk it will actually be: twice the
+         ground, and the climb recomputed the way Route.outAndBack does it —
+         an out-and-back's ascent is the outbound climb *plus* the outbound
+         descent, and is not twice anything. */
+      const on = flow.looped(r.id);
+      const km = (r.distance_m || 0) / 1000 * (on ? 2 : 1);
+      const up = on ? STRIDE.loopedClimb(r) : (r.climb_m || 0);
       groundCard(r.name || 'Route',
-                 (r.distance_m / 1000).toFixed(2) + ' km, with ' +
-                   Math.round(r.climb_m || 0) + ' m of climbing in it.',
-                 STRIDE.routePoints(r), false, () => flow.setRoute(r.id));
+                 km.toFixed(2) + ' km' + (on ? ' there and back' : '') + ', with ' +
+                   Math.round(up) + ' m of climbing in it.',
+                 STRIDE.routePoints(r), r.id === flow.route,
+                 () => flow.setRoute(r.id), r.id);
     });
     return;
   }
@@ -698,6 +734,13 @@ tap($('coach'), () => {
 window.coach = function(c){
   const line = (c && c.line) || '';
   if (!line) return;
+  /* Only over the walk. The ribbon is docked in the live screen's own band and
+     has no place to be anywhere else — a line that Home Assistant answers a
+     few seconds late, after the belt has stopped, used to land on top of the
+     summary. showScreen already clears it on the way out; this stops one
+     arriving afterwards. The closing line has its own place on the summary and
+     comes down a different road — see sumCoach. */
+  if (shownScreen !== 'scLive') return;
   $('coachText').textContent = line;
   $('coach').classList.add('show');
   clearTimeout(coachTimer);

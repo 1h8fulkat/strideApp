@@ -117,6 +117,11 @@ class Coach {
     /** A moment worth a sentence. [kind] picks the prompt, [detail] describes it. */
     data class Moment(val kind: String, val detail: String)
 
+    /** A line the console wrote itself, and which moment it belongs to. The
+     *  kind matters on the way out: "summary" is held for the summary screen
+     *  rather than shown over the walk, exactly as it is when HA answers. */
+    data class Local(val kind: String, val text: String)
+
     // Poll-thread state.
     private var lastSession = Session.WELCOME
     private var lastSpokeAt = 0L
@@ -144,6 +149,17 @@ class Coach {
     @Volatile private var awaitingSince = 0L
     @Volatile private var awaitingKind = ""
 
+    /**
+     * The line to show if that answer never arrives, built at the moment the
+     * moment happens rather than when the wait runs out — which is the only
+     * point where the snapshot is in hand. See [canned].
+     */
+    @Volatile private var awaitingCanned = ""
+
+    /** How many of each kind have fired this walk, so a canned line that has
+     *  to be used twice is not the same sentence twice. */
+    private val kindCount = HashMap<String, Int>()
+
     /** The last few lines actually shown, so the model can avoid repeating itself. */
     private val said = ArrayDeque<String>()
 
@@ -160,6 +176,8 @@ class Coach {
         spokenIncline = 0.0
         awaitingSince = 0L
         awaitingKind = ""
+        awaitingCanned = ""
+        kindCount.clear()
         openingSent = false
         said.clear()
     }
@@ -172,29 +190,58 @@ class Coach {
     @Synchronized fun hush() {
         awaitingSince = 0L
         awaitingKind = ""
+        awaitingCanned = ""
     }
 
-    /** Remember a line that was actually delivered. Called from the MQTT thread. */
-    @Synchronized fun heard(line: String) {
+    /**
+     * Remember a line that was actually delivered. Called from the MQTT thread.
+     *
+     * @return how long Home Assistant took to answer, in ms, or -1 if nothing
+     *         was waiting on it. Logged by the caller: the fallback firing is
+     *         the only symptom this has, and "it seemed laggy" is not something
+     *         you can act on. A number is.
+     */
+    @Synchronized fun heard(line: String): Long {
+        val took = if (awaitingSince == 0L) -1L
+                   else SystemClock.elapsedRealtime() - awaitingSince
         awaitingSince = 0L
         awaitingKind = ""
+        awaitingCanned = ""
         said.addLast(line)
         while (said.size > 3) said.removeFirst()
+        return took
     }
 
     /**
      * HA has had its chance and said nothing — the canned line for the moment
      * still in flight, or null if there is nothing waiting.
      */
-    @Synchronized fun timedOut(): String? {
+    @Synchronized fun timedOut(): Local? {
         if (awaitingSince == 0L) return null
         if (SystemClock.elapsedRealtime() - awaitingSince < FALLBACK_MS) return null
-        val line = fallback(awaitingKind)
+        return giveUp()
+    }
+
+    /**
+     * Stop waiting now and take the canned line.
+     *
+     * Separate from [timedOut] because there are two ways to end up without an
+     * answer and only one of them is a wait. If the broker is down, or the
+     * walker is not set up for coaching, then nothing was ever asked and the
+     * eight seconds are spent staring at a ribbon that was never going to
+     * arrive. Say the local line straight away instead.
+     *
+     * Returns null when there is nothing in flight.
+     */
+    @Synchronized fun giveUp(): Local? {
+        if (awaitingSince == 0L) return null
+        val local = Local(awaitingKind, awaitingCanned.ifEmpty { fallback(awaitingKind) })
         awaitingSince = 0L
         awaitingKind = ""
-        said.addLast(line)
+        awaitingCanned = ""
+        said.addLast(local.text)
         while (said.size > 3) said.removeFirst()
-        return line
+        return local
     }
 
     /**
@@ -229,6 +276,9 @@ class Coach {
         kindLastAt[moment.kind] = now
         awaitingSince = now
         awaitingKind = moment.kind
+        kindCount[moment.kind] = (kindCount[moment.kind] ?: 0) + 1
+        // Built here, while the frame that caused the moment is still in hand.
+        awaitingCanned = canned(moment.kind, s)
         return moment
     }
 
@@ -400,6 +450,9 @@ class Coach {
      * What the console says on its own when Home Assistant does not answer.
      * Flat and factual — the model's job is to be better than these, not the
      * other way round.
+     *
+     * The generic form, used when there is no frame to hand. [canned] is the
+     * one that actually gets shown, and it says more.
      */
     fun fallback(kind: String): String = when (kind) {
         "warmup_done" -> "Warm-up done. Settle into a pace that feels easy."
@@ -412,6 +465,72 @@ class Coach {
         "steady" -> "Nice rhythm — that pace is holding well."
         "summary" -> "That is another one done."
         else -> "Still going. That is the whole job."
+    }
+
+    /**
+     * The local line for a moment, built from the frame that caused it.
+     *
+     * Three "New stretch coming up" in one walk is what prompted this. Every
+     * one of them was correct and none of them was worth reading, and worse,
+     * they were *identical* — the same seven words, so the third one read as a
+     * console that had stopped paying attention rather than one whose coach was
+     * briefly unreachable.
+     *
+     * The console is not short of things to say here. It knows the gradient it
+     * is about to drive the deck to, how far off that is, how far he has come
+     * and how long he has been going. It cannot phrase any of it as well as the
+     * model can, which is the whole reason the model is asked first — but a
+     * flat sentence with a real number in it beats a warm one with nothing.
+     *
+     * [n] rotates the wording for the kinds that can fire repeatedly, so a walk
+     * with a poor connection does not become a loop.
+     */
+    private fun canned(kind: String, s: Snapshot): String {
+        val n = kindCount[kind] ?: 1
+        // 6.0 reads as "6", 6.5 stays "6.5". A hill is not a measurement.
+        fun pct(v: Double) = "%.1f".format(v).removeSuffix(".0")
+        return when (kind) {
+            "segment" -> {
+                val where = if (s.segmentLeftIsDistance)
+                    "In about ${s.segmentLeft.toInt()} metres"
+                else
+                    "In about ${s.segmentLeft.toInt()} seconds"
+                when {
+                    s.nextIncline > s.targetIncline + 0.4 ->
+                        "$where the ground rises to ${pct(s.nextIncline)}%. " +
+                        "Shorten the stride and stay tall."
+                    s.nextIncline < s.targetIncline - 0.4 ->
+                        "$where it drops to ${pct(s.nextIncline)}%. " +
+                        "Let the legs turn over — don't chase it."
+                    else ->
+                        "$where it settles at about ${pct(s.nextIncline)}%. " +
+                        "Hold what you have."
+                }
+            }
+            "milestone" -> {
+                val far = if (s.distance >= 1000) "%.1f km".format(s.distance / 1000)
+                          else "${s.distance.toInt()} m"
+                if (n % 2 == 1) "$far, ${Math.round(s.elapsed / 60)} minutes. Keep it steady."
+                else "$far down. That pace is doing the work."
+            }
+            "steady" -> "${"%.1f".format(s.speed)} km/h, held for minutes. " +
+                        "That is the rhythm — stay in it."
+            "pace_drop" -> "Sitting a little under your average of " +
+                           "${"%.1f".format(s.avgSpeed)}. No need to chase it."
+            "checkin" -> {
+                val mins = Math.round(s.elapsed / 60)
+                if (n % 2 == 1) "$mins minutes in, ${s.distance.toInt()} metres done."
+                else "Still going at $mins minutes. That is the whole job."
+            }
+            "warmup_done" ->
+                if (s.segments > 0) "Warm-up done — ${s.segments} stretches ahead. " +
+                                    "Settle into a pace that feels easy."
+                else fallback(kind)
+            "cooldown" -> "Easing down from ${"%.1f".format(s.avgSpeed)} average. Good work."
+            "summary" -> "${"%.2f".format(s.distance / 1000)} km, " +
+                         "${Math.round(s.elapsed / 60)} minutes. That is another one done."
+            else -> fallback(kind)
+        }
     }
 
     /** The moment, plus everything HA needs to write a sentence about it. */

@@ -140,6 +140,20 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 .shapes .slab.pick .nm{color:var(--accent)}
 .shapes .slab.pick .bl{color:var(--accent)}
 .shapes svg{position:absolute;right:34px;top:16px;width:420px;height:56px}
+/* The loop mark on a route lane — see stride-core loopMark(). The lane is a
+   row rather than a card, so the mark takes the right-hand end and the
+   sparkline shifts left to make room, on the routes step only. A 64px target:
+   it is pressed by somebody about to stand on a treadmill, and catching it by
+   accident sets off twice the walk they chose. */
+/* `> svg` and not `svg`: the loop mark carries one too, and a bare descendant
+   selector would tie with `.shapes .loop svg` on specificity. */
+.routes .shapes .slab > svg{right:118px;width:360px}
+.shapes .loop{position:absolute;right:24px;top:12px;width:64px;height:64px;
+              background:var(--control);border-radius:24px}
+.shapes .loop svg{position:absolute;left:18px;top:18px;right:auto;width:28px;height:28px;
+                  fill:var(--dim)}
+.shapes .loop.on{background:var(--accent)}
+.shapes .loop.on svg{fill:var(--on-accent)}
 
 .pill{position:absolute;height:80px;width:200px;background:var(--control);border-radius:40px}
 .pill .lab{position:absolute;left:0;top:28px;width:100%;text-align:center;
@@ -317,6 +331,15 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
         font-size:20px;font-weight:800;letter-spacing:.22em;color:var(--accent)}
 .sum .h{position:absolute;left:0;top:146px;width:1280px;text-align:center;
         font-size:80px;font-weight:800;letter-spacing:-.03em}
+/* The coach's closing line, between the headline and the profile band. It
+   carried nothing but `margin-top` until 2026-08-10, and every one of its
+   siblings on this screen is absolutely positioned — so it fell out of the
+   flow they had all left and rendered at 0,0, on top of the kicker. Same fault
+   in Ember, Cluster and Daylight, and only the Original escaped it because its
+   summary is an ordinary flex column. */
+.sum .sumcoach{position:absolute;left:240px;top:240px;width:800px;height:58px;
+               overflow:hidden;text-align:center;
+               font-size:20px;line-height:1.45;color:#b8e62e}
 .sum .band{position:absolute;left:36px;top:300px;width:1208px;height:140px;
            background:var(--slab);border-radius:32px;overflow:hidden}
 .sum .band svg{position:absolute;left:0;top:0;width:1208px;height:140px}
@@ -365,8 +388,6 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
           font-size:112px;font-weight:800;color:#221b33;font-variant-numeric:tabular-nums}
 .sleep .w{position:absolute;left:0;top:452px;width:1280px;text-align:center;
           font-size:17px;font-weight:800;letter-spacing:.3em;text-transform:uppercase;color:#181327}
-/* The coach's closing line on the summary. */
-.sumcoach{margin-top:12px;max-width:780px;font-size:20px;line-height:1.45;color:#b8e62e}
 </style>
 </head>
 <body>
@@ -537,11 +558,13 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
     <div class="cell"><div class="kk">CLIMBED</div><div class="vv" id="sumClimb">0</div></div>
   </div>
   <div class="foot">
-    <!-- Says where it goes, not how the walk went. "NICE ONE" was a reaction,
-         and it repeated the headline directly above it — two ways of reading
-         it as decoration rather than the way off this screen. Every other
-         button on the console names its action ("BACK TO IT", "I'M DONE"). -->
-    <button class="slab pick" id="btnDone"><span class="lab">BACK TO START</span></button>
+    <!-- DONE, like the other four. It has been "NICE ONE" and then "BACK TO
+         START", and neither was wrong — but the word on the way off the summary
+         is the one button the same person presses in whichever interface they
+         happen to be in that morning, and it should not change with the theme.
+         The five UIs differ in what they are made of, not in what they call the
+         way out. -->
+    <button class="slab pick" id="btnDone"><span class="lab">DONE</span></button>
     <div class="note" id="sumNote"></div>
   </div>
 </div>
@@ -698,8 +721,9 @@ STRIDE.DURATIONS.forEach(m => {
   $('mins').appendChild(b);
 });
 
-/* Four lanes, drawn as lanes. */
-function lane(name, blurb, points, chosen, onPick) {
+/* Four lanes, drawn as lanes. `routeId` is set only for the route lanes, and is
+   what earns the loop mark: a template has no direction to reverse. */
+function lane(name, blurb, points, chosen, onPick, routeId) {
   const lo = Math.min.apply(null, points), hi = Math.max.apply(null, points);
   const span = (hi - lo) || 1;
   const pts = points.map((v, i) =>
@@ -710,10 +734,14 @@ function lane(name, blurb, points, chosen, onPick) {
   b.innerHTML =
     '<span class="nm">' + STRIDE.esc(name) + '</span>' +
     '<span class="bl">' + STRIDE.esc(blurb) + '</span>' +
+    (routeId ? STRIDE.loopMark(flow.looped(routeId)) : '') +
     '<svg viewBox="0 0 420 60" preserveAspectRatio="none"><polyline points="' + pts +
       '" fill="none" stroke="' + (chosen ? '#c6f24e' : '#6d6088') +
       '" stroke-width="6" stroke-linecap="round"/></svg>';
-  tap(b, () => {
+  tap(b, (e) => {
+    // One handler for both halves of the lane — the mark cannot be a button of
+    // its own inside this one. See stride-core tappedLoop().
+    if (routeId && STRIDE.tappedLoop(e)) { flow.toggleLoop(routeId); renderPlan(); return; }
     onPick();
     [].forEach.call(b.parentNode.children, c => c.classList.toggle('pick', c === b));
   });
@@ -729,10 +757,18 @@ function renderPlan() {
   if (routes) {
     $('planAsk').textContent = 'Which route?';
     flow.routes().slice(0, 4).forEach(r => {
+      /* Looped, the lane says what the walk will actually be: twice the
+         ground, and the climb recomputed the way Route.outAndBack does it —
+         an out-and-back's ascent is the outbound climb *plus* the outbound
+         descent, and is not twice anything. */
+      const on = flow.looped(r.id);
+      const km = (r.distance_m || 0) / 1000 * (on ? 2 : 1);
+      const up = on ? STRIDE.loopedClimb(r) : (r.climb_m || 0);
       lane(r.name || 'Route',
-           (r.distance_m / 1000).toFixed(2) + ' km · ' +
-             Math.round(r.climb_m || 0) + ' m of climb',
-           STRIDE.routePoints(r), false, () => flow.setRoute(r.id));
+           km.toFixed(2) + ' km · ' + Math.round(up) + ' m of climb' +
+             (on ? ' · there and back' : ''),
+           STRIDE.routePoints(r), r.id === flow.route,
+           () => flow.setRoute(r.id), r.id);
     });
     return;
   }
@@ -829,6 +865,13 @@ tap($('coach'), () => {
 window.coach = function(c){
   const line = (c && c.line) || '';
   if (!line) return;
+  /* Only over the walk. The ribbon is docked in the live screen's own band and
+     has no place to be anywhere else — a line that Home Assistant answers a
+     few seconds late, after the belt has stopped, used to land on top of the
+     summary. showScreen already clears it on the way out; this stops one
+     arriving afterwards. The closing line has its own place on the summary and
+     comes down a different road — see sumCoach. */
+  if (shownScreen !== 'scLive') return;
   $('coachText').textContent = line;
   $('coach').classList.add('show');
   clearTimeout(coachTimer);

@@ -128,6 +128,50 @@ data class Route(
 ) {
     data class Segment(val startM: Double, val endM: Double, val incline: Double)
 
+    /**
+     * The same route walked out and then walked home.
+     *
+     * A recorded walk is usually one way — the 30 minutes from the hospital to
+     * the front door is a fine walk and a poor workout, because it is over when
+     * you have done it once. Turning round is what you would do outdoors, and
+     * it is a different walk from going round twice: the hill you climbed on
+     * the way out is the hill you come down on the way back, and the flat bit
+     * you enjoyed at the start is the drag at the end.
+     *
+     * So the return leg is the outbound one **reversed and inverted**, not
+     * repeated. At `distanceM + x` you are standing where you were at
+     * `distanceM - x`, facing the other way, which is exactly what negating the
+     * gradient means.
+     *
+     * Two honest limitations, both the machine's rather than this function's:
+     *
+     *  * **The deck stops at −3%.** Come back down anything steeper than that
+     *    and the descent is clamped, by the same `coerceIn` every route goes
+     *    through. A 9% climb on the way out is a 3% descent on the way home.
+     *    The ascents are untouched, because nothing outdoors was steeper going
+     *    down than the deck can climb going up.
+     *  * **Climb is recomputed, not doubled.** Total ascent over an out-and-back
+     *    is the outbound ascent plus the outbound *descent*, which for a route
+     *    that does not end where it started is not twice anything. It comes out
+     *    as the sum of the absolute rise of every segment.
+     *
+     * Per walk, never stored: the loop button on the picker chooses it for this
+     * session and the cached route is untouched.
+     */
+    fun outAndBack(): Route {
+        val total = distanceM
+        val back = segments.asReversed().map {
+            Segment(startM = total + (total - it.endM),
+                    endM = total + (total - it.startM),
+                    incline = -it.incline)
+        }
+        val ascent = segments.sumOf { Math.abs(it.incline) / 100.0 * (it.endM - it.startM) }
+        return copy(name = "$name, there and back",
+                    distanceM = total * 2,
+                    climbM = ascent,
+                    segments = segments + back)
+    }
+
     /** The incline at a given distance into the walk. */
     fun inclineAt(metres: Double): Double {
         if (segments.isEmpty()) return 0.0

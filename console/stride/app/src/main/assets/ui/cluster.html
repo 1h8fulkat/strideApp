@@ -126,6 +126,21 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 .shapes .bay.pick .nm{color:var(--accent)}
 .shapes .bay.pick .sub{color:#a9c4c9}
 .shapes svg{position:absolute;left:24px;bottom:26px;width:230px;height:100px}
+/* The loop mark, top-right of a route bay — see stride-core loopMark(). Its own
+   corner, and a 60px target: it is pressed by somebody about to stand on a
+   treadmill, and catching it by accident sets off twice the walk they chose. */
+.shapes .loop{position:absolute;right:18px;top:18px;width:60px;height:60px;
+              background:#11181a;border:1px solid var(--line);border-radius:8px}
+.shapes .loop svg{position:absolute;left:16px;top:16px;width:28px;height:28px;
+                  bottom:auto;fill:var(--dim)}
+.shapes .loop.on{border-color:var(--accent);background:#123037}
+.shapes .loop.on svg{fill:var(--accent)}
+/* Room for it. A route's name is somebody's typing on a phone, not a designed
+   label, so it wraps — and every child of this bay is absolutely positioned,
+   which means a second line lands on the sub-line rather than pushing it down.
+   The sub drops on the routes step and the bay can then take a two-line name. */
+.routes .shapes .nm{width:170px;line-height:1.2}
+.routes .shapes .sub{top:88px;width:244px}
 
 .key2{position:absolute;width:220px;height:100px;background:#1b2023;
       border:1px solid #2c3337;border-radius:6px}
@@ -269,10 +284,21 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
                    font-size:21px;letter-spacing:.2em;color:#ff8a7d}
 
 /* ---- summary ---------------------------------------------------------------- */
-.sum .k{position:absolute;left:0;top:140px;width:1280px;text-align:center;
+/* The kicker and the headline sit 24 px higher than they did, which is what
+   makes room for the coach's line below them. There was nothing in that space;
+   the grid, the button and every other band are exactly where they were. */
+.sum .k{position:absolute;left:0;top:116px;width:1280px;text-align:center;
         font-size:14px;letter-spacing:.34em;color:var(--accent)}
-.sum .h{position:absolute;left:0;top:196px;width:1280px;text-align:center;
+.sum .h{position:absolute;left:0;top:160px;width:1280px;text-align:center;
         font-size:64px;font-weight:200}
+/* The coach's closing line. It carried nothing but `margin-top` until
+   2026-08-10, and every one of its siblings on this screen is absolutely
+   positioned — so it fell out of the flow they had all left and rendered at
+   0,0, on top of the kicker. Same fault in Ember, Daylight and Pacer, and only
+   the Original escaped it because its summary is an ordinary flex column. */
+.sum .sumcoach{position:absolute;left:250px;top:242px;width:780px;height:56px;
+               overflow:hidden;text-align:center;
+               font-size:19px;line-height:1.45;color:#8fd6c8}
 .sum .grid{position:absolute;left:70px;top:320px;width:1140px;display:flex;flex-wrap:wrap}
 .sum .grid .cell{width:360px;height:130px;margin:0 30px 20px 0;position:relative;
                  background:var(--panel);border:1px solid var(--line);border-radius:10px}
@@ -317,8 +343,6 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
           font-size:112px;font-weight:200;color:#1c2225}
 .sleep .w{position:absolute;left:0;top:452px;width:1280px;text-align:center;
           font-size:17px;letter-spacing:.3em;text-transform:uppercase;color:#161b1d}
-/* The coach's closing line on the summary. */
-.sumcoach{margin-top:12px;max-width:760px;font-size:19px;line-height:1.45;color:#8fd6c8}
 </style>
 </head>
 <body>
@@ -609,7 +633,9 @@ STRIDE.DURATIONS.forEach(m => {
 /* Peak and gain rather than a blurb — the instrument reading of a profile. For
    a route both numbers are real rather than assumed: it was measured outdoors,
    so the gain is its own barometric ascent and not 30 minutes at 5 km/h. */
-function bay(title, sub, points, chosen, onPick) {
+/* `routeId` is set only for the route bays, and is what earns the loop mark:
+   a template has no direction to reverse. */
+function bay(title, sub, points, chosen, onPick, routeId) {
   const lo = Math.min.apply(null, points), hi = Math.max.apply(null, points);
   const span = (hi - lo) || 1;
   const pts = points.map((v, i) =>
@@ -620,9 +646,13 @@ function bay(title, sub, points, chosen, onPick) {
   b.innerHTML =
     '<span class="nm">' + STRIDE.esc(title) + '</span>' +
     '<span class="sub mono">' + STRIDE.esc(sub) + '</span>' +
+    (routeId ? STRIDE.loopMark(flow.looped(routeId)) : '') +
     '<svg viewBox="0 0 250 100" preserveAspectRatio="none"><polyline points="' + pts +
       '" fill="none" stroke="' + (chosen ? '#6fd0e0' : '#4a5257') + '" stroke-width="2"/></svg>';
-  tap(b, () => {
+  tap(b, (e) => {
+    // One handler for both halves of the bay — the mark cannot be a button of
+    // its own inside this one. See stride-core tappedLoop().
+    if (routeId && STRIDE.tappedLoop(e)) { flow.toggleLoop(routeId); renderPlan(); return; }
     onPick();
     [].forEach.call(b.parentNode.children, c => c.classList.toggle('pick', c === b));
   });
@@ -638,10 +668,17 @@ function renderPlan() {
   if (picking) {
     flow.routes().slice(0, 4).forEach(r => {
       const pts = STRIDE.routePoints(r);
+      /* Looped, the bay reads as the walk it will actually be: twice the
+         ground, and the climb recomputed the way Route.outAndBack does it —
+         an out-and-back's ascent is the outbound climb *plus* the outbound
+         descent, and is not twice anything. */
+      const on = flow.looped(r.id);
+      const km = (r.distance_m || 0) / 1000 * (on ? 2 : 1);
+      const up = on ? STRIDE.loopedClimb(r) : (r.climb_m || 0);
       bay((r.name || 'Route').toUpperCase(),
-          (r.distance_m / 1000).toFixed(2) + ' KM · CLIMB ' +
-            Math.round(r.climb_m || 0) + ' M',
-          pts, false, () => flow.setRoute(r.id));
+          km.toFixed(2) + ' KM · CLIMB ' + Math.round(up) + ' M' +
+            (on ? ' · BOTH WAYS' : ''),
+          pts, r.id === flow.route, () => flow.setRoute(r.id), r.id);
     });
     return;
   }
@@ -739,6 +776,13 @@ tap($('coach'), () => {
 window.coach = function(c){
   const line = (c && c.line) || '';
   if (!line) return;
+  /* Only over the walk. The ribbon is docked in the live screen's own band and
+     has no place to be anywhere else — a line that Home Assistant answers a
+     few seconds late, after the belt has stopped, used to land on top of the
+     summary. showScreen already clears it on the way out; this stops one
+     arriving afterwards. The closing line has its own place on the summary and
+     comes down a different road — see sumCoach. */
+  if (shownScreen !== 'scLive') return;
   $('coachText').textContent = line;
   $('coach').classList.add('show');
   clearTimeout(coachTimer);

@@ -123,9 +123,50 @@ class MainActivity : Activity() {
         /** Close enough to level to stop asking. The deck reports whole percent. */
         const val LEVEL_GRADE = 0.5
 
-        /** How close the derived speed must sit to the target before the readout
-         *  stops following it — see accumulate(). */
-        const val SETTLE_BAND_KPH = 0.45
+        /* ---- the speed readout ------------------------------------------
+         *
+         * See [beltSpeed]. The board will not tell us the belt speed, so it is
+         * estimated from two things that disagree in useful ways: what the belt
+         * was told to do, which is instant but may be a lie, and the odometer,
+         * which is the truth but arrives in whole metres and several seconds
+         * late. These are the weights on that trade.
+         */
+
+        /** How fast the model lets the belt gain and shed speed, km/h per
+         *  second. Deliberately a little *under* what the machine can do: a
+         *  readout that arrives slightly behind climbs smoothly, and one that
+         *  arrives ahead has to come back down, which is a wobble. */
+        const val BELT_UP_KPH_PER_SEC = 1.2
+        const val BELT_DOWN_KPH_PER_SEC = 2.5
+
+        /** How much of the odometer's disagreement is taken back per poll —
+         *  into where the model thinks it is, and into how fast it thinks it is
+         *  going. The second is small on purpose: it is an integrator, and it
+         *  is the only thing that can outvote the commanded pace. */
+        const val TRIM_POSITION = 0.15
+        const val TRIM_SPEED = 0.006
+
+        /** Whole metres at 6 km/h is a sawtooth with a 0.6 s period. Nothing
+         *  about a belt changes that fast, so the disagreement is smoothed
+         *  before it is allowed to move the number on screen. Without this the
+         *  last digit flickers about half of every second. */
+        const val TRIM_SMOOTH = 0.15
+
+        /** A disagreement smaller than this is measurement noise or belt
+         *  calibration, not news, and it bleeds away at [TRIM_SETTLE_PER_SEC]
+         *  so a steady pace reads as the pace that was asked for.
+         *
+         *  This is the old settle band, kept as a decision but moved: it used
+         *  to switch the whole readout over to the target once it came close,
+         *  which is why leaving it looked like a jump. Now it pulls the
+         *  *correction* to nothing, so arriving and leaving are both smooth,
+         *  and a belt that is genuinely a long way off still says so. */
+        const val TRIM_SETTLE_KPH = 0.35
+        const val TRIM_SETTLE_PER_SEC = 0.10
+
+        /** The correction is bounded, so one wild odometer frame cannot run the
+         *  readout away from the machine. */
+        const val TRIM_MAX_KPH = 4.0
 
         /**
          * Fallbacks only. The live values are in [Settings] — warm-up length,
@@ -136,9 +177,9 @@ class MainActivity : Activity() {
         const val WARMUP_MS = 2 * 60 * 1000L
         const val COOLDOWN_MS = 2 * 60 * 1000L
 
-        /** Window over which the odometer is differentiated — see beltSpeed(). */
-        const val WINDOW_MS = 4000L
-        const val MIN_SPAN_MS = 1500L
+        /** Longer than this between polls and the estimator re-seeds rather
+         *  than integrating across a gap it knows nothing about. */
+        const val MAX_STEP_MS = 2000L
 
         /**
          * How fast a guided walk is allowed to move the deck.
@@ -347,10 +388,18 @@ class MainActivity : Activity() {
     private var missingSpeedPolls = 0
     private var speedProbed = false
 
-    // Odometer samples the belt speed is differentiated from — see beltSpeed().
-    // Poll thread only.
-    private val distanceTrail = ArrayDeque<Pair<Long, Double>>()
-    private var smoothedKph = 0.0
+    // The belt-speed estimator — see beltSpeed(). Poll thread only.
+    /** What the belt was told to do, rate-limited: the feed-forward half. */
+    private var modelKph = 0.0
+    /** What the ground says it actually did, minus that: the correction half.
+     *  Persistent, because a correction the model erases every poll is not a
+     *  correction. */
+    private var trimKph = 0.0
+    /** Where the model believes the board's odometer should have got to, and
+     *  the smoothed disagreement with where it actually is. */
+    private var modelMetres = 0.0
+    private var trimResidual = 0.0
+    private var lastEstimateAt = 0L
 
     private val permissionReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -385,6 +434,7 @@ class MainActivity : Activity() {
             rampReason = "warmup"
             pendingWrite = mapOf(FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble())
             Log.i(TAG, "workout chosen: $type — warming up to ${cfg.warmupKph()} km/h")
+            repaint()
         }
 
         /**
@@ -440,6 +490,7 @@ class MainActivity : Activity() {
             // a circuit — so it goes over once rather than riding along with
             // every frame.
             pushPlan()
+            repaint()
         }
 
         /**
@@ -457,13 +508,19 @@ class MainActivity : Activity() {
          * than an omission: a route has its own length. Cutting it to fit a
          * time slot means never reaching the summit, which is the reason for
          * walking it again.
+         *
+         * @param loop walk it out and then walk it home — see [Route.outAndBack].
+         *             A property of *this* walk, chosen on the picker, not of
+         *             the route: the same 30-minute one-way walk is the right
+         *             length some mornings and half a walk on others.
          */
-        @JavascriptInterface fun chooseRoute(id: String) {
+        @JavascriptInterface fun chooseRoute(id: String, loop: Boolean) {
             if (dmk) return
-            val r = routes.byId(id) ?: run {
+            val found = routes.byId(id) ?: run {
                 Log.w(TAG, "no such route: $id")
                 return
             }
+            val r = if (loop) found.outAndBack() else found
 
             route = r
             planLoops = false
@@ -498,8 +555,10 @@ class MainActivity : Activity() {
                 FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble(),
             )
             Log.i(TAG, "route: ${r.name}, ${"%.2f".format(r.distanceM / 1000)} km, " +
-                    "${"%.0f".format(r.climbM)} m climb, ${r.segments.size} segments")
+                    "${"%.0f".format(r.climbM)} m climb, ${r.segments.size} segments" +
+                    if (loop) " (looped)" else "")
             pushPlan()
+            repaint()
         }
 
         /** Straight to the workout proper, keeping whatever pace is set. */
@@ -508,12 +567,14 @@ class MainActivity : Activity() {
             session = Session.ACTIVE
             phaseEndsAt = 0L
             Log.i(TAG, "warm-up skipped")
+            repaint()
         }
 
         /** Cool-down is the last thing standing between here and the summary. */
         @JavascriptInterface fun skipCooldown() {
             if (session != Session.COOLDOWN) return
             requestFinish()
+            repaint()
         }
 
         /** Belt to a halt, timer held. The board's own Pause is the legal exit
@@ -533,6 +594,7 @@ class MainActivity : Activity() {
                 FitPro.Field.KPH to 0.0,
                 FitPro.Field.WORKOUT_MODE to FitPro.Mode.PAUSE.toDouble(),
             )
+            repaint()
         }
 
         /**
@@ -551,6 +613,7 @@ class MainActivity : Activity() {
             rampReason = "resuming"
             pendingWrite = mapOf(FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble())
             Log.i(TAG, "resuming — ramping back to ${"%.1f".format(rampTo)} km/h")
+            repaint()
         }
 
         /**
@@ -568,6 +631,7 @@ class MainActivity : Activity() {
                 Log.i(TAG, "ended from a pause — no cool-down, belt already stopped")
                 clearPlan()
                 finishWorkout()
+                repaint()
                 return
             }
             val now = SystemClock.elapsedRealtime()
@@ -588,6 +652,7 @@ class MainActivity : Activity() {
                 FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble(),
             )
             Log.i(TAG, "cooling down for ${cfg.cooldownMs() / 1000}s")
+            repaint()
         }
 
         /**
@@ -611,6 +676,7 @@ class MainActivity : Activity() {
                 FitPro.Field.KPH to 0.0,
                 FitPro.Field.WORKOUT_MODE to FitPro.Mode.IDLE.toDouble(),
             )
+            repaint()
         }
 
         @JavascriptInterface fun speed(delta: Double) {
@@ -683,6 +749,8 @@ class MainActivity : Activity() {
         /** "I've put the key back." If it is still out, the next poll re-raises. */
         @JavascriptInterface fun ackDmk() {
             dmkLatched = false
+            dmk = false
+            repaint()
         }
 
         /**
@@ -1509,8 +1577,13 @@ class MainActivity : Activity() {
             .put("line", line)
             .put("kind", obj.optString("kind"))
             .toString()
-        Log.i(TAG, "coach: \"$line\"")
-        coach.heard(line)
+        // The round trip, every time. The fallback firing is the only symptom
+        // slow coaching has, and it looks identical whether Home Assistant took
+        // nine seconds or never answered at all. `grep "round trip"` over a
+        // walk's logcat says which, and how close to the wire the good ones are.
+        val took = coach.heard(line)
+        if (took >= 0) Log.i(TAG, "coach: round trip ${took} ms — \"$line\"")
+        else Log.i(TAG, "coach: \"$line\" (nothing was waiting on it)")
         if (obj.optString("kind") == "summary") {
             // Held, both the words and the audio. This was asked for at 98% of
             // the plan, so it arrives while there is still walking to do —
@@ -1577,16 +1650,42 @@ class MainActivity : Activity() {
             // unknown walker gets nothing rather than falling through to "not
             // Sam". Everyone else still gets the local canned lines, which
             // are generic and name nobody.
-            if (cfg.coachedFor(walker)) {
+            //
+            // Whether the question actually left the building decides how long
+            // it is worth waiting for an answer. If it did not — no broker, or
+            // a walker with no coaching set up — there is nothing in flight and
+            // the eight-second wait is eight seconds of silence for nothing.
+            // Take the local line now.
+            val asked = if (cfg.coachedFor(walker)) {
                 mqtt.publishEvent(coach.payload(moment, snap))
+                mqtt.connected
             } else {
                 Log.i(TAG, "coach: $walker is not set up for coaching, keeping it local")
+                false
             }
+            if (!asked) coach.giveUp()?.let { showLocalCoach(it, "nobody to ask") }
         }
-        coach.timedOut()?.let { line ->
-            Log.i(TAG, "coach: no answer from HA, using \"$line\"")
-            showCoach(org.json.JSONObject().put("line", line).put("kind", "local").toString())
+        coach.timedOut()?.let {
+            showLocalCoach(it, "no answer from HA in ${Coach.FALLBACK_MS / 1000}s")
         }
+    }
+
+    /**
+     * A line the console wrote itself.
+     *
+     * The closing line is held rather than shown, exactly as it is when Home
+     * Assistant answers — it is asked for at 98% of the plan, so a walk with no
+     * coaching used to put "That is another one done" over the belt with a
+     * minute still to walk, and then show a blank summary.
+     */
+    private fun showLocalCoach(local: Coach.Local, why: String) {
+        Log.i(TAG, "coach: $why, using \"${local.text}\"")
+        if (local.kind == "summary") {
+            summaryLine = local.text
+            return
+        }
+        showCoach(org.json.JSONObject()
+            .put("line", local.text).put("kind", "local").toString())
     }
 
     private fun pollLoop() {
@@ -1639,7 +1738,16 @@ class MainActivity : Activity() {
 
             if (writes != null) lastWriteMs = SystemClock.elapsedRealtime()
             val reply = conn.exchange(FitPro.readWrite(deviceId, READS, writes ?: emptyMap()))
-            if (reply == null) { Thread.sleep(POLL_MS); continue }
+            if (reply == null) {
+                // Same rule as the reject path below: a board that has stopped
+                // answering is a reason to say so, not a reason to stop
+                // drawing. This one used to fall straight through to the sleep
+                // and push nothing at all, which froze the screen for as long
+                // as the USB read kept timing out — a second per attempt.
+                repaint(boardOk = false)
+                Thread.sleep(POLL_MS)
+                continue
+            }
 
             // The board asking to be unlocked is not a dropped frame — it is a
             // request, and the only correct answer is to authenticate again.
@@ -1695,7 +1803,7 @@ class MainActivity : Activity() {
                 // console mid-render — buttons appeared dead, and the last
                 // thing painted stayed up. The board being unhappy is worth
                 // saying out loud; it is not a reason to stop drawing.
-                lastSnap?.let { push(it.copy(boardOk = false)) }
+                repaint(boardOk = false)
 
                 Thread.sleep(POLL_MS)
                 continue
@@ -1749,7 +1857,13 @@ class MainActivity : Activity() {
 
             val snap = accumulate(v)
             lastSnap = snap
-            push(snap)
+            // Through repaint() rather than push(), so the session stamped on
+            // the frame is the one that is true at the moment it is handed to
+            // the page. A press lands on a WebView thread and can arrive
+            // between accumulate() and here; pushing `snap` straight out would
+            // then put the screen the person just left back for a fifth of a
+            // second. One path, one answer to "which screen is this".
+            repaint()
             coachTick(snap)
             speakSummary()
 
@@ -1861,23 +1975,15 @@ class MainActivity : Activity() {
             missingSpeedPolls = 0
         }
 
+        // The estimator settles itself now — see beltSpeed(). There used to be
+        // a band here that swapped the readout for the commanded pace once the
+        // two came close, and stepping out of it was the jump.
         val derived = beltSpeed(rawDistance)
-        var speed = when {
+        val speed = when {
             actual > 0.0 -> actual          // if the board ever starts answering
             !Session.isMoving(session) -> 0.0
-            derived != null -> derived      // measured from the belt itself
-            else -> targetKph               // first few seconds, before a trend
-        }
-
-        // Settle the readout. Differentiating a whole-metre odometer gives a
-        // number that twitches — 4.8, 5.0, 5.1, 4.9 — which is distracting to
-        // read and, at a glance mid-run, worse than useless. Once the belt has
-        // plainly arrived at the commanded pace, show the commanded pace. The
-        // derived figure still drives everything else, and still shows during
-        // ramps, where the movement is real and worth watching.
-        if (rampTo == 0.0 && !stopping && targetKph > 0.0 &&
-            Math.abs(speed - targetKph) <= SETTLE_BAND_KPH) {
-            speed = targetKph
+            derived != null -> derived      // model, corrected by the odometer
+            else -> targetKph
         }
 
         if (Session.isMoving(session)) {
@@ -1981,7 +2087,7 @@ class MainActivity : Activity() {
     }
 
     /**
-     * Belt speed in km/h, measured by differentiating the odometer.
+     * Belt speed in km/h.
      *
      * `ActualKph` (field 16) reads 0.00 on this board at every speed. It is not
      * a framing bug — `ActualIncline` decodes correctly from the two bytes
@@ -1990,32 +2096,85 @@ class MainActivity : Activity() {
      * never fills it in.
      *
      * `Distance` *is* live and truthful though, so the belt tells us its speed
-     * whether or not the firmware will say so. Distance is whole metres, which
-     * is coarse at walking pace, so measure across a window rather than between
-     * consecutive polls: at 5 km/h a 4-second window covers ~5.5 m, good for
-     * about ±0.3 km/h, and it tightens as the pace rises.
+     * whether or not the firmware will say so.
      *
-     * Returns null until there is enough of a trend to be honest about.
+     * **What was wrong with reading it straight off the odometer.** Distance
+     * arrives in whole metres, which is far too coarse to differentiate between
+     * two polls, so it used to be differentiated across a four-second window.
+     * That window is the bug. It reports the average of the last four seconds,
+     * so the instant the pace changes the number is describing the pace you
+     * *were* walking, and the whole-metre quantisation puts about ±0.5 km/h of
+     * hash on top of it. A settle band hid all of that at a steady pace by
+     * switching the readout over to the commanded speed — which meant the
+     * moment you pressed a button the readout dropped out of the band, stopped
+     * showing 6.0 and started showing the four-second average with the hash
+     * back on it. Reported from the belt as "6 to 4.5 and then it slowly
+     * settles", repeatedly, and quite right.
+     *
+     * **What it does instead.** Two halves that fail in opposite directions:
+     *
+     *  * [modelKph] — the belt chasing the commanded pace at a bounded rate.
+     *    Instant and smooth, and wrong whenever the belt does not obey.
+     *  * [trimKph] — the difference the odometer has actually accumulated,
+     *    integrated slowly. Late and coarse, and the only thing here that has
+     *    measured any real ground.
+     *
+     * The model carries the change, so pressing 7 at 6 km/h climbs from 6 to 7
+     * and stops there. The trim carries the truth, so a belt that will not
+     * reach 7 is shown at what it is doing within about ten seconds, and a
+     * treadmill unplugged from its motor reads zero however hard the console
+     * asks for 7. Neither half alone is honest; the readout is the sum.
+     *
+     * Returns null when there is no walk in progress.
      */
     private fun beltSpeed(rawDistance: Double): Double? {
         val now = SystemClock.elapsedRealtime()
-        if (!Session.isMoving(session)) { distanceTrail.clear(); smoothedKph = 0.0; return null }
-
-        distanceTrail.addLast(now to rawDistance)
-        while (distanceTrail.size > 1 && now - distanceTrail.first().first > WINDOW_MS) {
-            distanceTrail.removeFirst()
+        if (!Session.isMoving(session)) {
+            modelKph = 0.0; trimKph = 0.0; trimResidual = 0.0; lastEstimateAt = 0L
+            return null
         }
 
-        val (t0, d0) = distanceTrail.first()
-        val spanMs = now - t0
-        if (spanMs < MIN_SPAN_MS) return null
+        // First frame of a walk, a poll gap long enough that integrating across
+        // it would be invention, or a board that has reset its odometer: seed
+        // and say nothing new. `+ 0.5` throughout because Distance is whole
+        // metres rounded down, and a half-metre bias would read as a permanent
+        // 0.2 km/h of shortfall at walking pace.
+        val gap = now - lastEstimateAt
+        if (lastEstimateAt == 0L || gap > MAX_STEP_MS || rawDistance + 0.5 < modelMetres - 5.0) {
+            modelMetres = rawDistance + 0.5
+            lastEstimateAt = now
+            return (modelKph + trimKph).coerceIn(0.0, maxKph)
+        }
+        lastEstimateAt = now
+        val dt = gap / 1000.0
 
-        val kph = (rawDistance - d0) / (spanMs / 1000.0) * 3.6
-        if (kph < 0 || kph > maxKph + 2.0) return smoothedKph.takeIf { it > 0.0 }
+        // Predict: the belt chases what it was told, no faster than a belt can.
+        val up = BELT_UP_KPH_PER_SEC * dt
+        val down = BELT_DOWN_KPH_PER_SEC * dt
+        modelKph += (targetKph - modelKph).coerceIn(-down, up)
 
-        // Light smoothing: the metre quantisation makes the raw figure twitch.
-        smoothedKph = if (smoothedKph == 0.0) kph else smoothedKph * 0.75 + kph * 0.25
-        return smoothedKph
+        val kph = (modelKph + trimKph).coerceAtLeast(0.0)
+        modelMetres += kph / 3.6 * dt
+
+        // Correct: how far off the ground says we are. Part goes straight back
+        // into position, so the residual measures the speed error rather than
+        // accumulating for ever; the rest is smoothed and integrated into the
+        // speed, which is the only path by which the odometer can overrule the
+        // number the console asked for.
+        val residual = (rawDistance + 0.5) - modelMetres
+        modelMetres += TRIM_POSITION * residual
+        trimResidual += TRIM_SMOOTH * (residual - trimResidual)
+        trimKph += TRIM_SPEED * trimResidual / dt * 3.6
+
+        // A small disagreement is noise or belt calibration. Let it bleed away
+        // rather than sit there moving the last digit — see TRIM_SETTLE_KPH.
+        if (Math.abs(trimKph) < TRIM_SETTLE_KPH) {
+            val bleed = TRIM_SETTLE_PER_SEC * dt
+            trimKph -= trimKph.coerceIn(-bleed, bleed)
+        }
+        trimKph = trimKph.coerceIn(-TRIM_MAX_KPH, TRIM_MAX_KPH)
+
+        return (modelKph + trimKph).coerceIn(0.0, maxKph)
     }
 
     /**
@@ -2050,6 +2209,54 @@ class MainActivity : Activity() {
     private fun push(s: Snapshot) {
         val json = s.toJson()
         runOnUiThread { web.evaluateJavascript("window.render($json)", null) }
+    }
+
+    /**
+     * Redraw now, on the strength of a button press, without waiting for the
+     * board to answer.
+     *
+     * Which screen the console shows is decided entirely by our own session
+     * state — but it only ever *changed* on the back of a good board frame,
+     * because [pollLoop] is the only thing that pushed. So every screen
+     * transition was queued behind a USB exchange, and when the board is slow
+     * or unhappy that is not 200 ms. A dropped frame costs a poll; a board
+     * that does not answer at all costs the full [FitProConnection] read
+     * timeout, one second, every attempt; a board refusing frames repaints the
+     * *previous* snapshot, which still says SUMMARY. Reported from the belt as
+     * DONE taking ages to react, and it is the same wait behind PAUSE and STOP.
+     *
+     * The board owns the numbers. It does not get a vote on which screen the
+     * person in front of it is looking at.
+     *
+     * The poll loop uses it too, with [boardOk] false, for the frames where
+     * there is no new telemetry to draw. Those used to repaint [lastSnap]
+     * verbatim, which meant a session change made on a WebView thread was
+     * undone a fifth of a second later by a snapshot from before it.
+     *
+     * Deliberately does not write [lastSnap]: this runs on a WebView thread and
+     * the poll thread owns that field. It is a repaint, not a state change —
+     * the authoritative frame is along in a fifth of a second either way.
+     */
+    private fun repaint(boardOk: Boolean = true) {
+        val base = lastSnap ?: return
+        val steps = planSteps
+        push(base.copy(
+            boardOk = boardOk,
+            session = session,
+            workout = workout,
+            dmk = dmk,
+            plan = planName,
+            segments = steps.size,
+            // Same rule accumulate() uses, so a repaint between two polls
+            // cannot show a segment number from the walk before this one.
+            segment = if (steps.isEmpty() || stepIndex < 0) 0 else stepIndex + 1,
+            summaryLine = summaryLine,
+            targetSpeed = targetKph,
+            targetIncline = targetGrade,
+            elapsed = elapsedSec(),
+            phaseLeft = phaseLeftSec(),
+            ramping = if (rampTo > 0.0) rampReason else "",
+        ))
     }
 
     private fun resolveDeviceId(): Boolean {

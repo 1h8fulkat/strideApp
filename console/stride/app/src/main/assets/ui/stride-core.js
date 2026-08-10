@@ -696,6 +696,9 @@ function flow(onStep) {
     shape: 'rolling',
     /** A recorded route's id, or null for one of the four templates. */
     route: null,
+    /** Walk the chosen route out and then home again — see loopMark(). Belongs
+     *  to this walk, not to the route, so it is never stored anywhere. */
+    loop: false,
 
     go: function (step) {
       f.step = step;
@@ -731,13 +734,33 @@ function flow(onStep) {
       // Either picker is entered clean, so a route chosen and backed out of
       // cannot arm the belt when a shape is picked afterwards.
       f.route = null;
+      f.loop = false;
       return f.go('plan');
     },
 
     /** True while the plan step is choosing a route rather than a shape. */
     pickingRoute: function () { return f.control === 'routes'; },
 
-    setRoute: function (id) { f.route = id; return f; },
+    /* Moving to a different route drops the loop rather than carrying it over.
+       Looping is a decision about a particular walk — "this one is only half an
+       hour one way" — and inheriting it silently is how somebody sets off on
+       twice the walk they chose. */
+    setRoute: function (id) {
+      if (id !== f.route) f.loop = false;
+      f.route = id;
+      return f;
+    },
+
+    /** Tapping the loop mark picks that route as well as looping it, the way
+     *  repeat on a music player applies to the thing you are playing. */
+    toggleLoop: function (id) {
+      f.loop = id === f.route ? !f.loop : true;
+      f.route = id;
+      return f;
+    },
+
+    /** Is this route the chosen one, and looped? */
+    looped: function (id) { return f.loop && f.route === id; },
 
     /** The routes cached on this console, or [] when there are none. */
     routes: function () {
@@ -753,7 +776,7 @@ function flow(onStep) {
       if (f.control === 'casual') { global.Stride.choose(f.mode); return f; }
       if (f.control === 'routes') {
         // Nothing to arm the belt with if no route was picked.
-        if (f.route) global.Stride.chooseRoute(f.route);
+        if (f.route) global.Stride.chooseRoute(f.route, f.loop);
         return f;
       }
       global.Stride.chooseGuided(f.shape, f.minutes);
@@ -1218,6 +1241,64 @@ function routePoints(r) {
   return out;
 }
 
+/* ---------------------------------------------------------------------------
+   THE LOOP MARK
+   ---------------------------------------------------------------------------
+   A recorded route is usually one way, and one way is not always a walk: the
+   half hour from the hospital to the front door is a fine walk and half a
+   workout. The mark turns that route into an out-and-back for *this* session —
+   Kotlin reverses the ground and inverts the gradients, so the hill you climbed
+   on the way out is the one you come down on the way home. See
+   Route.outAndBack.
+
+   The glyph is the repeat arrows everybody already knows from a music player,
+   because that is what it means and nothing else needs explaining.
+
+   It is a `<span>` inside the card's own button, not a button of its own. A
+   button inside a button is invalid and Chromium does the obvious wrong thing
+   with the nested tap; the card's single handler asks [tappedLoop] which half
+   of itself was hit. That keeps five interfaces on one tap handler each.
+   --------------------------------------------------------------------------- */
+
+var LOOP_PATH = 'M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z';
+
+/**
+ * Total ascent in metres of walking this route out and back.
+ *
+ * Mirrors `Route.outAndBack` in Routes.kt, and has to: a card that says "68 m
+ * of climb" beside a looped route is describing a walk nobody is going to take.
+ * Reversing the ground turns every descent into a climb, so the answer is the
+ * sum of the *absolute* rise of every segment — which for a route that does not
+ * end where it started is not twice its one-way figure.
+ */
+function loopedClimb(r) {
+  var segs = (r && r.segments) || [], m = 0;
+  for (var i = 0; i < segs.length; i++) {
+    m += Math.abs(segs[i][2]) / 100 * (segs[i][1] - segs[i][0]);
+  }
+  return m;
+}
+
+/** Markup for the mark. `on` lights it. Every UI styles `.loop` itself. */
+function loopMark(on) {
+  return '<span class="loop' + (on ? ' on' : '') + '">' +
+         '<svg viewBox="0 0 24 24"><path d="' + LOOP_PATH + '"/></svg></span>';
+}
+
+/**
+ * Did this tap land on the loop mark rather than on the card around it?
+ *
+ * Walks up from the target rather than using `closest`, which on this WebView
+ * is not reliable from an SVG child, and the thing under a finger here is
+ * usually the `<path>`.
+ */
+function tappedLoop(e) {
+  for (var n = e && e.target; n; n = n.parentNode) {
+    if (n.classList && n.classList.contains('loop')) return true;
+  }
+  return false;
+}
+
 /** Route names are typed by a person on a phone, and every UI builds its cards
  *  with innerHTML. */
 function esc(t) {
@@ -1239,6 +1320,9 @@ global.STRIDE = {
 
   flow: flow,
   routePoints: routePoints,
+  loopMark: loopMark,
+  tappedLoop: tappedLoop,
+  loopedClimb: loopedClimb,
   esc: esc,
   profiles: profiles,
   allowGuest: allowGuest,

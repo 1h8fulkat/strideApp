@@ -338,6 +338,7 @@ button.pulse{animation:pulse .9s ease-out 2}
 .chip.on{border-color:var(--accent);color:var(--accent);background:rgba(57,224,255,.14)}
 .plans{margin-top:30px;display:flex;justify-content:center}
 .plan{
+  position:relative;
   flex:none;width:250px;margin:0 11px;padding:22px 16px 18px;max-width:none;height:auto;
   background:rgba(22,37,90,.5);border:2px solid var(--track-line);border-radius:30px;
   color:var(--ink);font-family:inherit;display:block;text-align:center;
@@ -346,6 +347,20 @@ button.pulse{animation:pulse .9s ease-out 2}
 .plan .pn{font-size:22px;letter-spacing:.14em;text-transform:uppercase}
 .plan .pb{margin-top:7px;font-size:14px;color:var(--ink-faint);min-height:34px}
 .plan canvas{display:block;margin:6px auto 0}
+/* The loop mark on a route card — see stride-core loopMark(). Its own corner of
+   the card, and a 56px target: it is pressed by somebody about to stand on a
+   treadmill, and catching it by accident sets off twice the walk they chose. */
+.plan .loop{
+  position:absolute;right:10px;top:10px;width:52px;height:52px;
+  border:2px solid var(--track-line);border-radius:26px;
+}
+.plan .loop svg{position:absolute;left:12px;top:12px;width:28px;height:28px;fill:var(--ink-faint)}
+.plan .loop.on{border-color:var(--accent);background:rgba(57,224,255,.16)}
+.plan .loop.on svg{fill:var(--accent)}
+/* The name gets out from under it rather than running beneath it. This card is
+   ordinary flow, unlike the other four interfaces, so a second line pushes the
+   rest down instead of landing on it — the padding is all it needs. */
+.plan.route .pn{padding:0 50px;font-size:18px;letter-spacing:.06em;line-height:1.25}
 .back{
   position:absolute;left:38px;bottom:40px;width:150px;height:60px;max-width:none;
   font-size:15px;
@@ -588,8 +603,11 @@ button.pulse{animation:pulse .9s ease-out 2}
 <div class="screen" id="screenSummary">
   <div class="summary">
     <div class="head" id="sumHead">Nice work</div>
-    <div class="sumcoach" id="sumCoach"></div>
+    <!-- Under the kicker, not between it and the headline. "Nice work / WALK
+         COMPLETE" is one thought and the coach's sentence is another; splitting
+         the first with the second read as though the walk had been interrupted. -->
     <div class="sub" id="sumSub">walk complete</div>
+    <div class="sumcoach" id="sumCoach"></div>
     <div class="cards">
       <div class="card"><div class="k">Time</div><div class="v" id="sumTime">0:00</div></div>
       <div class="card"><div class="k">Distance</div><div class="v"><span id="sumDist">0</span><small>m</small></div></div>
@@ -760,6 +778,10 @@ let chosenShape = 'rolling';
 /* A route's id when one is picked, or null for a shape. They are alternatives
    for the same slot, so choosing either clears the other. */
 let chosenRoute = null;
+/* Walk the chosen route out and then home again — see stride-core loopMark().
+   A decision about this walk, not about the route, so it is never stored and
+   it does not follow you to a different one. */
+let chosenLoop = false;
 /* 'shapes' or 'routes' — which set step four is showing. */
 let planMode = 'shapes';
 
@@ -839,16 +861,39 @@ function buildGuidedStep(){
     $('askShape').textContent = 'Which route?';
     myRoutes().slice(0, 4).forEach(r => {
       const b = document.createElement('button');
-      b.className = 'plan' + (r.id === chosenRoute ? ' on' : '');
+      b.className = 'plan route' + (r.id === chosenRoute ? ' on' : '');
+      /* Looped, the card describes the walk it will actually be: twice the
+         ground, and the climb recomputed the way Route.outAndBack does it —
+         an out-and-back's ascent is the outbound climb *plus* the outbound
+         descent, and is not twice anything. */
+      const on = chosenLoop && r.id === chosenRoute;
+      const km = (r.distance_m || 0) / 1000 * (on ? 2 : 1);
+      const up = on ? STRIDE.loopedClimb(r) : (r.climb_m || 0);
       b.innerHTML = '<div class="pn">' + STRIDE.esc(r.name || 'Route') + '</div>' +
-                    '<div class="pb">' + (r.distance_m/1000).toFixed(2) + ' km · ' +
-                    Math.round(r.climb_m || 0) + ' m up</div>';
+                    '<div class="pb">' + km.toFixed(2) + ' km · ' +
+                    Math.round(up) + ' m up' +
+                    (on ? '<br>there and back' : '') + '</div>' +
+                    STRIDE.loopMark(on);
       const cv = document.createElement('canvas');
       cv.width = 210; cv.height = 56;
       b.appendChild(cv);
       plans.appendChild(b);
       sparkline(cv, STRIDE.routePoints(r));
-      tap(b, () => {
+      tap(b, (e) => {
+        // One handler for both halves of the card — the mark cannot be a button
+        // of its own inside this one. See stride-core tappedLoop().
+        if (STRIDE.tappedLoop(e)){
+          // Tapping the mark picks that route as well as looping it, the way
+          // repeat on a music player applies to what is playing.
+          chosenLoop = r.id === chosenRoute ? !chosenLoop : true;
+          chosenRoute = r.id;
+          buildGuidedStep();
+          return;
+        }
+        // Moving to a different route drops the loop rather than carrying it
+        // over: inheriting it silently is how somebody sets off on twice the
+        // walk they chose.
+        if (r.id !== chosenRoute) chosenLoop = false;
         chosenRoute = r.id;
         [...plans.children].forEach(c => c.classList.toggle('on', c === b));
       });
@@ -887,7 +932,7 @@ tap($('pickWalk'), () => {
 });
 tap($('pickRun'),  () => Stride.choose('run'));
 tap($('pickCasual'), () => Stride.choose('walk'));
-tap($('pickGuided'), () => { planMode = 'shapes'; chosenRoute = null;
+tap($('pickGuided'), () => { planMode = 'shapes'; chosenRoute = null; chosenLoop = false;
                              buildGuidedStep(); showStep(4); });
 tap($('pickRoutes'), () => { planMode = 'routes'; buildGuidedStep(); showStep(4); });
 tap($('btnBack'), () => showStep(Math.max(1, stepNow - 1)));
@@ -897,7 +942,7 @@ tap($('suggest'), () => { if (suggestKph > 0) Stride.setSpeed(suggestKph); });
 
 tap($('btnBegin'), () => {
   // A route carries its own length, so it never takes a duration.
-  if (planMode === 'routes') { if (chosenRoute) Stride.chooseRoute(chosenRoute); }
+  if (planMode === 'routes') { if (chosenRoute) Stride.chooseRoute(chosenRoute, chosenLoop); }
   else Stride.chooseGuided(chosenShape, chosenMinutes);
 });
 /* The settings screen is shared by all five interfaces — see
@@ -1006,6 +1051,15 @@ function showScreen(mode){
   ['screenWelcome','screenHud','screenSummary']
     .forEach(id => $(id).classList.toggle('on', id === target));
   if (mode === 'welcome' || mode === 'summary') closeFan();
+  /* The ribbon lives in the HUD's own band and belongs to the walk. It is
+     outside the screens so a line can land on any of them, which meant a line
+     still up when the belt stopped stayed up — over the summary's cards, at
+     y=478, where nothing had made room for it. The other four interfaces
+     already dropped it on the way out of the live screen; this one did not. */
+  if (target !== 'screenHud'){
+    clearTimeout(coachTimer);
+    $('coach').classList.remove('show');
+  }
   if (mode !== 'paused') $('confirm').classList.remove('show');
   if (mode !== 'welcome') STRIDE_SETTINGS.close();
   // Back to the first question whenever we land on the welcome screen, so a
@@ -1449,6 +1503,12 @@ tap($('coach'), dismissCoach);
 window.coach = function(c){
   const line = (c && c.line) || '';
   if (!line) return;
+  /* Only over the walk. A line Home Assistant answers a few seconds late, after
+     the belt has stopped, used to land on top of the summary — showScreen
+     clears one that is already up, this stops one arriving afterwards. The
+     closing line has its own place down there and comes by another road; see
+     sumCoach. */
+  if (SCREENS[shownMode] !== 'screenHud') return;
   $('coachText').textContent = line;
   $('coach').classList.add('show');
   clearTimeout(coachTimer);
