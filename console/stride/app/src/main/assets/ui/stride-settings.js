@@ -283,6 +283,39 @@
     return s;
   }
 
+  /* Somebody's age, which saves through setPersonAge rather than the global
+     store the ordinary stepper writes to — it belongs to a person, not to the
+     console.
+
+     "Not set" is a real value and the one it ships in: stepping below the
+     bottom clears it rather than sticking at a floor, because declining to
+     give a treadmill your age has to stay a supported answer. The first tap
+     up lands mid-range rather than at 13, so nobody has to press + forty
+     times to reach themselves. */
+  function ageStepper(p) {
+    var s = el('div', 'sx-step');
+    var v = el('div', 'sx-v');
+    var value = p.age || 0;
+    var draw = function () {
+      v.innerHTML = value >= 13
+        ? value + '<small>years</small>' : '<small>not set</small>';
+    };
+    var bump = function (d) {
+      if (value < 13) value = d > 0 ? 40 : 0;
+      else value = value + d;
+      if (value > 100) value = 100;
+      if (value < 13) value = 0;
+      draw();
+      try { S = JSON.parse(bridge().setPersonAge(p.name, value)); } catch (e) {}
+      p.age = value;
+    };
+    s.appendChild(press(el('button', '', '&minus;'), function () { bump(-1); }));
+    s.appendChild(v);
+    s.appendChild(press(el('button', '', '+'), function () { bump(1); }));
+    draw();
+    return s;
+  }
+
   /* What a stored password looks like from here. The console does not send
      the password itself — Settings.json() sends `mqtt_pass_set` instead — so
      this is a statement that one exists, never the thing itself. */
@@ -587,6 +620,13 @@
           try { S = JSON.parse(bridge().setPersonFlag(p.name, 'coached', on)); } catch (e) {}
           p.coached = on; drawPeople();
         })));
+      detail.appendChild(row('Age',
+        'Only used for heart-rate zones. With it the coach can tell "taking it ' +
+        'easy" from "working hard"; without it, it can still tell "harder than ' +
+        'earlier in this walk" and says so. Leaving it unset costs the first of ' +
+        'those and nothing else — the estimate behind it is rough anyway, so ' +
+        'the coach talks in words rather than numbers either way.',
+        ageStepper(p)));
       detail.appendChild(row('Record to Home Assistant',
         'Their distance, time and calories, published under their own name.',
         toggle(null, p.publish, function (on) {

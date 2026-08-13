@@ -84,6 +84,33 @@ KINDS = {
                  "be tiring or may have chosen to ease off — you do not know which, "
                  "so do not assume. Never tell him to speed up.",
     "steady": "He has held a steady pace for several minutes. Notice the rhythm.",
+    "hr_climb": "His heart rate has risen well clear of his own average for this "
+                "session and stayed there. This is effort, not a problem — a "
+                "pulse that climbs on a hill is the body doing its job. Say "
+                "something useful about breathing and holding rhythm. You are "
+                "not a doctor: do not diagnose, do not warn him about his "
+                "heart, and do not suggest he stops or slows for medical "
+                "reasons. Mention zones only if `hr_zone` is non-zero, and even "
+                "then in words — see the note under it below.",
+    "hr_settled": "His heart rate has come back down to his session average "
+                  "after a spell of working harder, and he is still walking. "
+                  "That is recovery on the move and it is worth noticing once. "
+                  "Keep it light — no physiology lecture, no numbers he does "
+                  "not need.",
+    "zone_low": "His heart rate has been sitting below the easy aerobic range "
+                "this walk is aiming for, for a full minute. This is an "
+                "invitation, not a correction — he may be deliberately taking "
+                "it gently, and that is allowed. Offer the pace the console "
+                "suggests, say it is there if he wants it, and let him decline "
+                "it without being nagged. Never imply he is doing badly.",
+    "zone_high": "His heart rate has been above the range this walk is aiming "
+                 "for, for a full minute. Deal with form before pace: a longer "
+                 "stride and longer breathing often settle it on their own, and "
+                 "that is the first thing to say. Then offer the easier pace as "
+                 "a fallback. Stay calm and matter-of-fact — a high heart rate "
+                 "on a climb is the body working, not an emergency. You are not "
+                 "a doctor: do not diagnose and do not tell him to stop for "
+                 "medical reasons.",
     "checkin": "Nothing in particular has happened. He is still going. Say "
                "something small, or something about the session so far.",
     "segment": "The ground is about to change. Say what is coming and what to do "
@@ -184,9 +211,25 @@ THE SESSION SO FAR
 - Incline: {{ trigger.payload_json.incline }} %
 - Calories: {{ trigger.payload_json.calories }}
 {% if trigger.payload_json.pulse | int > 0 %}
-- Heart rate: {{ trigger.payload_json.pulse }} bpm
+- Heart rate: {{ trigger.payload_json.pulse }} bpm{% if trigger.payload_json.avg_pulse | int > 0 %}
+  (session average {{ trigger.payload_json.avg_pulse }}, highest so far
+  {{ trigger.payload_json.max_pulse }}){% endif %}
+{% if trigger.payload_json.hr_zone | int > 0 %}
+- Effort: {{ ['', 'barely ticking over', 'easy aerobic', 'steady',
+              'working hard', 'flat out'][trigger.payload_json.hr_zone | int] }}
+  for him. This walk is aiming for easy aerobic through steady.
+  Say it in those words. Do NOT say "zone", do not say a percentage, and do
+  not quote his maximum: it is estimated from his age with about ten beats of
+  slack either way, and reciting it would give a rough number the authority of
+  a measured one.
+{% endif %}
+{% elif trigger.payload_json.avg_pulse | int > 0 %}
+- Heart rate: not reading at this moment — the strap has dropped out mid-walk
+  and should be back shortly. Earlier in this session it averaged
+  {{ trigger.payload_json.avg_pulse }} bpm. Say nothing about it; a gap in the
+  signal is not something he did.
 {% else %}
-- Heart rate: not measured — no strap is paired. Say nothing about it.
+- Heart rate: not measured in this session. Say nothing about it.
 {% endif %}
 
 HOW THIS COMPARES

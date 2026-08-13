@@ -218,6 +218,13 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 .tele .v .u{font-size:19px;font-weight:400;color:var(--dim)}
 .tele .hr .k{color:var(--faint)}
 .tele .hr .none{font-size:20px;margin-top:18px;color:var(--faint)}
+/* A reading that exists is a metric like the four beside it, and reads at the
+   same size and weight as they do. The faint styling belongs to the empty
+   state alone — it used to leak onto live readings, because the markup ships
+   with `none` on the value and only the *text* was ever swapped, never the
+   class. A heart rate is the one number here you cannot glance down and read
+   at 20px while walking. */
+.tele .hr.live .k{color:var(--dim)}
 
 /* control row. STOP is the only saturated fill on the console. */
 .controls{position:absolute;left:44px;top:658px;width:1192px;display:flex}
@@ -431,7 +438,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
     <div class="cell"><div class="k">Distance</div><div class="v"><span id="dist">0.00</span><span class="u"> km</span></div></div>
     <div class="cell"><div class="k">Calories</div><div class="v" id="cals">0</div></div>
     <div class="cell"><div class="k">Climbed</div><div class="v"><span id="climb">0</span><span class="u"> m</span></div></div>
-    <div class="cell hr"><div class="k">Heart rate</div><div class="none" id="pulse">no strap paired</div></div>
+    <div class="cell hr" id="hrCell"><div class="k">Heart rate</div><div class="none" id="pulse">no reading</div></div>
   </div>
 
   <div class="controls">
@@ -821,16 +828,31 @@ window.render = function(raw){
 
   /* Never applied to the belt. The plan owns the hill; the pace is the
      walker's, and this is a sentence rather than a control for that reason. */
-  const suggesting = guided && s.targets.suggest > 0 && !timed;
+  /* Which way it points depends on where the pace already is. "Lift to 6.0"
+     while walking 7.0 is the plan talking straight past the walker — and the
+     tap target under it would have *slowed him down*, which is the opposite of
+     what the word says. Inside a tenth either way there is nothing worth
+     saying, so the pill goes rather than nagging about a pace already held. */
+  const suggestDelta = s.targets.suggest - s.belt.speed;
+  const suggesting = guided && s.targets.suggest > 0 && !timed
+                     && Math.abs(suggestDelta) > 0.15;
   $('suggest').classList.toggle('off', !suggesting);
-    suggestKph = suggesting ? s.targets.suggest : 0;
-  if (suggesting) $('suggest').textContent = 'Lift to ' + s.targets.suggest.toFixed(1) + ' km/h';
+  suggestKph = suggesting ? s.targets.suggest : 0;
+  if (suggesting) $('suggest').textContent =
+    (suggestDelta > 0 ? 'Lift to ' : 'Ease to ') + s.targets.suggest.toFixed(1) + ' km/h';
 
   $('elapsed').textContent = mmss(s.session.elapsed);
   $('dist').textContent    = STRIDE.km(s.session.distance);
   $('cals').textContent    = nf(s.session.calories);
   $('climb').textContent   = Math.round(s.session.climb);
-  $('pulse').textContent   = s.session.pulse ? s.session.pulse + ' bpm' : 'no strap paired';
+  /* Class as well as text: `none` is the empty state's styling, and leaving it
+     on a live reading is what rendered a heart rate faint and half the size of
+     the calories next to it. */
+  const bpm = s.session.pulse;
+  $('hrCell').classList.toggle('live', bpm > 0);
+  const pulseEl = $('pulse');
+  pulseEl.className = bpm > 0 ? 'v' : 'none';
+  pulseEl.innerHTML = bpm > 0 ? bpm + '<span class="u"> bpm</span>' : 'no reading';
 
   $('fanLab').textContent  = STRIDE.fanLabel(s.fan);
   $('leadLab').textContent = timed ? 'SKIP' : s.phase === 'paused' ? 'RESUME' : 'PAUSE';

@@ -111,6 +111,11 @@ class MqttPublisher(
             Sensor("distance", "Distance", "m", "distance", null),
             Sensor("elapsed", "Elapsed", "s", "duration", null),
             Sensor("pulse", "Pulse", "bpm", null, "mdi:heart-pulse"),
+            // The session's own figures, so the post-workout coach can talk
+            // about the walk that just happened rather than only about the
+            // outdoor walks Apple Health knows the heart rate for.
+            Sensor("avgPulse", "Pulse Average", "bpm", null, "mdi:heart-pulse"),
+            Sensor("maxPulse", "Pulse Max", "bpm", null, "mdi:heart-pulse"),
             Sensor("calories", "Calories", "kcal", null, "mdi:fire"),
             Sensor("mode", "Mode", null, null, "mdi:state-machine"),
             Sensor("workout", "Workout", null, null, "mdi:walk"),
@@ -142,6 +147,13 @@ class MqttPublisher(
 
     /** Connect and publish discovery. Safe to call repeatedly. */
     fun connect(): String? {
+        // An attempt that threw leaves its client assigned — see below, where
+        // the client is deliberately stored before connecting. Building another
+        // on top of it strands the first, and the retry loop that exists for a
+        // broker which is not up yet does exactly this every few seconds until
+        // it is. Closing a client that never connected is a no-op.
+        try { client?.close() } catch (_: Exception) { }
+        client = null
         return try {
             val c = MqttClient(broker, CLIENT_ID, MemoryPersistence())
             c.setCallback(object : MqttCallbackExtended {

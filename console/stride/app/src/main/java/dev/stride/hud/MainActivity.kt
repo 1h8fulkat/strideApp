@@ -38,6 +38,9 @@ class MainActivity : Activity() {
         const val ACTION_USB_PERMISSION = "dev.stride.hud.USB_PERMISSION"
         const val POLL_MS = 200L
 
+        /** Request code for the location permission a BLE scan needs. */
+        const val SCAN_PERMISSION = 1
+
         /** How long to wait before answering a securityBlock again. The board
          *  can refuse for a moment while it settles; hammering VerifySecurity
          *  at 5 Hz would be its own kind of denial of service. */
@@ -77,6 +80,25 @@ class MainActivity : Activity() {
          *  refusal surfaces while the person is still looking at the button. */
         const val WRITE_TRIES = 15
         const val MQTT_EVERY_MS = 1000L
+
+        /**
+         * How long to wait before trying the *first* MQTT connection again,
+         * and the ceiling the wait backs off to.
+         *
+         * Paho reconnects by itself, but only once it has connected once: a
+         * first attempt that throws is final, and nothing after it ever tries
+         * again. On a console that starts itself at boot that is the common
+         * case, not the rare one — this machine autostarts 0.3 s after the
+         * boot broadcast and its Wi-Fi associates about ten seconds later, so
+         * the one attempt reliably lands in the window where there is no
+         * network to connect over. It came back up, ran a whole walk with the
+         * coach mute, and logged "mqtt down, event not sent" thirty times.
+         *
+         * Backing off to a minute rather than hammering: nothing here is
+         * urgent, and a broker that is down is usually down for a while.
+         */
+        const val MQTT_RETRY_MS = 5_000L
+        const val MQTT_RETRY_MAX_MS = 60_000L
 
         /**
          * The selectable interfaces, in the order the settings screen shows them.
@@ -342,6 +364,19 @@ class MainActivity : Activity() {
      */
     @Volatile private var walker = ""
 
+    /**
+     * The current walker's maximum heart rate, or 0 if they have not given an
+     * age. Cached rather than looked up per frame: reading it means parsing the
+     * whole person list out of JSON in SharedPreferences, and the poll loop
+     * builds a Snapshot five times a second. Refreshed wherever [walker] is
+     * set, which is the only thing that can change the answer mid-walk.
+     */
+    @Volatile private var walkerHrMax = 0
+
+    private fun refreshWalkerHrMax() {
+        walkerHrMax = cfg.person(walker)?.maxPulse ?: 0
+    }
+
     // --- guided walk ---------------------------------------------------------
     /** Empty on a casual walk. Set once at START and never rewritten mid-walk. */
     @Volatile private var planName = ""
@@ -435,6 +470,13 @@ class MainActivity : Activity() {
     @Volatile private var speedSum = 0.0
     @Volatile private var inclineSum = 0.0
     @Volatile private var samples = 0
+
+    /** Pulse keeps its own count: it is the one number that can be absent for
+     *  part of a walk, and averaging zeros from before the strap connected
+     *  would report a heart rate nobody had. */
+    @Volatile private var maxPulse = 0
+    @Volatile private var pulseSum = 0L
+    @Volatile private var pulseSamples = 0
 
     @Volatile private var maxKph = 19.0
     @Volatile private var minKph = 1.6
@@ -859,6 +901,7 @@ class MainActivity : Activity() {
 
         @JavascriptInterface fun setWalker(name: String) {
             walker = name
+            refreshWalkerHrMax()
             Log.i(TAG, "walker: $name")
         }
 
@@ -968,10 +1011,30 @@ class MainActivity : Activity() {
             return cfg.json().toString()
         }
 
+        /**
+         * Set or clear somebody's age. Zero, or anything outside what
+         * `220 - age` means anything for, clears it back to "has not said" —
+         * which is a supported state and not an error. See Settings.Person.age.
+         */
+        @JavascriptInterface fun setPersonAge(name: String, age: Int): String {
+            val clean = if (age in 13..100) age else 0
+            cfg.savePeople(cfg.people().map {
+                if (it.name == name) it.copy(age = clean) else it
+            })
+            // The walker may be the person just edited, and the zones the coach
+            // uses come off a cached copy.
+            refreshWalkerHrMax()
+            Log.i(TAG, "settings: age for $name -> ${if (clean > 0) "$clean" else "not given"}")
+            return cfg.json().toString()
+        }
+
         // --- heart rate strap ---
         @JavascriptInterface fun hrScan() {
-            ensureScanPermission()
-            strap.scan()
+            // Asking is asynchronous: the dialog is still on screen when this
+            // returns. Scanning through it is the documented way to get an
+            // empty list that looks exactly like "no straps here", so the scan
+            // waits for the answer — see onRequestPermissionsResult.
+            if (ensureScanPermission()) strap.scan()
         }
 
         @JavascriptInterface fun hrFound(): String = JSONArray().apply {
@@ -1077,13 +1140,22 @@ class MainActivity : Activity() {
     // --- applying settings ----------------------------------------------------
 
     /**
+     * Bumped on every apply, so a retry still sleeping against the old broker
+     * settings knows it has been superseded and stops.
+     */
+    private val mqttGen = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /**
      * Connect, reconnect or stay down, according to what is configured.
      *
      * Called at start-up and whenever a broker setting changes. **A console
      * with no broker set is a working treadmill, not a broken one** — it does
-     * not retry, does not warn, and does not log an error every poll.
+     * not retry, does not warn, and does not log an error every poll. A
+     * console with a broker set that could not be reached is a different
+     * thing, and does keep trying: see [retryMqtt].
      */
     private fun applyMqttSettings() {
+        val gen = mqttGen.incrementAndGet()
         if (!cfg.haEnabled()) {
             mqtt.close()
             Log.i(TAG, "mqtt: not configured, running standalone")
@@ -1096,8 +1168,51 @@ class MainActivity : Activity() {
         mqtt.onMessage(mqtt.uiTopic, ::onUiCommand)
         mqtt.onMessage(mqtt.personsTopic, ::onPersons)
         mqtt.onMessage(mqtt.routesTopic, routes::accept)
-        mqtt.connect()?.let { Log.w(TAG, "mqtt: $it") }
-        if (mqtt.connected) mqtt.publishUi(chosenUi())
+        val err = mqtt.connect()
+        if (err == null) {
+            if (mqtt.connected) mqtt.publishUi(chosenUi())
+            return
+        }
+        Log.w(TAG, "mqtt: $err")
+        retryMqtt(gen)
+    }
+
+    /**
+     * Keep trying until the broker answers, then hand over to Paho.
+     *
+     * **On its own thread, deliberately.** The start-up call to
+     * [applyMqttSettings] is made from [pollLoop], and sleeping there would
+     * stall telemetry, the coach and every board write behind a broker that
+     * has nothing to do with any of them. A treadmill whose belt stops
+     * responding because Home Assistant is down is a far worse machine than
+     * one that walks fine without a coach.
+     *
+     * Stops at the first success rather than staying resident: from there
+     * Paho's own `automaticReconnect` owns the connection, and it is better at
+     * it than this is. The gap being filled is only the one Paho does not
+     * cover — the first connection, which it never retries.
+     */
+    private fun retryMqtt(gen: Int) {
+        Thread {
+            var wait = MQTT_RETRY_MS
+            while (gen == mqttGen.get() && running) {
+                try {
+                    Thread.sleep(wait)
+                } catch (e: InterruptedException) {
+                    return@Thread
+                }
+                // Settings changed, or HA was switched off, while we slept.
+                if (gen != mqttGen.get()) return@Thread
+                val err = mqtt.connect()
+                if (err == null) {
+                    Log.i(TAG, "mqtt: connected on retry")
+                    if (mqtt.connected) mqtt.publishUi(chosenUi())
+                    return@Thread
+                }
+                wait = (wait * 2).coerceAtMost(MQTT_RETRY_MAX_MS)
+                Log.w(TAG, "mqtt: $err — trying again in ${wait / 1000}s")
+            }
+        }.start()
     }
 
     /**
@@ -1140,13 +1255,27 @@ class MainActivity : Activity() {
      * applies — and an empty list is exactly what "no straps here" looks like,
      * which makes it the single most confusing way for this feature to fail.
      */
-    private fun ensureScanPermission() {
-        if (android.os.Build.VERSION.SDK_INT < 23) return
+    private fun ensureScanPermission(): Boolean {
+        if (android.os.Build.VERSION.SDK_INT < 23) return true
         val perm = android.Manifest.permission.ACCESS_COARSE_LOCATION
-        if (checkSelfPermission(perm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            Log.i(TAG, "hr: asking for location permission so a BLE scan can return results")
-            requestPermissions(arrayOf(perm), 1)
+        if (checkSelfPermission(perm) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return true
         }
+        Log.i(TAG, "hr: asking for location permission so a BLE scan can return results")
+        requestPermissions(arrayOf(perm), SCAN_PERMISSION)
+        return false
+    }
+
+    /** The scan the user asked for, once they have answered the dialog. */
+    override fun onRequestPermissionsResult(
+        code: Int, permissions: Array<out String>, results: IntArray
+    ) {
+        super.onRequestPermissionsResult(code, permissions, results)
+        if (code != SCAN_PERMISSION) return
+        val granted = results.firstOrNull() ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (granted) strap.scan()
+        else Log.w(TAG, "hr: location refused, a BLE scan will find nothing")
     }
 
     // --- which interface ------------------------------------------------------
@@ -1655,6 +1784,9 @@ class MainActivity : Activity() {
         speedSum = 0.0
         inclineSum = 0.0
         samples = 0
+        maxPulse = 0
+        pulseSum = 0L
+        pulseSamples = 0
     }
 
     private fun elapsedSec(): Double {
@@ -1678,6 +1810,7 @@ class MainActivity : Activity() {
 
         cfg.seedFromBuildConfig()
         walker = cfg.defaultWalker()
+        refreshWalkerHrMax()
         applyBrightness()
         applyStrap()
 
@@ -2194,6 +2327,8 @@ class MainActivity : Activity() {
             else -> targetKph
         }
 
+        val pulse = pulseNow(v[FitPro.Field.PULSE]?.toInt() ?: 0)
+
         if (Session.isMoving(session)) {
             sessionDistance = (rawDistance - baseDistance).coerceAtLeast(0.0)
             sessionCalories = (rawCalories - baseCalories).coerceAtLeast(0.0)
@@ -2202,6 +2337,12 @@ class MainActivity : Activity() {
             speedSum += speed
             inclineSum += incline
             samples++
+            // Zero is "no reading", never "no pulse" — see pulseNow.
+            if (pulse > 0) {
+                if (pulse > maxPulse) maxPulse = pulse
+                pulseSum += pulse
+                pulseSamples++
+            }
         }
 
         val elapsedNow = elapsedSec()
@@ -2219,7 +2360,7 @@ class MainActivity : Activity() {
             distance = sessionDistance,
             elapsed = elapsedSec(),
             calories = sessionCalories,
-            pulse = pulseNow(v[FitPro.Field.PULSE]?.toInt() ?: 0),
+            pulse = pulse,
             fan = fanState,
             session = session,
             workout = workout,
@@ -2231,6 +2372,9 @@ class MainActivity : Activity() {
             maxSpeed = maxSpeed,
             avgIncline = if (samples > 0) inclineSum / samples else 0.0,
             maxIncline = maxIncline,
+            avgPulse = if (pulseSamples > 0) (pulseSum / pulseSamples).toInt() else 0,
+            maxPulse = maxPulse,
+            hrMax = walkerHrMax,
             who = walker,
             plan = planName,
             segment = if (step != null) stepIndex + 1 else 0,

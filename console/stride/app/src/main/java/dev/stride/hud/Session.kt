@@ -56,6 +56,20 @@ data class Snapshot(
     val maxSpeed: Double,
     val avgIncline: Double,
     val maxIncline: Double,
+    /** Averaged over the frames that had a reading, not over the walk — a
+     *  strap that connected late or dropped out must not drag the number
+     *  towards zero. Both are 0 when nothing ever read. */
+    val avgPulse: Int = 0,
+    val maxPulse: Int = 0,
+    /**
+     * The *walker's* maximum heart rate, or 0 when they have not given an age.
+     *
+     * Not [maxPulse], which is the highest beat seen during this walk. This one
+     * is a property of the person and the reason zones can be spoken about at
+     * all — see Settings.Person.age. Zero is the ordinary case and means the
+     * coach falls back to comparing against the session's own average.
+     */
+    val hrMax: Int = 0,
     /** Who tapped their name on the welcome screen. */
     val who: String = "",
     /** Guided walk, or empty on a casual one. */
@@ -127,6 +141,8 @@ data class Snapshot(
         append("\"maxSpeed\":${"%.1f".format(maxSpeed)},")
         append("\"avgIncline\":${"%.1f".format(avgIncline)},")
         append("\"maxIncline\":${"%.1f".format(maxIncline)},")
+        append("\"avgPulse\":$avgPulse,")
+        append("\"maxPulse\":$maxPulse,")
         append("\"who\":\"$who\",")
         append("\"plan\":\"$plan\",")
         append("\"segment\":$segment,")

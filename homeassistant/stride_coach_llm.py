@@ -356,6 +356,13 @@ TREADMILL
 - Most recent session: {{ (states('{TREADMILL_DISTANCE}') | float(0) / 1000) | round(2) }} km,
   {{ (states('{TREADMILL_ELAPSED}') | float(0) / 60) | round(0) | int }} min,
   {{ states('{TREADMILL_CALORIES}') }} kcal
+{% if states('sensor.treadmill_pulse_average') | int(0) > 0 %}
+- Heart rate on that session: {{ states('sensor.treadmill_pulse_average') }} avg,
+  {{ states('sensor.treadmill_pulse_max') }} peak. Measured by a chest strap,
+  averaged only over the part of the walk it was actually reading — so treat it
+  as the walk's character, not a precise total. Compare it to the outdoor walks
+  above only if the comparison says something he does not already know.
+{% endif %}
 - Treadmill state: {{ states('{TREADMILL_MODE}') }}
 
 NOTE: the weekly workout count is inflated by a logging fault before 29 July 2026.

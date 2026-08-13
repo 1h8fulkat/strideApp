@@ -244,6 +244,11 @@ button{font-family:inherit;color:inherit;background:none;border:none;
    and if a strap ever pairs mid-walk the cell fills without moving the row. */
 .tele .hr .k{color:var(--ghost)}
 .tele .hr .none{font-size:21px;font-weight:300;margin-top:26px;color:var(--ghost)}
+/* Designed absent, not designed *faint*. Once a strap is delivering, the cell
+   is a metric like the four beside it and reads like them — the ghost styling
+   is the empty state's, and it used to stay on live readings because only the
+   text was swapped, never the class. */
+.tele .hr.live .k{color:var(--dim)}
 
 /* ---- control row ---------------------------------------------------------
    One row, pinned. It never reflows between screens, the leftmost key changes
@@ -510,7 +515,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;
     <div class="cell"><div class="k">Distance</div><div class="v"><span id="dist">0.00</span><span class="u"> km</span></div></div>
     <div class="cell"><div class="k">Climbed</div><div class="v"><span id="climb">0</span><span class="u"> m</span></div></div>
     <div class="cell"><div class="k">Calories</div><div class="v" id="cals">0</div></div>
-    <div class="cell hr"><div class="k">Heart rate</div><div class="none" id="pulse">no strap paired</div></div>
+    <div class="cell hr" id="hrCell"><div class="k">Heart rate</div><div class="none" id="pulse">no reading</div></div>
   </div>
 
   <div class="controls">
@@ -968,17 +973,27 @@ window.render = function(raw){
 
   /* A suggestion. The plan never applies it — the person on the treadmill
      decides the pace, always — but they can take it with one tap. */
-  const suggesting = guided && s.targets.suggest > 0 && !timed;
+  /* Which way it points depends on where the pace already is — "lift to 6.0"
+     while walking 7.0 reads as the plan ignoring the walker, and the tap would
+     have slowed him down. Within a tenth there is nothing to suggest. */
+  const suggestDelta = s.targets.suggest - s.belt.speed;
+  const suggesting = guided && s.targets.suggest > 0 && !timed
+                     && Math.abs(suggestDelta) > 0.15;
   suggestKph = suggesting ? s.targets.suggest : 0;
   $('suggest').textContent = suggesting
-    ? 'lift to ' + s.targets.suggest.toFixed(1) + ' km/h'
+    ? (suggestDelta > 0 ? 'lift to ' : 'ease to ') + s.targets.suggest.toFixed(1) + ' km/h'
     : '';
 
   $('elapsed').textContent = mmss(s.session.elapsed);
   $('dist').textContent    = STRIDE.km(s.session.distance);
   $('climb').textContent   = Math.round(s.session.climb);
   $('cals').textContent    = nf(s.session.calories);
-  $('pulse').textContent   = s.session.pulse ? s.session.pulse + ' bpm' : 'no strap paired';
+  /* Class as well as text — see `.tele .hr.live`. */
+  const bpm = s.session.pulse;
+  $('hrCell').classList.toggle('live', bpm > 0);
+  const pulseEl = $('pulse');
+  pulseEl.className = bpm > 0 ? 'v' : 'none';
+  pulseEl.innerHTML = bpm > 0 ? bpm + '<span class="u"> bpm</span>' : 'no reading';
 
   $('fanLab').textContent = STRIDE.fanLabel(s.fan);
   $('leadLab').textContent =

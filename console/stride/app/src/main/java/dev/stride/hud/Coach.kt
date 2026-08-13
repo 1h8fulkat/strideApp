@@ -106,6 +106,92 @@ class Coach {
         const val DROP_GAP_MS = 5 * 60_000L
         const val STEADY_GAP_MS = 8 * 60_000L
 
+        /**
+         * Effort, measured against the walk rather than against a chart.
+         *
+         * The console does not know his age, his maximum, or his zones, and
+         * inventing them from a birthday would be worse than not having them —
+         * a number dressed up as physiology. What it does know is what his
+         * heart has been doing *for the last few minutes*, so that is the
+         * reference: twelve beats clear of the session's own average, held,
+         * means the work has genuinely got harder, whoever he is.
+         *
+         * Deliberately not a warning. A pulse that climbs on a hill is the
+         * system working, not a fault, and the coach's job here is to notice
+         * effort and say something useful about breathing and rhythm — never
+         * to diagnose, alarm, or tell anyone to stop. See KINDS in
+         * stride_coach_live.py, which says so to the model too.
+         */
+        const val HR_RISE_BPM = 12
+        const val HR_SETTLE_BPM = 5
+        const val HR_HOLD_MS = 45_000L
+        const val HR_GAP_MS = 6 * 60_000L
+
+        /**
+         * How long before a session average is worth comparing against.
+         *
+         * Early on the average is two minutes of warm-up, so everything looks
+         * like a climb against it. It has to have seen the walk before it can
+         * describe a departure from it.
+         */
+        const val HR_SETTLED_AFTER_S = 240.0
+
+        /**
+         * Heart-rate zones, as a share of maximum.
+         *
+         * The five everybody uses, and they only exist when the walker has
+         * given an age — see Settings.Person.age. Everything below is a
+         * fraction of `220 - age`, which is a population average with about
+         * ±10-12 bpm of spread between two people of the same age. That is
+         * wide enough that the coach must never read a zone number out as if
+         * it were measured: it says "easy aerobic" and "working hard", not
+         * "zone 2" and "78% of max". The boundaries are for deciding *whether
+         * to speak*, not for reciting.
+         */
+        const val Z1_TOP = 0.60   // recovery, barely working
+        const val Z2_TOP = 0.70   // easy aerobic — where a walk wants to live
+        const val Z3_TOP = 0.80   // steady
+        const val Z4_TOP = 0.90   // threshold; above this is Z5
+
+        /**
+         * The band a walk is aiming for, and how long it has to sit outside it
+         * before that is worth a word.
+         *
+         * Z2 and Z3 — easy aerobic through steady. Below Z2 the walk is not
+         * really doing anything, above Z3 it has stopped being a walk. Both
+         * edges are held for a good while before the coach says so, because a
+         * heart rate crosses a line constantly and a coach that reacts to every
+         * crossing is a nag.
+         */
+        const val ZONE_FLOOR = Z1_TOP
+        const val ZONE_CEIL = Z3_TOP
+        const val ZONE_HOLD_MS = 60_000L
+        const val ZONE_GAP_MS = 5 * 60_000L
+
+        /**
+         * How much pace to suggest when the heart rate wants moving.
+         *
+         * Deliberately a nudge and not a calculation. Turning "your heart rate
+         * is 8 bpm low" into a speed needs a model of *this* walker's response
+         * on *this* gradient, and the console has no such thing — inventing one
+         * would be exactly the number-dressed-up-as-physiology this file has
+         * argued against from the start. Half a km/h is a change a walker can
+         * feel and undo, and the coach can suggest it again in five minutes if
+         * it was not enough.
+         */
+        const val ZONE_NUDGE_KPH = 0.5
+
+        /**
+         * Zone names, in the coach's own register rather than the textbook's.
+         *
+         * Index is the zone, 1-5. These are what gets spoken; the numbers stay
+         * behind the curtain — see [Z1_TOP].
+         */
+        val ZONE_WORDS = arrayOf(
+            "", "barely ticking over", "easy aerobic", "steady",
+            "working hard", "flat out",
+        )
+
         /** How long to wait for HA before showing the canned line instead. */
         const val FALLBACK_MS = 8_000L
 
@@ -139,11 +225,36 @@ class Coach {
     /** The briefing is offered once per walk, at the top. */
     private var openingSent = false
 
+    /**
+     * Which zone a share of maximum falls in, 1-5.
+     *
+     * Indexes [ZONE_WORDS], and the word is the part anyone hears — see
+     * [Z1_TOP] for why the number stays out of the coach's mouth.
+     */
+    private fun zoneOf(share: Double): Int = when {
+        share < Z1_TOP -> 1
+        share < Z2_TOP -> 2
+        share < Z3_TOP -> 3
+        share < Z4_TOP -> 4
+        else -> 5
+    }
+
     /** The closing line is asked for once per walk. */
     private var summarySent = false
     private var dropSince = 0L
     private var steadySince = 0L
     private var steadyRef = 0.0
+
+    /** Effort state — see HR_RISE_BPM. [hrElevated] survives a strap dropping
+     *  out, because a lost signal is not the same as a heart rate coming down. */
+    private var hrHighSince = 0L
+    private var hrBackSince = 0L
+    private var hrElevated = false
+
+    /** Zone state — how long the heart rate has been under or over the band
+     *  the walk is aiming for. Only ever set when an age is known. */
+    private var zoneLowSince = 0L
+    private var zoneHighSince = 0L
 
     /** Set when a moment goes out, cleared when a line comes back. */
     @Volatile private var awaitingSince = 0L
@@ -173,6 +284,11 @@ class Coach {
         dropSince = 0L
         steadySince = 0L
         steadyRef = 0.0
+        hrHighSince = 0L
+        hrBackSince = 0L
+        hrElevated = false
+        zoneLowSince = 0L
+        zoneHighSince = 0L
         spokenIncline = 0.0
         awaitingSince = 0L
         awaitingKind = ""
@@ -421,6 +537,113 @@ class Coach {
             steadySince = 0L
         }
 
+        // --- zones: effort against the walker, not against the walk ----------
+        //
+        // The session-average test below is good at "harder than you have been"
+        // and blind to "you have been taking it easy for twenty minutes" — a
+        // walk that never troubles the heart is perfectly steady, and reads as
+        // fine. An age turns the pulse into a fraction of a maximum, which is
+        // the only way the console can tell those two apart.
+        //
+        // Both edges are worth saying and they are not symmetrical. Under the
+        // floor is an invitation and comes with a pace to try. Over the ceiling
+        // is about form first — stride, breathing — and pace second, because
+        // "slow down" is the advice a walker has already thought of.
+        if (moving && s.pulse > 0 && s.hrMax > 0 && s.elapsed >= HR_SETTLED_AFTER_S) {
+            val share = s.pulse.toDouble() / s.hrMax
+            val zone = zoneOf(share)
+
+            if (share < ZONE_FLOOR) {
+                zoneHighSince = 0L
+                if (zoneLowSince == 0L) zoneLowSince = now
+                if (now - zoneLowSince >= ZONE_HOLD_MS) {
+                    zoneLowSince = 0L
+                    val suggest = s.speed + ZONE_NUDGE_KPH
+                    return Moment("zone_low",
+                        "his heart rate has been sitting at ${s.pulse} bpm for the last " +
+                        "minute, which is ${ZONE_WORDS[zone]} for him and below the easy " +
+                        "aerobic range this walk wants. He is at " +
+                        "${"%.1f".format(s.speed)} km/h; a little more pace would bring it " +
+                        "up. Invite him to try ${"%.1f".format(suggest)} km/h if he has it " +
+                        "in him, and make clear it is an offer, not an instruction")
+                }
+            } else if (share > ZONE_CEIL) {
+                zoneLowSince = 0L
+                if (zoneHighSince == 0L) zoneHighSince = now
+                if (now - zoneHighSince >= ZONE_HOLD_MS) {
+                    zoneHighSince = 0L
+                    val suggest = (s.speed - ZONE_NUDGE_KPH).coerceAtLeast(0.0)
+                    return Moment("zone_high",
+                        "his heart rate has been at ${s.pulse} bpm for the last minute, " +
+                        "which is ${ZONE_WORDS[zone]} for him and above where this walk is " +
+                        "meant to sit. Tell him to lengthen his stride and breathe longer " +
+                        "first, and to ease back to about " +
+                        "${"%.1f".format(suggest)} km/h from " +
+                        "${"%.1f".format(s.speed)} if it does not settle. Calm, not alarmed " +
+                        "— a high heart rate on a hill is the body working, not a fault")
+                }
+            } else {
+                zoneLowSince = 0L
+                zoneHighSince = 0L
+            }
+        } else {
+            zoneLowSince = 0L
+            zoneHighSince = 0L
+        }
+
+        // --- effort: the one thing the belt cannot see -----------------------
+        //
+        // Speed and incline say what the treadmill is doing. Only the strap
+        // says what it is costing, and the gap between those two is the most
+        // useful thing the coach has ever been handed: the same hill on a
+        // tired day is a different walk, and until now nothing on this console
+        // could tell the difference.
+        //
+        // This runs whether or not an age is known, and is the *whole* of the
+        // heart-rate coaching when it is not: a walker who never gives one is
+        // still told when the work has got harder, measured against their own
+        // walk. Nobody has to tell a treadmill their age to be coached by it.
+        if (moving && s.pulse > 0 && s.avgPulse > 0 && s.elapsed >= HR_SETTLED_AFTER_S) {
+            val above = s.pulse - s.avgPulse
+
+            if (!hrElevated) {
+                if (above >= HR_RISE_BPM) {
+                    if (hrHighSince == 0L) hrHighSince = now
+                    if (now - hrHighSince >= HR_HOLD_MS) {
+                        hrHighSince = 0L
+                        hrElevated = true
+                        hrBackSince = 0L
+                        return Moment("hr_climb",
+                            "his heart rate has been sitting around ${s.pulse} bpm for the " +
+                            "last minute, about $above above his session average of " +
+                            "${s.avgPulse} — he is working harder than he has been")
+                    }
+                } else {
+                    hrHighSince = 0L
+                }
+            } else {
+                if (above <= HR_SETTLE_BPM) {
+                    if (hrBackSince == 0L) hrBackSince = now
+                    if (now - hrBackSince >= HR_HOLD_MS) {
+                        hrBackSince = 0L
+                        hrElevated = false
+                        return Moment("hr_settled",
+                            "his heart rate has come back to ${s.pulse} bpm, level with his " +
+                            "session average of ${s.avgPulse} again, after a spell of working " +
+                            "harder — he has recovered while still walking")
+                    }
+                } else {
+                    hrBackSince = 0L
+                }
+            }
+        } else {
+            // No reading, or too early to have an average worth comparing to.
+            // The timers stop; whether he is elevated is not something a lost
+            // signal gets to answer.
+            hrHighSince = 0L
+            hrBackSince = 0L
+        }
+
         // --- nothing has happened for a while --------------------------------
         if (lastSpokeAt > 0L && now - lastSpokeAt >= CHECKIN_MS) {
             return Moment("checkin", "nothing in particular has happened; he is simply still going")
@@ -440,6 +663,8 @@ class Coach {
         val gap = when (kind) {
             "pace_drop" -> DROP_GAP_MS
             "steady" -> STEADY_GAP_MS
+            "hr_climb", "hr_settled" -> HR_GAP_MS
+            "zone_low", "zone_high" -> ZONE_GAP_MS
             else -> 0L
         }
         val last = kindLastAt[kind] ?: return true
@@ -463,6 +688,10 @@ class Coach {
         "resumed" -> "Back on it."
         "pace_drop" -> "Pace has eased off a little."
         "steady" -> "Nice rhythm — that pace is holding well."
+        "hr_climb" -> "Effort is up. Breathe into it and keep the rhythm."
+        "hr_settled" -> "That has come back down. Nicely recovered."
+        "zone_low" -> "Heart rate is easing off. A touch more pace if you have it."
+        "zone_high" -> "Long stride, long breaths. Let that come down a little."
         "summary" -> "That is another one done."
         else -> "Still going. That is the whole job."
     }
@@ -517,6 +746,20 @@ class Coach {
                         "That is the rhythm — stay in it."
             "pace_drop" -> "Sitting a little under your average of " +
                            "${"%.1f".format(s.avgSpeed)}. No need to chase it."
+            "hr_climb" -> if (n % 2 == 1)
+                "${s.pulse} bpm, up from ${s.avgPulse} today. Breathe steady — " +
+                "you are doing the work now."
+            else
+                "Heart rate is up around ${s.pulse}. Long breaths, same rhythm."
+            "hr_settled" -> "Back to ${s.pulse} bpm. That recovered well while still moving."
+            // The canned pair carry the suggested pace too. These are what gets
+            // spoken when Home Assistant is unreachable, and a nudge without a
+            // number is the half of the advice that is no use.
+            "zone_low" -> "${s.pulse} bpm — easy going. Try " +
+                "${"%.1f".format(s.speed + ZONE_NUDGE_KPH)} if you have it in you."
+            "zone_high" -> "${s.pulse} bpm. Lengthen the stride, breathe long — " +
+                "and ease to ${"%.1f".format((s.speed - ZONE_NUDGE_KPH).coerceAtLeast(0.0))} " +
+                "if it stays up."
             "checkin" -> {
                 val mins = Math.round(s.elapsed / 60)
                 if (n % 2 == 1) "$mins minutes in, ${s.distance.toInt()} metres done."
@@ -548,6 +791,14 @@ class Coach {
             .put("incline", String.format("%.1f", s.incline).toDouble())
             .put("calories", Math.round(s.calories))
             .put("pulse", s.pulse)
+            .put("avg_pulse", s.avgPulse)
+            .put("max_pulse", s.maxPulse)
+            // The walker's own maximum, not this walk's — 0 when no age has
+            // been given, which is HA's signal that zones are not available and
+            // it must not talk about them. See Settings.Person.age.
+            .put("hr_max", s.hrMax)
+            .put("hr_zone", if (s.hrMax > 0 && s.pulse > 0)
+                zoneOf(s.pulse.toDouble() / s.hrMax) else 0)
             .put("who", s.who)
             .put("plan", s.plan)
             .put("segment_label", s.segmentLabel)

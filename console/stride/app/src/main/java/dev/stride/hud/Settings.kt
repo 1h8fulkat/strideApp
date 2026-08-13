@@ -123,11 +123,35 @@ class Settings(context: Context) {
         val publish: Boolean,
         /** `person.jane_doe`, or empty for somebody who exists only here. */
         val haPerson: String = "",
+        /**
+         * Years, or 0 for "has not said" — which is the default and stays the
+         * default. It buys one thing: heart-rate zones, via the usual
+         * 220-minus-age. That formula is crude enough (±10-12 bpm between two
+         * people of the same age) that the coach talks in its terms rather than
+         * quoting it, and a walker who leaves this alone still gets effort
+         * coaching measured against their own session average instead. Nobody
+         * has to tell a treadmill their age to be coached by it.
+         *
+         * Per person, not per console: there is a person registry here because
+         * more than one person walks on this machine, and one shared age would
+         * be wrong for all but one of them.
+         */
+        val age: Int = 0,
     ) {
         fun json(): JSONObject = JSONObject()
             .put("id", id).put("name", name)
             .put("coached", coached).put("publish", publish)
             .put("ha_person", haPerson)
+            .put("age", age)
+
+        /**
+         * Maximum heart rate, or 0 if unknown.
+         *
+         * Clamped to an age this formula means anything for. Below about 13 and
+         * above about 100 it is extrapolation, and a zone floor built on it
+         * would be a number the console had made up.
+         */
+        val maxPulse: Int get() = if (age in 13..100) 220 - age else 0
     }
 
     /**
@@ -198,6 +222,9 @@ class Settings(context: Context) {
                     coached = o.optBoolean("coached", true),
                     publish = o.optBoolean("publish", true),
                     haPerson = o.optString("ha_person"),
+                    // Absent for everyone who existed before zones did, which
+                    // is the same as declining to say — see Person.age.
+                    age = o.optInt("age", 0),
                 )
             }
         } catch (e: Exception) {
