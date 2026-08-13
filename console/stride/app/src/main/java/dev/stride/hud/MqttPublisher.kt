@@ -203,7 +203,14 @@ class MqttPublisher(
             client = c
             c.connect(opts)
             connected = true
-            subscribeAll()
+            // **No subscribeAll() here.** connectComplete above has already run
+            // — that is what the comment two lines up is saying — so doing it
+            // again subscribed to every topic twice on every start-up. The
+            // broker collapses the duplicate subscription, but it redelivers
+            // each retained message once per subscribe, so the console handled
+            // the persons list and the whole route set twice every boot. One
+            // owner of subscriptions, and it is the callback, because it is the
+            // only one of the two that also runs on an automatic reconnect.
             publishDiscovery()
             publishRaw(availTopic, "online", retained = true)
             Log.i(TAG, "mqtt connected to $broker")
