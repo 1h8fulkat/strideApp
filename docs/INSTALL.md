@@ -37,6 +37,7 @@ STRIDE is confirmed on one machine:
 
 | | |
 |---|---|
+| Model | NordicTrack C 1750 |
 | Generation | Gen 6, the "CLASSIC" embedded console |
 | GlassOS | 8.51.7.1070 |
 | System version | EKA2_20221110 |

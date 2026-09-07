@@ -80,9 +80,9 @@ an opinionated health dashboard if you want a starting point.
 
 ## Does this work on my treadmill?
 
-Proven on one Gen 6 NordicTrack with a FitPro board — device id `0x04`, incline
-−3 to +12 %, speed 1.6 to 20 km/h. Probably fine on other Gen 6 NordicTrack and
-ProForm consoles on the same board, but nobody has tried.
+Proven on one NordicTrack C 1750, a Gen 6 machine with a FitPro board: device
+id `0x04`, incline −3 to +12 %, speed 1.6 to 20 km/h. Probably fine on other
+Gen 6 NordicTrack and ProForm consoles on the same board, but nobody has tried.
 
 Gen 7 / iFit 2.0 is reported not to work, but nobody here has tested it. If you
 know better, please let us know.
