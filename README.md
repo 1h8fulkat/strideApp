@@ -2,7 +2,9 @@
 
 **Replace the iFit software on a NordicTrack treadmill. Keep the belt, lose the subscription.**
 
-> ### 🚧 Early days, so don't point this at a treadmill you love
+**Please note**: This is a hobby project one person and Claude Code, please don't get upset at that. Claude Code is enabling me to be able to do something I've dreamed of doing for a few years but didn't have the ability. Now I'm able to walk/run on my own physical hardware that I bought without it having someone else's subscription software on it. If you don't like that 90% of this was coded with AI tools like Claude Code - then this isn't the project for you. If you want to fork this, put your fingerprints all over it ... please do, I'd welcome that!
+
+> ### 🚧 Early days and factory reset has saved me more than once
 >
 > It works, and I walk on it most days, but it works on *my* machine. Nobody
 > else has installed it yet and I've no idea how it behaves on other hardware.
@@ -20,9 +22,9 @@
 > ever suggested. You decide when to go faster.
 
 > **Gen 7 / iFit 2.0.** Second-hand reports say this update closes the
-> privileged-mode route everything here depends on. Nobody here has seen it
-> happen. Declining it costs nothing, so decline it until somebody knows either
-> way.
+> privileged-mode route everything here depends on. If you know how to do this on Gen 7
+> let us know the steps and we can update this
+
 
 I got tired of iFit on my NordicTrack. Manual mode, a 400 m loop, and an
 interface that kept asking me to subscribe. The console turns out to be an
