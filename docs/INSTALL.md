@@ -85,6 +85,7 @@ On the iFit welcome screen:
    calculator such as <https://getresponsecode.com> (no connection to this
    project).
 5. Enter the response code.
+6. The console opens the default Android apps screen. Tap **Settings**.
 
 ### 1.3 Stop iFit locking you out again
 
