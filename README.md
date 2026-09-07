@@ -1,36 +1,43 @@
 # STRIDE
 
-**A NordicTrack treadmill, free of its iFit subscription prison, talking to Home Assistant.**
+**Replace the iFit software on a NordicTrack treadmill. Keep the belt, lose the subscription.**
 
-> # 🚧 Work in progress — don't run this yet
+> ### 🚧 Early days, so don't point this at a treadmill you love
 >
-> It works, but on one machine, set up by the person who wrote it. The install
-> guide is unfinished and nobody knows how it behaves on other hardware.
+> It works, and I walk on it most days, but it works on *my* machine. Nobody
+> else has installed it yet and I've no idea how it behaves on other hardware.
 >
-> Nothing here is supported — use it at your own risk. A factory reset does
-> restore the original software if it goes wrong.
+> Nothing here is supported, so use it at your own risk. If it goes wrong a
+> factory reset puts the original software back, and I've done that plenty of
+> times while building this.
 >
-> Read the code, take the [protocol notes](protocol/FITPRO_PROTOCOL.md), tell
-> me what board your treadmill has. Just don't point it at a machine you care
-> about yet.
+> Read the code, take the [protocol notes](protocol/FITPRO_PROTOCOL.md), and
+> tell me what board your treadmill has.
 
-> ⚠️ **This software drives a motorised treadmill.** Read [SAFETY.md](SAFETY.md)
-> before installing anything. The physical safety key remains the stop of
-> record; incline is driven, speed is only ever suggested.
+> ⚠️ **This drives a motorised treadmill.** Read [SAFETY.md](SAFETY.md) before
+> you install anything. Your physical safety key is still the stop that matters
+> and it cuts the motor directly. STRIDE drives the incline, but speed is only
+> ever suggested. You decide when to go faster.
 
 > **Gen 7 / iFit 2.0.** Second-hand reports say this update closes the
-> privileged-mode route everything here depends on. Nobody involved has seen it
+> privileged-mode route everything here depends on. Nobody here has seen it
 > happen. Declining it costs nothing, so decline it until somebody knows either
 > way.
 
-STRIDE replaces the software on a treadmill console with something you own. The
-belt and deck work without a login, without a subscription, and without an
-internet connection — and everything the machine knows appears in Home
-Assistant as ordinary entities.
+I got tired of iFit on my NordicTrack. Manual mode, a 400 m loop, and an
+interface that kept asking me to subscribe. The console turns out to be an
+Android tablet talking to a separate motor board, so I replaced what runs on
+the tablet and left the motor board alone.
+
+The belt and the deck now work with no login, no subscription and no internet.
+If you want it, everything the machine knows turns up in Home Assistant as
+ordinary entities. I built it with Claude Code alongside me, and there's a
+[full write-up of how the jailbreak works](https://theidea.works/blog/jailbreak-nordictrack-treadmill/)
+if you'd rather read the story than the steps.
 
 **v0.6**, in daily use. Still to do for v1.0: HACS packaging, a better
 dashboard, the iOS app on the App Store, and an install guide somebody other
-than the author has followed.
+than me has followed.
 
 ![STRIDE on a NordicTrack console](docs/screenshots/oval-original.png)
 
@@ -38,72 +45,74 @@ than the author has followed.
 
 ---
 
-## What it is, in three parts
+## What's in here
 
 | | |
 |---|---|
-| **`console/`** | An Android app for the treadmill's own screen. Talks to the motor board over USB, drives incline, runs guided walks, and offers five completely different interfaces. |
-| **`homeassistant/`** | Scripts that install the coach, the reminders and a health dashboard. **Optional** — the treadmill registers itself in Home Assistant without any of it. |
+| **`console/`** | The Android app that replaces iFit on the treadmill's own screen. Talks to the motor board over USB, drives the incline, runs guided walks, and gives you five completely different interfaces to pick from. |
+| **`homeassistant/`** | Optional scripts for the coach, the reminders and a health dashboard. The treadmill shows up in Home Assistant without any of them. |
+| **`protocol/`** | The [FitPro serial protocol](protocol/FITPRO_PROTOCOL.md), decoded and written down. If you're working on a different machine, start here. |
 
-There used to be a third part, `ios/`. It is now its own product,
-**[AH for HA](https://github.com/keranm/ah-for-ha)** — Apple Health into Home
-Assistant, with no treadmill in it at all. It grew to 39 metrics, rings, sleep
-stages and workouts, none of which are about walking on a belt, and most people
-who want that will never own a treadmill.
+There used to be an `ios/` folder. That's now its own thing,
+**[AH for HA](https://github.com/keranm/ah-for-ha)**, which pushes Apple Health
+into Home Assistant and has no treadmill in it at all. It grew to 39 metrics,
+rings, sleep stages and workouts, and most people who want that will never own
+a treadmill.
 
-STRIDE keeps the half that matters to it. An outdoor walk can still become a
-gradient profile the deck replays, because that arrives over MQTT as a published
-contract and the console has never known who publishes it. Swap the publisher
-and it cannot tell.
-
-Plus [`protocol/`](protocol/FITPRO_PROTOCOL.md) — the FitPro serial protocol,
-decoded and written down. Probably the most useful thing here if you're working
-on a different machine.
+STRIDE kept the half it cares about. An outdoor walk can still become a
+gradient profile the deck replays, because that arrives over MQTT and the
+console has never cared who published it.
 
 ---
 
 ## Home Assistant needs nothing installed
 
-The console publishes its own MQTT discovery. Put your broker details into
-Settings → Home Assistant on the treadmill and a **Treadmill** device shows up
-with speed, incline, distance, elapsed, pulse, calories, mode and workout, plus
-a device per person as they walk.
+Put your broker details into Settings → Home Assistant on the treadmill and a
+**Treadmill** device shows up, with speed, incline, distance, elapsed, pulse,
+calories, mode and workout, plus a device per person as they walk. The console
+publishes its own MQTT discovery, so there's no integration, no YAML and no
+custom component.
 
-No integration, no YAML, no custom component. Build whatever dashboard you
-like from it — there's no STRIDE dashboard you have to accept. A shipped one
-may come via HACS later.
+Build whatever dashboard you like from it. There's no STRIDE dashboard you have
+to accept, though I may ship one via HACS later.
 
 The `homeassistant/` scripts are for the extras: the coach, the reminders, and
 an opinionated health dashboard if you want a starting point.
 
 ---
 
-## Does this work on my treadmill?
+## Will it work on my treadmill?
 
-Proven on one NordicTrack C 1750, a Gen 6 machine with a FitPro board: device
-id `0x04`, incline −3 to +12 %, speed 1.6 to 20 km/h. Probably fine on other
-Gen 6 NordicTrack and ProForm consoles on the same board, but nobody has tried.
+Honestly, maybe. It's proven on one machine, mine:
 
-Gen 7 / iFit 2.0 is reported not to work, but nobody here has tested it. If you
-know better, please let us know.
+| | |
+|---|---|
+| Model | NordicTrack C 1750 |
+| Generation | Gen 6, the embedded "CLASSIC" console |
+| Motor board | FitPro, device id `0x04` |
+| Reported ranges | incline −3 to +12 %, speed 1.6 to 20 km/h |
 
-[`console/usbprobe`](console/usbprobe) reads your board and reports what it is,
-without changing anything. It is an app you install on the console, so it needs
-ADB and the iFit software disabled first, which is step 6 above rather than
-something you can run today. **Please open an issue with what it says,** working
-or not. A list of known-good boards would be the most useful thing this project
-could have, and it doesn't exist.
+Other Gen 6 NordicTrack and ProForm consoles on the same board are probably
+fine, because the protocol looks like a family rather than a single model, but
+nobody has tried. You also need a console you can reach with `adb`, and that's
+the part that varies most by model and year.
 
-You also need a console you can reach with `adb`, which is the part that varies
-most by model and year.
+[`console/usbprobe`](console/usbprobe) asks your board what it is and changes
+nothing. It's an app you install on the console, so it needs ADB and the iFit
+software out of the way first, which makes it step 6 below rather than
+something you can run today.
+
+**Please open an issue with whatever it tells you,** working or not. A list of
+known-good boards would be the most useful thing this project could have and it
+doesn't exist yet. I'm not buying more treadmills to build one.
 
 ---
 
 ## Installing
 
-**[docs/INSTALL.md](docs/INSTALL.md)** — but read the banner above first. That
-guide has not yet been followed by anyone who did not already know the answers,
-and it says so at the top and marks the places it is weakest.
+**[docs/INSTALL.md](docs/INSTALL.md)** has the full step by step, but read the
+banner at the top of this page first. Nobody who didn't already know the
+answers has followed that guide yet, and it marks its own weak spots.
 
 In outline:
 
@@ -123,16 +132,20 @@ In outline:
 8. **Optional:** enter broker details on the console to get the treadmill into
    Home Assistant, then add the coach.
 
-Stop after step 7 and you have a treadmill with no subscription. Steps 1 to 7
+Stop after step 7 and you've got a treadmill with no subscription. Steps 1 to 7
 need nothing installed on the Home Assistant side.
+
+If you aren't a confident coder (I'm not), point Claude Code at this repo, give
+it the treadmill's IP address, and ask it to follow the install guide over ADB.
+That's how most of my own installs have gone.
 
 ---
 
 ## Configuration
 
 **The console configures itself.** Broker details, who walks, units, warm-up,
-coach, heart rate, display — all in Settings on the treadmill's own screen. No
-config files, no rebuild.
+coach, heart rate, display: all of it lives in Settings on the treadmill's own
+screen. No config files, no rebuild.
 
 **The Home Assistant side reads one file:**
 
@@ -141,42 +154,45 @@ cp homeassistant/stride.conf.example homeassistant/stride.conf
 ```
 
 Every key is documented in the example. Leave anything blank and that subject
-is simply absent — no scale, no blood-pressure cuff, no phone. The coach says
-nothing about what it wasn't given rather than guessing.
+is simply absent, so no scale, no blood-pressure cuff, no phone. The coach says
+nothing about what it wasn't given rather than guessing at it.
 
 `coach_ai_task` has no default, because which AI entity you have depends on
 which integration you set up.
 
 **For weekly and monthly totals**, copy
 [`homeassistant/packages/stride.yaml`](homeassistant/packages/stride.yaml) into
-your Home Assistant config. The console's distance counter resets every walk, so
-the accumulating has to happen in HA. That file also creates the helpers the
+your Home Assistant config. The console's distance counter resets every walk,
+so the accumulating has to happen in HA. That file also creates the helpers the
 coach and reminders need.
 
 ---
 
-## Design decisions worth knowing
+## How it's put together
+
+A few decisions that will save you reading the code to find them.
 
 - **Kotlin owns the treadmill, HTML owns the screen.** The five interfaces are
-  HTML in a WebView, so they can be designed in a browser. The buttons do what
-  buttons do — tap SPEED+ and the belt speeds up — but every request goes
-  through Kotlin, which clamps it to what the board says it can do. A bad
-  layout can't outrun the machine.
-- **The coach decides when to speak; Home Assistant decides what it says.**
-  With HA unreachable it still marks your kilometres from a set of built-in
-  lines.
-- **A stale number is worse than a missing one.** Every health metric carries
-  its age, and anything that hasn't changed since midnight is withheld rather
-  than shown as today's. Learned the hard way, from a coach cheerfully
-  reporting yesterday's step count at 7am.
-- **Coaching and recording are per person**, not per console. A guest gets
-  neither.
+  HTML in a WebView, so you can design them in a browser. Tap SPEED+ and the
+  belt speeds up, but the request goes through Kotlin first, which clamps it to
+  whatever the board says it can do. A bad layout can't outrun the machine.
+- **The coach decides when to speak, Home Assistant decides what it says.**
+  With HA unreachable it still marks your kilometres, using a set of lines
+  built into the console.
+- **Never hand over a number without its age.** Health metrics that reset at
+  midnight are withheld entirely if they haven't changed since midnight, rather
+  than being passed on as today's. This one came from a real incident: the
+  sensors hold yesterday's closing total and look exactly like today's running
+  total, so the coach quoted yesterday's numbers back at me as though they were
+  fresh.
+- **Coaching and recording are per person, not per console.** Guests get
+  neither. They're summarised at the end of a walk and then forgotten.
 
 ---
 
 ## Licence
 
-[Apache-2.0](LICENSE). No warranty — see [SAFETY.md](SAFETY.md).
+[Apache-2.0](LICENSE). No warranty, and see [SAFETY.md](SAFETY.md).
 
 STRIDE is an independent project, built for compatibility with hardware its
 authors own. Not affiliated with or endorsed by iFIT, ICON Health & Fitness,
