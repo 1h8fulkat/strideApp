@@ -3,16 +3,13 @@
 > 🚧 **DRAFT.** Nobody has followed this page end to end on a factory-reset
 > machine. [Report anything that does not match](https://github.com/keranm/strideApp/issues).
 
-## ⛔ Never accept the Gen 7 / iFit 2.0 update
-
-- If the console offers Gen 7 or iFit 2.0, decline it.
-- Keep declining it every time it asks.
-- Taking it closes the privileged-mode route permanently. A factory reset does
-  not undo it.
-- If your machine is already on Gen 7, stop here. Nothing in this guide works.
-
 **Read [SAFETY.md](../SAFETY.md) before you start.** This software drives a
 motorised treadmill.
+
+> **Gen 7 / iFit 2.0.** Second-hand reports say this update closes the
+> privileged-mode route used below. Nobody here has seen it happen, and it is
+> one passing comment on another site rather than anything tested. Declining
+> the update costs nothing, so decline it until somebody knows either way.
 
 To undo everything: factory reset the console.
 
@@ -48,7 +45,7 @@ STRIDE is confirmed on one machine:
 | Ranges reported | incline -3 to +12 %, speed 1.6 to 20 km/h |
 
 - **Likely to work:** other Gen 6 NordicTrack and ProForm consoles on a FitPro board.
-- **Will not work:** Gen 7 / iFit 2.0.
+- **Unknown:** Gen 7 / iFit 2.0. Reported not to work, untested here.
 - **Required:** an Android console you can reach with `adb`.
 
 To identify your board, build and run `console/usbprobe`. It reads the board

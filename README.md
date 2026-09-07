@@ -18,10 +18,10 @@
 > before installing anything. The physical safety key remains the stop of
 > record; incline is driven, speed is only ever suggested.
 
-> ⛔ **Never accept the Gen 7 / iFit 2.0 update on your console.** It is
-> understood to close the privileged-mode route everything here depends on,
-> permanently and with no way back. Modify first, update never. If your machine
-> is already on Gen 7, none of this will work.
+> **Gen 7 / iFit 2.0.** Second-hand reports say this update closes the
+> privileged-mode route everything here depends on. Nobody involved has seen it
+> happen. Declining it costs nothing, so decline it until somebody knows either
+> way.
 
 STRIDE replaces the software on a treadmill console with something you own. The
 belt and deck work without a login, without a subscription, and without an
@@ -84,7 +84,8 @@ Proven on one Gen 6 NordicTrack with a FitPro board — device id `0x04`, inclin
 −3 to +12 %, speed 1.6 to 20 km/h. Probably fine on other Gen 6 NordicTrack and
 ProForm consoles on the same board, but nobody has tried.
 
-Gen 7 / iFit 2.0 won't work at all. (At least that we know of - if you know better, please let us know)
+Gen 7 / iFit 2.0 is reported not to work, but nobody here has tested it. If you
+know better, please let us know.
 
 [`console/usbprobe`](console/usbprobe) reads your board and reports what it is,
 without changing anything. **Please open an issue with what it says** — working
