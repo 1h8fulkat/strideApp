@@ -55,7 +55,7 @@ What you can check right now, on the console's own screen:
 3. Read **Android version**. This machine is on Android 9.
 
 You cannot identify the motor board yet. That needs ADB and the iFit software
-out of the way, so it happens in [step 1.7](#17-identify-the-motor-board).
+out of the way, so it happens in [step 1.6](#16-identify-the-motor-board).
 
 [Open an issue](https://github.com/keranm/strideApp/issues) with what you find,
 working or not.
@@ -71,7 +71,7 @@ working or not.
 2. Hold the pinhole in while you switch the treadmill on at the power switch.
 3. Wait for *System recovery* in blue text.
 4. Let it finish. Takes five to ten minutes.
-5. Do not connect to Wi-Fi in iFit. Stay offline until step 1.3 is done.
+5. Do not join Wi-Fi yet. Stay offline until iFit is disabled in step 1.3.
 
 ### 1.2 Enable privileged mode
 
@@ -146,15 +146,7 @@ adb devices
 
 Do not turn USB debugging off afterwards.
 
-### 1.5 Back up the original software
-
-```sh
-./protocol/grab-ifit.sh
-```
-
-Pulls the console's APKs to your computer. Keep them to yourself.
-
-### 1.6 Read unchain.sh before running it
+### 1.5 Read unchain.sh before running it
 
 [`tools/unchain.sh`](../tools/unchain.sh) does five things in order:
 
@@ -175,7 +167,7 @@ undoes the home-app change.
 > usually your only way in. Whether it survives a power cycle varies by
 > console. Test yours before relying on it. STRIDE itself needs no ADB to run.
 
-### 1.7 Identify the motor board
+### 1.6 Identify the motor board
 
 `console/usbprobe` asks the board what it is. It reads and writes nothing.
 
@@ -196,7 +188,7 @@ If it says the device is claimed, `com.ifit.eru` is running again. Re-run
 says,** working or not. A list of known-good boards is the most useful thing
 this project could have and it does not exist yet.
 
-### 1.8 Build and install
+### 1.7 Build and install
 
 ```sh
 cd console/stride
@@ -209,7 +201,7 @@ SDK via `ANDROID_HOME` or `~/Library/Android/sdk`.
 ✅ The console shows the STRIDE welcome screen, and the log prints
 `limits: <min>..<max> km/h, <min>..<max> %`.
 
-### 1.9 Set up STRIDE
+### 1.8 Set up STRIDE
 
 Everything is on the treadmill's own screen. There are no config files.
 
