@@ -28,9 +28,9 @@ belt and deck work without a login, without a subscription, and without an
 internet connection — and everything the machine knows appears in Home
 Assistant as ordinary entities.
 
-**v0.5**, in daily use. What's missing for v1.0 isn't features — it's install
-guides with photos, HACS packaging, a better dashboard, and the iOS app on the
-App Store.
+**v0.6**, in daily use. Still to do for v1.0: HACS packaging, a better
+dashboard, the iOS app on the App Store, and an install guide somebody other
+than the author has followed.
 
 ![STRIDE on a NordicTrack console](docs/screenshots/oval-original.png)
 
@@ -104,19 +104,23 @@ and it says so at the top and marks the places it is weakest.
 
 In outline:
 
-1. **Check your board** with [`console/usbprobe`](console/usbprobe), which
-   reads and changes nothing — and please report what it says.
-2. **Get into the console's privilege mode** — a tap sequence and a
-   challenge-response code — and enable ADB.
-3. **Run [`tools/unchain.sh`](tools/unchain.sh)** — disables the iFit software,
-   `com.ifit.eru` first, because that is what re-locks the console on every
-   boot.
-4. **Build and install the console app**, then set it up on its own screen.
-5. **Optional:** broker details on the console and the treadmill appears in
-   Home Assistant. Then the coach, and the iOS app for Apple Health.
+1. **Check your board.** Build and run [`console/usbprobe`](console/usbprobe).
+   It reads and changes nothing. Report what it says.
+2. **Factory reset the console.** Stay offline afterwards.
+3. **Enable privileged mode.** Tap ten times, wait seven seconds, tap ten more.
+4. **Force stop iFit Admin** (`com.ifit.eru`) and take away its two
+   permissions, then force stop and uninstall iFit (`com.ifit.standalone`).
+5. **Enable ADB over Wi-Fi.** Tap Build number seven times, turn on USB
+   debugging, join your network.
+6. **Run [`tools/unchain.sh`](tools/unchain.sh).** Disables the iFit packages
+   and installs the launcher.
+7. **Build and install the console app** with `console/stride/run.sh`, then set
+   it up on its own screen.
+8. **Optional:** enter broker details on the console to get the treadmill into
+   Home Assistant, then add the coach.
 
-Stop after step 4 and you have a treadmill with no subscription, which is most
-of the point. Steps 1–5 need nothing installed on the Home Assistant side.
+Stop after step 7 and you have a treadmill with no subscription. Steps 1 to 7
+need nothing installed on the Home Assistant side.
 
 ---
 

@@ -1,26 +1,20 @@
 # Installing STRIDE
 
-> 🚧 **DRAFT.** Part 1 now follows the route the author actually took, but
-> nobody has yet walked this page end to end on a factory-reset machine. Part 2
-> onwards is still unverified by anyone. Expect gaps and please
-> [report them](https://github.com/keranm/strideApp/issues).
+> 🚧 **DRAFT.** Nobody has followed this page end to end on a factory-reset
+> machine. [Report anything that does not match](https://github.com/keranm/strideApp/issues).
 
-> # ⛔ Before you touch anything: never accept the Gen 7 / iFit 2.0 update
->
-> If your console offers an update to Gen 7 or iFit 2.0, **decline it, and keep
-> declining it.** That update is understood to close the privileged-mode route
-> this entire process depends on. Take it and you are locked out permanently —
-> there is no known way back, and a factory reset will not help you.
->
-> **Modify first. Update never.** If your machine is already on Gen 7, nothing
-> in this guide will work for you.
+## ⛔ Never accept the Gen 7 / iFit 2.0 update
 
-**Read [SAFETY.md](../SAFETY.md) first.** This software drives a motorised
-treadmill.
+- If the console offers Gen 7 or iFit 2.0, decline it.
+- Keep declining it every time it asks.
+- Taking it closes the privileged-mode route permanently. A factory reset does
+  not undo it.
+- If your machine is already on Gen 7, stop here. Nothing in this guide works.
 
-**This is reversible.** A factory reset restores the manufacturer's software.
-Verified on the machine STRIDE was built against. You are changing the screen
-on the front, not the motor controller, the belt or the deck.
+**Read [SAFETY.md](../SAFETY.md) before you start.** This software drives a
+motorised treadmill.
+
+To undo everything: factory reset the console.
 
 ---
 
@@ -28,250 +22,235 @@ on the front, not the motor controller, the belt or the deck.
 
 | | |
 |---|---|
-| A treadmill | NordicTrack or ProForm with a FitPro motor board and an Android console. See [Is my treadmill supported](#step-0-is-my-treadmill-supported). |
+| A treadmill | NordicTrack or ProForm, FitPro motor board, Android console. Check [Step 0](#step-0-check-your-treadmill). |
 | A computer | macOS or Linux, with `adb` and Python 3.9+. |
-| Home Assistant | **Optional.** With an MQTT broker, if you want the treadmill in it. |
-| An iPhone | **Optional.** Only for the Apple Health companion app. |
+| Home Assistant | Optional. Needs an MQTT broker. |
+| An iPhone | Optional. Apple Health only. |
 
-Time: about an hour for the console, ten minutes for Home Assistant.
+Allow about an hour for Part 1, ten minutes for Part 2.
 
-The three parts are independent. Stop after Part 1 and you have a treadmill
-with no subscription, which is the main event.
+Parts 2 and 3 are optional. Stop after Part 1 and the treadmill works with no
+subscription.
 
 ---
 
-## Step 0. Is my treadmill supported?
+## Step 0. Check your treadmill
 
-Nobody knows except for one machine, which is:
+STRIDE is confirmed on one machine:
 
 | | |
 |---|---|
-| Generation | **Gen 6** (the "CLASSIC" embedded console) |
+| Generation | Gen 6, the "CLASSIC" embedded console |
 | GlassOS | 8.51.7.1070 |
 | System version | EKA2_20221110 |
 | Firmware | 84.121 |
 | Motor board | FitPro, device id `0x04` |
-| Ranges reported | incline −3 to +12 %, speed 1.6 to 20 km/h |
+| Ranges reported | incline -3 to +12 %, speed 1.6 to 20 km/h |
 
-- **Likely to work:** other Gen 6 NordicTrack and ProForm consoles on the same
-  FitPro board. The protocol is a family, not a model.
-- **Will not work:** Gen 7 / iFit 2.0. See the warning above.
-- **Required regardless:** a console running Android that you can reach with
-  `adb`.
+- **Likely to work:** other Gen 6 NordicTrack and ProForm consoles on a FitPro board.
+- **Will not work:** Gen 7 / iFit 2.0.
+- **Required:** an Android console you can reach with `adb`.
 
-Before changing anything, find out what you have. `console/usbprobe` is a
-read-only app that asks the board what it is and reports back — it writes
-nothing and moves nothing.
+To identify your board, build and run `console/usbprobe`. It reads the board
+and writes nothing.
 
-**Whatever it tells you, please [open an
-issue](https://github.com/keranm/strideApp/issues) with the result** — working
-or not. A list of known-good and known-bad boards is the most valuable thing
-this project could have and it does not exist yet.
+[Open an issue](https://github.com/keranm/strideApp/issues) with the result,
+working or not.
 
 ---
 
-## Part 1 — The console
+## Part 1. The console
 
-### 1.1 Factory reset the console
+### 1.1 Factory reset
 
-Takes five to ten minutes, and means nothing left over from iFit is in the
-way.
-
-Find and hold the **pinhole reset button** while you switch the treadmill on at
-the power switch. You should see *System recovery* in blue text. Let it finish.
-
-> **The pinhole is in a different place on different machines** — the side
-> panel on some, the top of the console on others. Look for a single small hole
-> that is plainly not a screw or a vent.
-
-> **Do not connect it to Wi-Fi in iFit afterwards.** Leave it offline until
-> you have finished step 1.3. A console that reaches the internet is a console
-> that can be offered the update that locks you out.
+1. Find the pinhole reset button. Look for a single small hole on the side
+   panel or the top of the console.
+2. Hold the pinhole in while you switch the treadmill on at the power switch.
+3. Wait for *System recovery* in blue text.
+4. Let it finish. Takes five to ten minutes.
+5. Do not connect to Wi-Fi in iFit. Stay offline until step 1.3 is done.
 
 ### 1.2 Enable privileged mode
 
 On the iFit welcome screen:
 
-1. Tap a **blank area** of the screen **ten times**.
-2. **Count to seven.** Nothing happens during this pause — that is the
-   sequence, not you having got it wrong.
-3. Tap **the same spot** ten more times.
+1. Tap a blank area of the screen ten times.
+2. Wait seven seconds. Nothing appears during the pause.
+3. Tap the same spot ten more times.
+4. Look for the confirmation message at the bottom of the screen.
+5. Swipe up from the bottom to get the Android home button.
 
-A message at the bottom confirms privileged mode is on. **Swipe up from the
-bottom** to get the Android home button, and from there Settings.
+If the console asks for a challenge code, either ring NordicTrack support and
+ask for one, or use a third-party calculator such as
+<https://getresponsecode.com> (no connection to this project).
 
-> **Some consoles ask for a code here** — a challenge number expecting a
-> response. Either ring NordicTrack support and ask for one, or use a
-> third-party calculator like <https://getresponsecode.com> (no connection to
-> this project).
+### 1.3 Stop iFit locking you out again
 
-### 1.3 Stop iFit locking you back out — **do not skip this**
+Do this before anything else. Skipping it undoes every later step at the next
+reboot.
 
-Skip this and everything else you do gets undone at the next reboot.
+Open **Settings → Apps**. Deal with two apps.
 
-In the console's Android settings there are two apps to deal with. They appear
-as **iFit Admin** and **iFit**:
+**iFit Admin** (`com.ifit.eru`):
 
-**iFit Admin** — the one that re-asserts the lock.
+1. Tap **Force stop**.
+2. Go to **Settings → Apps → Special access → Display over other apps**.
+3. Set iFit Admin to **Not allowed**.
+4. Go to **Settings → Apps → Special access → Modify system settings**.
+5. Set iFit Admin to off.
 
-- **Force stop** it.
-- Turn off **Draw over other apps**.
-- Turn off **Modify system settings**.
-- You **cannot uninstall it**; it is a system app. Stopping it and taking those
-  two permissions away is the most that can be done from here.
+![iFit Admin app info](screenshots/install-ifit-admin.png)
 
-**iFit** — the app itself.
+![Display over other apps](screenshots/install-display-over-other-apps.png)
 
-- **Force stop** it.
-- **Uninstall it if you can.** This one usually can be removed, and removing it
-  is the cleanest way to stop it starting up and taking the screen back.
+iFit Admin is a system app and cannot be uninstalled. Force stop plus those two
+permissions is as far as the console UI goes.
 
-Leave iFit Admin those permissions and it switches privileged mode off again
-at the next boot, with nothing on screen to say why.
+> If **Modify system settings** or the full app list never finishes loading,
+> skip them here and run these two commands once you have ADB in step 1.4:
+>
+> ```sh
+> adb shell appops set com.ifit.eru SYSTEM_ALERT_WINDOW deny
+> adb shell appops set com.ifit.eru WRITE_SETTINGS deny
+> ```
 
-[`tools/unchain.sh`](../tools/unchain.sh) does this properly over ADB later,
-and kills iFit Admin first for the same reason. This is the manual version, and
-you need it now because you don't have ADB yet.
+**iFit** (`com.ifit.standalone`):
+
+1. Tap **Force stop**.
+2. Tap **Uninstall**.
+
+![iFit app info](screenshots/install-ifit-app.png)
 
 ### 1.4 Enable ADB over Wi-Fi
 
-1. **Settings → About tablet → Build number**, tapped **seven times**, unlocks
-   Developer Options.
-2. **Settings → Developer Options → Enable USB debugging.**
-3. Pull down the notification panel, long-press **Wi-Fi**, and join your
-   network.
-4. **Settings → About tablet → Status** gives you the console's IP address.
+1. Go to **Settings → About tablet**.
+2. Tap **Build number** seven times.
 
-From your computer:
+   ![Build number](screenshots/install-build-number.png)
+
+3. Go to **Settings → Developer options**.
+
+   ![Developer options](screenshots/install-developer-options.png)
+
+4. Turn on **USB debugging**.
+
+   ![USB debugging](screenshots/install-usb-debugging.png)
+
+5. Pull down the notification panel, long-press **Wi-Fi**, and join your network.
+6. Go to **Settings → About tablet** and read the **IP address**.
+
+   ![IP address](screenshots/install-ip-address.png)
+
+On your computer:
 
 ```sh
 adb connect <console-ip>:5555
 adb devices
 ```
 
-✅ **Checkpoint:** the console appears in `adb devices` as `device` — not
-`unauthorized` or `offline`.
+✅ The console lists as `device`, not `unauthorized` or `offline`.
 
-### 1.5 Back up the original software first
+Do not turn USB debugging off afterwards.
 
-Before changing anything, take a copy of what is on there:
+### 1.5 Back up the original software
 
 ```sh
 ./protocol/grab-ifit.sh
 ```
 
-Pulls the console's APKs onto your computer. They're from a machine you own,
-so keep them to yourself. Handy if something goes wrong and you'd rather not
-rely on a factory reset.
+Pulls the console's APKs to your computer. Keep them to yourself.
 
-### 1.6 Understand what you are about to run
+### 1.6 Read unchain.sh before running it
 
-`tools/unchain.sh` does five things, in this order:
+[`tools/unchain.sh`](../tools/unchain.sh) does five things in order:
 
-1. **Disables `com.ifit.eru`.** This is the piece that re-locks the console on
-   every boot. It goes first, before anything else, because it is the thing
-   that will undo the rest.
+1. Disables `com.ifit.eru` and denies it `SYSTEM_ALERT_WINDOW` and `WRITE_SETTINGS`.
 2. Disables the remaining iFit packages.
-3. Turns on developer settings and keeps the screen awake while you work.
-4. Installs a launcher, so there is something to go back to.
-5. Installs STRIDE — if you have built it — and makes it the console's home
-   app, so a power cycle comes back to the treadmill rather than to a grid of
-   icons. Run it with `STRIDE_KIOSK=0` to skip that last part; the script
-   prints the one command that undoes it either way.
+3. Turns on developer settings and keeps the screen awake.
+4. Installs a launcher.
+5. Installs STRIDE if you have built it, and sets it as the home app.
 
-Read it before you run it. It operates on your treadmill.
+Run it with `STRIDE_KIOSK=0` to skip step 5. The script prints the command that
+undoes the home-app change.
 
-> **Treat ADB over Wi-Fi as your only way in, because it probably is.** The
-> console's USB port is the host link to the motor board, and the unit is built
-> into the treadmill — on most machines there is nothing to plug a laptop into.
-> Whether Wi-Fi ADB returns after a power cycle varies by console: the property
-> that pins it (`persist.adb.tcp.port`) usually needs root, but some builds,
-> including the one this was developed on, restore it themselves. Check that
-> yours does before you rely on it, and do not turn off USB debugging in
-> Developer Options afterwards — that is the switch that would lock you out.
->
-> The treadmill itself is unaffected either way. STRIDE starts on its own and
-> needs no ADB to run.
+```sh
+./tools/unchain.sh
+```
+
+> The console's USB port is the link to the motor board, so Wi-Fi ADB is
+> usually your only way in. Whether it survives a power cycle varies by
+> console. Test yours before relying on it. STRIDE itself needs no ADB to run.
 
 ### 1.7 Build and install
 
 ```sh
 cd console/stride
-./run.sh                 # builds, installs, launches, and tails the log
+./run.sh
 ```
 
-The build needs the Android SDK. `run.sh` finds it via `ANDROID_HOME`, or the
-default location under `~/Library/Android/sdk`.
+`run.sh` builds, installs, launches, and tails the log. It finds the Android
+SDK via `ANDROID_HOME` or `~/Library/Android/sdk`.
 
-✅ **Checkpoint:** the console shows the STRIDE welcome screen, and the log
-prints `limits: <min>..<max> km/h, <min>..<max> %` — those numbers came from
-your motor board, which means the USB link works.
+✅ The console shows the STRIDE welcome screen, and the log prints
+`limits: <min>..<max> km/h, <min>..<max> %`.
 
-### 1.8 Set it up, on the console
+### 1.8 Set up STRIDE
 
 Everything is on the treadmill's own screen. There are no config files.
 
-**Settings → Who walks.** Add yourself. Nobody is pre-configured, so the
-welcome screen offers *Guest* and *Add people* until you do.
+- **Settings → Who walks.** Add yourself. Nobody is pre-configured.
+- **Settings → Treadmill.** Units, warm-up, cool-down, guided-walk speed limit.
+- **Settings → Interface.** Pick one of five. *Original* is the most tested.
 
-**Settings → Treadmill.** Units, warm-up, cool-down, how fast a guided walk may
-move the deck. The incline and speed ranges shown are read from your board and
-cannot be raised — see [SAFETY.md](../SAFETY.md).
+✅ Clip the safety key, choose a workout, and check the belt starts and the
+distance climbs.
 
-**Settings → Interface.** Five interfaces. *Original* is the one with real
-miles on it; the other four are less tested.
-
-✅ **Checkpoint:** walk on it. Clip the safety key, choose a workout, and check
-the belt starts and the distance climbs.
-
-**Stop here if you do not use Home Assistant.** Everything below is optional.
+**Stop here if you do not use Home Assistant.**
 
 ---
 
-## Part 2 — Home Assistant
+## Part 2. Home Assistant
 
-### 2.1 The treadmill registers itself
+### 2.1 Connect the treadmill
 
-You need the [MQTT integration](https://www.home-assistant.io/integrations/mqtt/)
-set up and a broker running. Nothing from this repository is installed in Home
-Assistant for this step.
+Requires the [MQTT integration](https://www.home-assistant.io/integrations/mqtt/)
+and a broker. Nothing from this repository is installed for this step.
 
-On the console: **Settings → Home Assistant** → broker host, port, username,
-password → **Test**.
+1. On the console, go to **Settings → Home Assistant**.
+2. Enter broker host, port, username, password.
+3. Tap **Test**.
 
-✅ **Checkpoint:** a **Treadmill** device appears in Home Assistant under
-Settings → Devices, with speed, incline, distance, elapsed, pulse, calories,
-mode and workout. A second device appears per person the first time they walk.
+✅ A **Treadmill** device appears under Settings → Devices with speed, incline,
+distance, elapsed, pulse, calories, mode and workout. A second device appears
+per person the first time they walk.
 
-That is the whole integration. **Build whatever dashboard you like from those
-entities** — there is nothing you have to accept, and no custom component to
-install.
+Build whatever dashboard you like from those entities. There is no custom
+component to install.
 
 ### 2.2 Optional: weekly and monthly totals
 
-The console publishes a *session* counter that resets at the start of every
-walk. Correct for a session, useless for "how far this week", so the
-accumulation happens in Home Assistant.
+The console's distance counter resets every walk, so totals accumulate in Home
+Assistant.
 
-Copy [`homeassistant/packages/stride.yaml`](../homeassistant/packages/stride.yaml)
-into your Home Assistant config as `packages/stride.yaml`, and make sure
-`configuration.yaml` has:
+1. Copy [`homeassistant/packages/stride.yaml`](../homeassistant/packages/stride.yaml)
+   into your config as `packages/stride.yaml`.
+2. Add to `configuration.yaml`:
 
-```yaml
-homeassistant:
-  packages: !include_dir_named packages
-```
+   ```yaml
+   homeassistant:
+     packages: !include_dir_named packages
+   ```
 
-Restart Home Assistant.
+3. Restart Home Assistant.
 
-✅ **Checkpoint:** `sensor.treadmill_distance_weekly` exists and is not
-`unavailable`. If it is unavailable, its source is wrong — check whether your
-treadmill device is named something other than `Treadmill`, and set
-`treadmill_prefix` in `stride.conf` plus the `source:` lines in the package to
-match.
+✅ `sensor.treadmill_distance_weekly` exists and is not `unavailable`.
 
-> **Gap:** this file has been validated as YAML and mirrors a configuration
-> known to work, but has not itself been installed on a clean Home Assistant.
+If it is unavailable, your treadmill device is named something other than
+`Treadmill`. Set `treadmill_prefix` in `stride.conf` and the `source:` lines in
+the package to match.
+
+> **Gap:** this file is valid YAML and mirrors a working configuration, but has
+> not been installed on a clean Home Assistant.
 
 ### 2.3 Optional: the coach and reminders
 
@@ -280,87 +259,68 @@ cd homeassistant
 cp stride.conf.example stride.conf
 ```
 
-Every key is documented in the file. Leave anything blank and that subject is
-just absent.
+1. Open `stride.conf`. Every key is documented in the file. Leave a key blank to
+   skip that subject.
+2. Set `coach_ai_task`. Find your AI entity under Developer Tools → States,
+   prefix `ai_task.`.
+3. Run what you want:
 
-**`coach_ai_task`** has to be set — it's the AI entity that writes the coach's
-lines, and which one you have depends on your integration. Find it in Developer
-Tools → States under `ai_task.`.
+   ```sh
+   python3 stride_coach_llm.py      # coach, and the automations that fire it
+   python3 stride_reminders.py      # weigh-in and blood-pressure reminders
+   python3 stride_persons.py        # publishes your HA people to the console
+   ```
 
-```sh
-python3 stride_coach_llm.py      # the coach, and the automations that fire it
-python3 stride_reminders.py      # weigh-in and blood-pressure reminders
-python3 stride_persons.py        # publishes your HA people to the console
-```
+✅ `script.stride_coach` exists. Run it with `kind: morning` and a `task`, and a
+message appears on `sensor.stride_coach`.
 
-✅ **Checkpoint:** `script.stride_coach` exists. Run it with
-`kind: morning` and a `task`, and a coach message appears on
-`sensor.stride_coach`.
-
-After `stride_persons.py`, the console's **Settings → Who walks** offers your
-Home Assistant people under *From Home Assistant*. Adding somebody that way
-links them, so their walks line up with the person Home Assistant already
-knows.
+After `stride_persons.py`, the console's **Settings → Who walks** lists your
+Home Assistant people under *From Home Assistant*.
 
 ---
 
-## Part 3 — Apple Health (iPhone)
+## Part 3. Apple Health (iPhone)
 
-Optional, and nothing here depends on it.
+Optional. Nothing else depends on it.
 
-Apple Health is its own project now:
-**[AH for HA](https://github.com/keranm/ah-for-ha)** — Apple Health into Home
-Assistant, with no treadmill in it at all. It grew to 39 metrics, rings, sleep
-stages and workouts, and it publishes its own discovery configs, so there is
-nothing in *this* repository to install for it. Follow its guide instead of
-this one.
+Use **[AH for HA](https://github.com/keranm/ah-for-ha)**, which is a separate
+project with its own guide. There is nothing in this repository to install for
+it.
 
-It is also how an outdoor walk becomes an indoor one. A route you actually
-walked arrives over MQTT as a gradient profile, and STRIDE replays that on the
-deck for the days you cannot get out. The console has never known or cared who
-publishes those — swap the publisher and it carries on.
+AH for HA also publishes outdoor walks as gradient profiles over MQTT, which
+STRIDE replays on the deck.
 
-> `homeassistant/stride_health_webhook.py` is the receiver from when the iOS
-> app lived in this repository. It is frozen, and still live for the phone
-> already posting to it. **Setting this up for the first time? You do not need
-> it** — use AH for HA.
-
----
-
-## Credit
-
-Steps 1.1–1.4 follow a community *NordicTrack Gen 6 modding guide* — that's
-how ADB got onto this console in the first place. That guide heads towards QZ
-Companion, which is a perfectly good place to end up; STRIDE goes a different
-way after 1.4 and replaces the console software.
-
-If you know who wrote it, [tell us](https://github.com/keranm/strideApp/issues)
-and we'll credit them.
+> `homeassistant/stride_health_webhook.py` is frozen. Setting this up for the
+> first time? You do not need it.
 
 ---
 
 ## If it goes wrong
 
-1. **Pull the safety key.** Always first — it is hardware.
+1. Pull the safety key.
 2. Switch the treadmill off at the wall.
-3. To restore the manufacturer's software: **factory reset** from the console's
-   own recovery. You will set up iFit again from scratch, and you will be back
-   where you started.
+3. To restore the manufacturer's software, factory reset from the console's own
+   recovery.
+
+---
+
+## Credit
+
+Steps 1.1 to 1.4 follow a community *NordicTrack Gen 6 modding guide*. That
+guide heads towards QZ Companion. STRIDE goes a different way after 1.4.
+
+If you know who wrote it, [tell us](https://github.com/keranm/strideApp/issues).
 
 ---
 
 ## Testing this guide
 
-If you're following this on a factory-reset treadmill and a fresh Home
-Assistant, these are the bits most likely to be wrong:
+Most likely to be wrong:
 
-- **Steps 1.1–1.4** are the route the author took, written up afterwards. Nobody
-  has followed *this page* through them on a freshly reset machine.
-- **Step 2.2**, the package file, has never been installed on a clean Home
-  Assistant.
-- **Every ✅ checkpoint** is a claim. If one does not happen, that is the bug.
-- **Anything you had to know that is not written down.** The author cannot see
-  these, because he already knows them.
+- **Steps 1.1 to 1.4.** Written up after the fact. Nobody has followed this page
+  on a freshly reset machine.
+- **Step 2.2.** Never installed on a clean Home Assistant.
+- **Every ✅ check.** If one does not happen, that is the bug.
+- **Anything you had to work out that is not written down.**
 
-Open an issue with whatever you hit. "Stuck at 1.1 on a 2019 Commercial 1750"
-is genuinely useful.
+Open an issue. "Stuck at 1.1 on a 2019 Commercial 1750" is useful.
