@@ -88,7 +88,9 @@ Gen 7 / iFit 2.0 is reported not to work, but nobody here has tested it. If you
 know better, please let us know.
 
 [`console/usbprobe`](console/usbprobe) reads your board and reports what it is,
-without changing anything. **Please open an issue with what it says** — working
+without changing anything. It is an app you install on the console, so it needs
+ADB and the iFit software disabled first, which is step 6 above rather than
+something you can run today. **Please open an issue with what it says,** working
 or not. A list of known-good boards would be the most useful thing this project
 could have, and it doesn't exist.
 
@@ -105,16 +107,16 @@ and it says so at the top and marks the places it is weakest.
 
 In outline:
 
-1. **Check your board.** Build and run [`console/usbprobe`](console/usbprobe).
-   It reads and changes nothing. Report what it says.
-2. **Factory reset the console.** Stay offline afterwards.
-3. **Enable privileged mode.** Tap ten times, wait seven seconds, tap ten more.
-4. **Force stop iFit Admin** (`com.ifit.eru`) and take away its two
+1. **Factory reset the console.** Stay offline afterwards.
+2. **Enable privileged mode.** Tap ten times, wait seven seconds, tap ten more.
+3. **Force stop iFit Admin** (`com.ifit.eru`) and take away its two
    permissions, then force stop and uninstall iFit (`com.ifit.standalone`).
-5. **Enable ADB over Wi-Fi.** Tap Build number seven times, turn on USB
+4. **Enable ADB over Wi-Fi.** Tap Build number seven times, turn on USB
    debugging, join your network.
-6. **Run [`tools/unchain.sh`](tools/unchain.sh).** Disables the iFit packages
+5. **Run [`tools/unchain.sh`](tools/unchain.sh).** Disables the iFit packages
    and installs the launcher.
+6. **Identify your board** with [`console/usbprobe`](console/usbprobe), which
+   reads and changes nothing. Report what it says.
 7. **Build and install the console app** with `console/stride/run.sh`, then set
    it up on its own screen.
 8. **Optional:** enter broker details on the console to get the treadmill into
