@@ -34,7 +34,32 @@ object Session {
 
 /** One frame of everything both the HUD and Home Assistant need. */
 data class Snapshot(
+    /**
+     * The pace the console is holding, km/h — the setpoint, not a measurement.
+     *
+     * This is the number on the dial, and it is the commanded speed on purpose.
+     * `ActualKph` never populates on this board (see MainActivity.beltSpeed), so
+     * the only alternative is an estimate built from a whole-metre odometer, and
+     * showing that estimate is what made the readout wander. On 17 August 2026 a
+     * steady walk rendered nineteen different speeds in thirty-six seconds while
+     * the deck was tilting — 7.9, 7.7, 7.6, 7.5, 7.4, 7.5, 7.6, 7.7, 7.6 … — and
+     * pressing − at 7.6 landed on 7.4 because the drift was larger than the step.
+     *
+     * A belt is a closed loop that reaches what it is told within a second or
+     * two, so the setpoint is both the honest answer and the stable one, and it
+     * makes the buttons exact by construction: 7.6 − 0.1 is 7.5, always. The
+     * estimate is still computed, and still allowed to disagree — it is carried
+     * as [beltKph] and watched, rather than being put on the dial.
+     */
     val speed: Double,
+    /**
+     * What the odometer says the belt is actually doing, km/h.
+     *
+     * Diagnosis only: nothing draws this. It exists so a belt that cannot reach
+     * the commanded pace is still detectable — see [slipping] — now that the
+     * dial no longer shows it.
+     */
+    val beltKph: Double = 0.0,
     val incline: Double,
     val targetSpeed: Double,
     val targetIncline: Double,
@@ -70,8 +95,35 @@ data class Snapshot(
      * coach falls back to comparing against the session's own average.
      */
     val hrMax: Int = 0,
+    /**
+     * Seconds spent in each heart-rate zone, indexed 1-5; index 0 is everything
+     * below zone 1 and is counted but rarely interesting.
+     *
+     * Empty when [hrMax] is 0 — without a maximum there are no zones, and a
+     * console that invented some would be dressing a guess as physiology. The
+     * summary falls back to average and peak, which need nobody's age.
+     */
+    val zoneSecs: List<Int> = emptyList(),
+    /**
+     * What this walk did that previous walks did not — see History.
+     *
+     * Computed once, when the belt stops, against this walker's own recorded
+     * sessions. Empty on the way round; empty too for a first walk, which has
+     * nothing to beat and should not be told it set five records.
+     */
+    val achievements: List<String> = emptyList(),
     /** Who tapped their name on the welcome screen. */
     val who: String = "",
+    /**
+     * The walker's stable profile id, or empty for a guest.
+     *
+     * Sent to Home Assistant alongside [who] so the coach can tell whose walk
+     * this is without matching on a display name. The prompt keys every personal
+     * figure — weight, blood pressure, sleep — off this, and attaches none of
+     * them when it is empty. A guest on the belt gets coaching about the walk
+     * and nothing about anybody's body. See Settings.Person.id.
+     */
+    val whoId: String = "",
     /** Guided walk, or empty on a casual one. */
     val plan: String = "",
     val segment: Int = 0,
@@ -119,9 +171,45 @@ data class Snapshot(
 ) {
     val mode: String get() = Session.name(session)
 
+    /**
+     * True when the ground says the belt is well short of what was asked for.
+     *
+     * The dial shows the setpoint, which is right almost always and wrong in
+     * exactly one case: a belt that physically cannot reach the pace. This is
+     * how that case still gets noticed. Deliberately a wide band — the estimate
+     * behind it is coarse, and a threshold tight enough to catch a small
+     * shortfall would fire on the estimator's own noise.
+     */
+    val slipping: Boolean
+        get() = Session.isMoving(session) && speed > 0.5 && beltKph > 0.0 &&
+                speed - beltKph > 0.8
+
+    /**
+     * JSON string escaping, for the fields that carry text somebody else wrote.
+     *
+     * [summaryLine] and the coach's lines come from a language model, plan and
+     * segment labels come from a route file, and names are typed in by hand.
+     * Any of them may contain a quote or a backslash, and one of those dropped
+     * raw into this object produces JSON the HUD cannot parse — a blank screen
+     * for the rest of the walk, from one apostrophe.
+     */
+    private fun esc(s: String): String = buildString(s.length) {
+        for (c in s) when {
+            c == '"' -> append("\\\"")
+            c == '\\' -> append("\\\\")
+            c == '\n' -> append("\\n")
+            c == '\r' -> append("\\r")
+            c == '\t' -> append("\\t")
+            c < ' ' -> append("\\u%04x".format(c.code))
+            else -> append(c)
+        }
+    }
+
     fun toJson(): String = buildString {
         append("{")
         append("\"speed\":${"%.1f".format(speed)},")
+        append("\"beltKph\":${"%.1f".format(beltKph)},")
+        append("\"slipping\":$slipping,")
         append("\"incline\":${"%.1f".format(incline)},")
         append("\"targetSpeed\":${"%.1f".format(targetSpeed)},")
         append("\"targetIncline\":${"%.1f".format(targetIncline)},")
@@ -130,9 +218,9 @@ data class Snapshot(
         append("\"calories\":${"%.0f".format(calories)},")
         append("\"pulse\":$pulse,")
         append("\"fan\":$fan,")
-        append("\"workout\":\"$workout\",")
+        append("\"workout\":\"${esc(workout)}\",")
         append("\"dmk\":$dmk,")
-        append("\"ramping\":\"$ramping\",")
+        append("\"ramping\":\"${esc(ramping)}\",")
         append("\"phaseLeft\":${"%.0f".format(phaseLeft)},")
         append("\"boardMode\":$boardMode,")
         append("\"boardOk\":$boardOk,")
@@ -143,19 +231,25 @@ data class Snapshot(
         append("\"maxIncline\":${"%.1f".format(maxIncline)},")
         append("\"avgPulse\":$avgPulse,")
         append("\"maxPulse\":$maxPulse,")
-        append("\"who\":\"$who\",")
-        append("\"plan\":\"$plan\",")
+        append("\"hrMax\":$hrMax,")
+        append("\"zoneSecs\":${zoneSecs.joinToString(",", "[", "]")},")
+        append("\"achievements\":${
+            achievements.joinToString(",", "[", "]") { "\"${esc(it)}\"" }
+        },")
+        append("\"who\":\"${esc(who)}\",")
+        append("\"whoId\":\"${esc(whoId)}\",")
+        append("\"plan\":\"${esc(plan)}\",")
         append("\"segment\":$segment,")
         append("\"segments\":$segments,")
-        append("\"segmentLabel\":\"$segmentLabel\",")
+        append("\"segmentLabel\":\"${esc(segmentLabel)}\",")
         append("\"segmentLeft\":${"%.0f".format(segmentLeft)},")
         append("\"segmentLeftIsDistance\":$segmentLeftIsDistance,")
-        append("\"nextLabel\":\"$nextLabel\",")
+        append("\"nextLabel\":\"${esc(nextLabel)}\",")
         append("\"nextIncline\":${"%.1f".format(nextIncline)},")
         append("\"planTotalSec\":${"%.0f".format(planTotalSec)},")
         append("\"planClimbM\":${"%.0f".format(planClimbM)},")
         append("\"planPeakIncline\":${"%.1f".format(planPeakIncline)},")
-        append("\"summaryLine\":\"$summaryLine\",")
+        append("\"summaryLine\":\"${esc(summaryLine)}\",")
         append("\"planElapsed\":${"%.0f".format(planElapsed)},")
         append("\"planLap\":$planLap,")
         append("\"planLoops\":$planLoops,")

@@ -410,7 +410,7 @@ class Coach {
         // moment where the coach knows something you do not: what is coming.
         if (!openingSent && s.session != Session.WELCOME && s.plan.isNotEmpty()) {
             openingSent = true
-            val shape = StringBuilder("this walk is \"${s.plan}\"")
+            val shape = StringBuilder("this workout is \"${s.plan}\"")
             if (s.planClimbM > 0) {
                 // A route: real distance and real ascent, measured outdoors.
                 shape.append(", ${"%.1f".format(s.planTotalSec / 1000)} km with " +
@@ -450,7 +450,7 @@ class Coach {
             s.planElapsed >= s.planTotalSec * SUMMARY_AT) {
             summarySent = true
             return Moment("summary",
-                "the walk is about to finish. This is the closing line, shown on " +
+                "the workout is about to finish. This is the closing line, shown on " +
                 "the summary screen next to the numbers — so do not read the " +
                 "numbers back")
         }
@@ -490,8 +490,8 @@ class Coach {
                 "in about ${s.segmentLeft.toInt()} metres"
             else
                 "in about ${s.segmentLeft.toInt()} seconds"
-            val what = if (s.segmentLeftIsDistance) "the walk reaches a point where"
-                       else "the walk moves into \"${s.nextLabel}\", segment " +
+            val what = if (s.segmentLeftIsDistance) "the workout reaches a point where"
+                       else "the workout moves into \"${s.nextLabel}\", segment " +
                             "${s.segment + 1} of ${s.segments}, where"
             return Moment("segment",
                 "$where $what $shape. Tell him what is coming, not what he is " +
@@ -562,7 +562,7 @@ class Coach {
                     return Moment("zone_low",
                         "his heart rate has been sitting at ${s.pulse} bpm for the last " +
                         "minute, which is ${ZONE_WORDS[zone]} for him and below the easy " +
-                        "aerobic range this walk wants. He is at " +
+                        "aerobic range this workout wants. He is at " +
                         "${"%.1f".format(s.speed)} km/h; a little more pace would bring it " +
                         "up. Invite him to try ${"%.1f".format(suggest)} km/h if he has it " +
                         "in him, and make clear it is an offer, not an instruction")
@@ -575,7 +575,7 @@ class Coach {
                     val suggest = (s.speed - ZONE_NUDGE_KPH).coerceAtLeast(0.0)
                     return Moment("zone_high",
                         "his heart rate has been at ${s.pulse} bpm for the last minute, " +
-                        "which is ${ZONE_WORDS[zone]} for him and above where this walk is " +
+                        "which is ${ZONE_WORDS[zone]} for him and above where this workout is " +
                         "meant to sit. Tell him to lengthen his stride and breathe longer " +
                         "first, and to ease back to about " +
                         "${"%.1f".format(suggest)} km/h from " +
@@ -630,7 +630,7 @@ class Coach {
                         return Moment("hr_settled",
                             "his heart rate has come back to ${s.pulse} bpm, level with his " +
                             "session average of ${s.avgPulse} again, after a spell of working " +
-                            "harder — he has recovered while still walking")
+                            "harder — he has recovered without stopping")
                     }
                 } else {
                     hrBackSince = 0L

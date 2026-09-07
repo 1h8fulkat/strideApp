@@ -45,6 +45,9 @@
   --accent:#6fd0e0;
   --warn:#e5b567;
   --alert:#d92d20;
+  /* Heart rate. Warm enough to read as the body rather than the machine, and
+     deliberately not --alert: a high pulse on a hill is the system working. */
+  --hot:#e2685f;
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{
@@ -83,6 +86,39 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 .ch.mode{left:150px;letter-spacing:.26em;color:var(--accent)}
 .ch.mid{left:0;width:1280px;text-align:center;color:var(--soft)}
 .ch.who{right:34px;color:var(--dim)}
+
+/* ---- heart rate, on every screen ------------------------------------------
+   Lives in the chrome bar rather than on the live screen, so the reading is
+   there while choosing a walk, while walking, and on the summary. A strap that
+   is on and reading should be visible the whole time it is; hiding it on four
+   screens out of five is why it read as "only done on one screen".
+
+   Hidden entirely when nothing is reading — an empty heart outline sitting
+   permanently in the corner is furniture, and furniture stops being looked at,
+   which is the opposite of the point. */
+.ch.hr{right:150px;top:20px;display:none;align-items:center;gap:9px;color:var(--soft)}
+.ch.hr.live{display:flex}
+.ch.hr .bpm{font-size:22px;letter-spacing:.04em;color:var(--hot)}
+.ch.hr .u{font-size:11px;letter-spacing:.2em;color:var(--dim);margin-left:1px}
+
+/* The beat is driven by animation-duration, set from the number beside it, so
+   the two always agree — see STRIDE.beatStyle. A fixed pulse would be a
+   decoration that happens to look heart-shaped; this one is the reading. */
+.ch.hr svg{width:22px;height:22px;display:block;transform-origin:50% 55%;
+           animation:beat 1s ease-in-out infinite}
+.ch.hr path{fill:var(--hot)}
+@keyframes beat{
+  0%   {transform:scale(1)}
+  14%  {transform:scale(1.26)}
+  28%  {transform:scale(1.02)}
+  42%  {transform:scale(1.14)}
+  70%,100%{transform:scale(1)}
+}
+/* Chromium 83 on this console honours prefers-reduced-motion, and a console in
+   a hallway is exactly where somebody may have set it. Keep the number. */
+@media (prefers-reduced-motion: reduce){
+  .ch.hr svg{animation:none}
+}
 
 /* ===================== setup ============================================== */
 .title{position:absolute;left:0;top:150px;width:1280px;text-align:center;
@@ -287,26 +323,62 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 /* The kicker and the headline sit 24 px higher than they did, which is what
    makes room for the coach's line below them. There was nothing in that space;
    the grid, the button and every other band are exactly where they were. */
-.sum .k{position:absolute;left:0;top:116px;width:1280px;text-align:center;
+/* The whole screen moved up on 17 August 2026 to make room for the two things
+   it never had: what the heart did, and what the walk beat. Six numbers and a
+   sentence is a receipt — it tells you what you already watched happen. */
+.sum .k{position:absolute;left:0;top:74px;width:1280px;text-align:center;
         font-size:14px;letter-spacing:.34em;color:var(--accent)}
-.sum .h{position:absolute;left:0;top:160px;width:1280px;text-align:center;
-        font-size:64px;font-weight:200}
+.sum .h{position:absolute;left:0;top:108px;width:1280px;text-align:center;
+        font-size:54px;font-weight:200}
 /* The coach's closing line. It carried nothing but `margin-top` until
    2026-08-10, and every one of its siblings on this screen is absolutely
    positioned — so it fell out of the flow they had all left and rendered at
    0,0, on top of the kicker. Same fault in Ember, Daylight and Pacer, and only
    the Original escaped it because its summary is an ordinary flex column. */
-.sum .sumcoach{position:absolute;left:250px;top:242px;width:780px;height:56px;
+.sum .sumcoach{position:absolute;left:210px;top:176px;width:860px;height:52px;
                overflow:hidden;text-align:center;
-               font-size:19px;line-height:1.45;color:#8fd6c8}
-.sum .grid{position:absolute;left:70px;top:320px;width:1140px;display:flex;flex-wrap:wrap}
-.sum .grid .cell{width:360px;height:130px;margin:0 30px 20px 0;position:relative;
+               font-size:19px;line-height:1.35;color:#8fd6c8}
+
+/* Left half: the numbers, three rows of two rather than two rows of three, so
+   the right half is free for the heart. */
+.sum .grid{position:absolute;left:70px;top:246px;width:552px;display:flex;flex-wrap:wrap}
+.sum .grid .cell{width:264px;height:88px;margin:0 24px 16px 0;position:relative;
                  background:var(--panel);border:1px solid var(--line);border-radius:10px}
 .sum .grid .cell.last{margin-right:0}
-.sum .grid .kk{position:absolute;left:24px;top:20px;font-size:12px;letter-spacing:.24em;color:var(--dim)}
-.sum .grid .vv{position:absolute;left:24px;top:52px;font-size:52px;font-weight:500}
-.sum .grid .vv .u{font-size:22px;color:var(--dim)}
-.sum .done{position:absolute;left:490px;top:660px;width:300px;height:100px;
+.sum .grid .kk{position:absolute;left:18px;top:14px;font-size:11px;letter-spacing:.24em;color:var(--dim)}
+.sum .grid .vv{position:absolute;left:18px;top:38px;font-size:36px;font-weight:500}
+.sum .grid .vv .u{font-size:16px;color:var(--dim)}
+
+/* ---- summary: the heart --------------------------------------------------
+   The one thing the six cells could never say. Average and peak need nobody's
+   age; the zone bars need one, and say so plainly when it is missing rather
+   than drawing five empty rows or inventing a maximum. */
+.sum .heart{position:absolute;left:658px;top:246px;width:552px;height:312px;
+            background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.sum .heart .kk{position:absolute;left:24px;top:18px;font-size:11px;
+                letter-spacing:.24em;color:var(--dim)}
+.sum .heart .big{position:absolute;left:24px;top:44px;font-size:36px;font-weight:500;color:var(--hot)}
+.sum .heart .big .u{font-size:15px;color:var(--dim);letter-spacing:.16em}
+.sum .heart .peak{position:absolute;right:24px;top:52px;font-size:20px;color:var(--soft)}
+.sum .heart .peak .u{font-size:12px;color:var(--dim);letter-spacing:.16em}
+.sum .zones{position:absolute;left:24px;top:104px;width:504px}
+.sum .zrow{display:flex;align-items:center;height:34px}
+.sum .zrow .zn{width:104px;font-size:13px;color:var(--soft)}
+.sum .zrow .zt{flex:1;height:12px;background:var(--hair);border-radius:6px;overflow:hidden}
+.sum .zrow .zf{height:12px;border-radius:6px;transition:width .4s ease}
+.sum .zrow .zv{width:74px;text-align:right;font-size:13px;color:var(--dim)}
+.sum .heart .none{position:absolute;left:24px;top:120px;width:504px;
+                  font-size:16px;line-height:1.5;color:var(--dim)}
+
+/* ---- summary: what this walk beat ---------------------------------------- */
+.sum .badges{position:absolute;left:70px;top:576px;width:1140px;
+             display:flex;justify-content:center;gap:16px;height:56px}
+.sum .badge{display:flex;align-items:center;gap:10px;padding:0 22px;height:52px;
+            background:#1a2a24;border:1px solid #2f6b52;border-radius:26px;
+            font-size:17px;color:#8fd6c8}
+.sum .badge b{font-weight:400;color:var(--warn);font-size:19px}
+
+.sum .done{position:absolute;left:490px;top:664px;width:300px;height:96px;
            background:#173238;border:1px solid var(--accent);border-radius:8px}
 .sum .done.down{background:#0f2126}
 .sum .done .lab{position:absolute;left:0;top:38px;width:100%;text-align:center;
@@ -351,6 +423,10 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 <div class="ch clock mono" id="clock">&mdash;</div>
 <div class="ch mode" id="modeWord">READY</div>
 <div class="ch mid" id="topLine">STRIDE</div>
+<div class="ch hr" id="hrChip">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-8-5.2-8-10.4A4.6 4.6 0 0 1 12 7a4.6 4.6 0 0 1 8 3.6C20 15.8 12 21 12 21z"/></svg>
+  <span class="bpm mono" id="hrBpm">&mdash;&mdash;</span><span class="u">BPM</span>
+</div>
 <div class="ch who" id="who">&mdash;</div>
 
 <!-- ===================== 01–04 · SETUP ================================= -->
@@ -361,15 +437,6 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
     <button class="key2" id="btnSettings"><span class="lab">SETTINGS</span></button>
   </div>
 
-  <div class="step gone" id="stMode">
-    <div class="title">SESSION TYPE</div>
-    <div class="row2">
-      <button class="bay" id="pickWalk">
-        <span class="nm">WALK</span><span class="sub mono">CEILING 6.5 KM/H</span></button>
-      <button class="bay" id="pickRun">
-        <span class="nm">RUN</span><span class="sub mono">CEILING 19 KM/H</span></button>
-    </div>
-  </div>
 
   <div class="step gone" id="stControl">
     <div class="title">CONTROL MODE</div>
@@ -507,12 +574,22 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
   <div class="sumcoach" id="sumCoach"></div>
   <div class="grid">
     <div class="cell"><div class="kk">TIME</div><div class="vv mono" id="sumTime">0:00</div></div>
-    <div class="cell"><div class="kk">DISTANCE</div><div class="vv mono"><span id="sumDist">0.00</span><span class="u"> KM</span></div></div>
-    <div class="cell last"><div class="kk">CALORIES</div><div class="vv mono" id="sumCals">0</div></div>
-    <div class="cell"><div class="kk">AVG SPEED</div><div class="vv mono"><span id="sumAvg">0.0</span><span class="u"> KM/H</span></div></div>
-    <div class="cell"><div class="kk">MAX SPEED</div><div class="vv mono"><span id="sumMax">0.0</span><span class="u"> KM/H</span></div></div>
+    <div class="cell last"><div class="kk">DISTANCE</div><div class="vv mono"><span id="sumDist">0.00</span><span class="u"> KM</span></div></div>
+    <div class="cell"><div class="kk">CALORIES</div><div class="vv mono" id="sumCals">0</div></div>
     <div class="cell last"><div class="kk">CLIMBED</div><div class="vv mono"><span id="sumClimb">0</span><span class="u"> M</span></div></div>
+    <div class="cell"><div class="kk">AVG SPEED</div><div class="vv mono"><span id="sumAvg">0.0</span><span class="u"> KM/H</span></div></div>
+    <div class="cell last"><div class="kk">MAX SPEED</div><div class="vv mono"><span id="sumMax">0.0</span><span class="u"> KM/H</span></div></div>
   </div>
+
+  <div class="heart" id="sumHeart">
+    <div class="kk">HEART</div>
+    <div class="big mono"><span id="sumHrAvg">——</span><span class="u"> BPM AVG</span></div>
+    <div class="peak mono"><span id="sumHrMax">——</span><span class="u"> PEAK</span></div>
+    <div class="zones" id="sumZones"></div>
+    <div class="none" id="sumZonesNone"></div>
+  </div>
+
+  <div class="badges" id="sumBadges"></div>
   <button class="done" id="btnDone"><span class="lab">DONE</span></button>
 </div>
 
@@ -584,7 +661,7 @@ window.plan = function(p){
 };
 
 /* ---- setup ---------------------------------------------------------------- */
-const STEPS = {profile:'stProfile', mode:'stMode', control:'stControl', plan:'stPlan'};
+const STEPS = {profile:'stProfile', control:'stControl', plan:'stPlan'};
 const flow = STRIDE.flow(step => {
   Object.keys(STEPS).forEach(k => $(STEPS[k]).classList.toggle('gone', k !== step));
   $('btnBack').classList.toggle('gone', step === 'profile');
@@ -701,8 +778,6 @@ function refreshControl() {
 
 renderPlan();
 
-tap($('pickWalk'),   () => flow.setMode('walk'));
-tap($('pickRun'),    () => flow.setMode('run'));
 tap($('pickCasual'), () => flow.setControl('casual'));
 tap($('pickGuided'), () => { flow.setControl('guided'); renderPlan(); });
 tap($('pickRoutes'), () => { flow.setControl('routes'); renderPlan(); });
@@ -805,10 +880,13 @@ $('sleep').addEventListener('mousedown',  e => { e.preventDefault(); wake(); });
 function wake(){
   lastTouch = performance.now();
   if (!asleep) return;
-  asleep = false;
-  STRIDE.suppress(500);
-  $('sleep').classList.remove('on');
-  Stride.dim(false);
+  /* The tap wakes the panel; the machine behind it is a second question, and
+     only asked when there is one to ask. See STRIDE.wakeStep. */
+  STRIDE.wakeStep($('sleep'), function(){
+    asleep = false;
+    STRIDE.suppress(500);
+    $('sleep').classList.remove('on');
+  });
 }
 document.addEventListener('touchstart', () => { lastTouch = performance.now(); }, {capture:true, passive:true});
 document.addEventListener('mousedown',  () => { lastTouch = performance.now(); }, {capture:true});
@@ -837,8 +915,8 @@ window.render = function(raw){
   const screen = STRIDE.screenFor(s);
 
   $('safety').classList.toggle('on', s.safetyKey === 'out');
-  $('who').textContent = (s.profile || '').toUpperCase() + ' · HR ' +
-                         (s.session.pulse ? s.session.pulse : '——');
+  $('who').textContent = (s.profile || '').toUpperCase();
+  renderHeart(s.session.pulse);
 
   if (screen === 'welcome'){
     showScreen('scSetup');
@@ -864,12 +942,12 @@ window.render = function(raw){
     : s.phase === 'cooldown' ? 'COOLING DOWN'
     : s.phase === 'paused'   ? 'HELD'
     : s.ramping === 'resuming' ? 'RESUMING'
-    : s.mode === 'run' ? 'RUNNING' : 'WALKING';
+    : 'WORKING OUT';
   $('topLine').textContent = guided
     ? (planName + ' · ' + (s.plan.loops
         ? 'OPEN · LAP ' + s.plan.lap
         : planMinutes + ' MIN')).toUpperCase()
-    : (s.mode === 'run' ? 'MANUAL RUN' : 'MANUAL WALK');
+    : 'MANUAL';
 
   /* Both needles come off the belt controller, never off the setpoint. */
   $('incline').textContent = s.belt.incline.toFixed(1);
@@ -924,9 +1002,47 @@ window.render = function(raw){
   }
 };
 
-/** A ring arc, clamped to the dial's scale. */
+/**
+ * The heart-rate chip in the chrome bar, on whatever screen is showing.
+ *
+ * `beatStyle` returns the duration for one beat at this rate, so the animation
+ * keeps pace with the number rather than running at a fixed speed. It is only
+ * written when the rate actually changes: reassigning animation-duration
+ * restarts the animation in Chromium 83, so setting it on every 5 Hz frame
+ * makes the heart twitch instead of beat.
+ */
+let shownBpm = -1;
+function renderHeart(bpm){
+  bpm = bpm || 0;
+  $('hrChip').classList.toggle('live', bpm > 0);
+  if (bpm === shownBpm) return;
+  shownBpm = bpm;
+  $('hrBpm').textContent = bpm > 0 ? bpm : '——';
+  const beat = STRIDE.beatStyle(bpm);
+  const svg = $('hrChip').querySelector('svg');
+  svg.style.animationDuration = beat;
+  svg.style.animationPlayState = beat ? 'running' : 'paused';
+}
+
+/**
+ * A ring arc, clamped to the dial's scale.
+ *
+ * Positive grows clockwise from twelve o'clock, negative grows anti-clockwise
+ * from the same place — so a decline reads as the mirror of a climb rather than
+ * as nothing at all. Until 17 August 2026 this was `Math.max(0, …)` and the deck
+ * going to −1% drew an empty ring, which is indistinguishable from level.
+ *
+ * The anti-clockwise case is a gap followed by a dash, occupying the last `len`
+ * units of the path, which is the segment immediately before twelve o'clock
+ * going backwards. Done this way rather than with a negative `dashoffset` for
+ * the same reason `tick()` is: Chromium 83 animates dashoffset unevenly on a
+ * rotated circle, and the arc visibly crawls into place.
+ */
 function dash(f){
-  return (Math.max(0, Math.min(1, f)) * 1000).toFixed(1) + ' 1000';
+  const v = Math.max(-1, Math.min(1, f || 0));
+  if (v >= 0) return (v * 1000).toFixed(1) + ' 1000';
+  const len = -v * 1000;
+  return '0 ' + (1000 - len).toFixed(1) + ' ' + len.toFixed(1) + ' 0';
 }
 /** A 6-unit mark at f, drawn as a gap-then-dash so it needs no dashoffset —
  *  Chromium 83 animates dashoffset unevenly on a rotated circle. */
@@ -968,7 +1084,7 @@ function renderWarm(s){
 
 function renderSummary(s){
   $('sumKind').textContent = ('SESSION COMPLETE · ' +
-    (s.plan.name || (s.mode === 'run' ? 'MANUAL RUN' : 'MANUAL WALK')) +
+    (s.plan.name || 'MANUAL') +
     ' ' + Math.round(s.session.elapsed / 60)).toUpperCase();
   $('sumHead').textContent  = 'Nice work, ' + (s.profile || 'you');
   $('sumCoach').textContent = s.summaryLine || '';
@@ -978,6 +1094,69 @@ function renderSummary(s){
   $('sumAvg').textContent   = s.session.avgSpeed.toFixed(1);
   $('sumMax').textContent   = s.session.maxSpeed.toFixed(1);
   $('sumClimb').textContent = Math.round(s.session.climb);
+  renderHeartPanel(s);
+  renderBadges(s);
+}
+
+/**
+ * Average, peak and time-in-zone for the walk just finished.
+ *
+ * Three states, and all three happen: a strap that read (zones, if an age is
+ * set), a strap that read with no age on file (average and peak, which need
+ * nobody's), and no strap at all. The last is the common case for a guest and
+ * must not look like a fault.
+ */
+function renderHeartPanel(s){
+  const avg = s.session.avgPulse, peak = s.session.maxPulse;
+  $('sumHrAvg').textContent = avg > 0 ? avg : '——';
+  $('sumHrMax').textContent = peak > 0 ? peak : '——';
+
+  const rows = STRIDE.zoneRows(s.session.zones);
+  const zonesEl = $('sumZones'), noneEl = $('sumZonesNone');
+  zonesEl.innerHTML = '';
+  if (rows.length){
+    noneEl.textContent = '';
+    rows.forEach(r => {
+      const row = document.createElement('div');
+      row.className = 'zrow';
+      const name = document.createElement('div');
+      name.className = 'zn'; name.textContent = r.name;
+      const track = document.createElement('div');
+      track.className = 'zt';
+      const fill = document.createElement('div');
+      fill.className = 'zf';
+      fill.style.width = (r.share * 100).toFixed(1) + '%';
+      fill.style.background = r.colour;
+      track.appendChild(fill);
+      const val = document.createElement('div');
+      val.className = 'zv mono';
+      val.textContent = Math.round(r.secs / 60) + ' min';
+      row.appendChild(name); row.appendChild(track); row.appendChild(val);
+      zonesEl.appendChild(row);
+    });
+  } else if (avg > 0){
+    /* Read, but no age on file, so there is no maximum to divide by. Say what
+       is missing and where it lives — a blank panel reads as broken. */
+    noneEl.textContent = 'Add your age in Settings to see time in each zone.';
+  } else {
+    noneEl.textContent = 'No heart rate recorded for this workout.';
+  }
+}
+
+/** What this walk beat, or nothing at all — see History.achievements. */
+function renderBadges(s){
+  const el = $('sumBadges');
+  el.innerHTML = '';
+  (s.session.achievements || []).forEach(text => {
+    const b = document.createElement('div');
+    b.className = 'badge';
+    const star = document.createElement('b');
+    star.textContent = '★';
+    const label = document.createElement('span');
+    label.textContent = text;
+    b.appendChild(star); b.appendChild(label);
+    el.appendChild(b);
+  });
 }
 
 /* ---- clock ------------------------------------------------------------------ */

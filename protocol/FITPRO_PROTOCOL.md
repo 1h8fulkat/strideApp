@@ -142,16 +142,19 @@ Other converters in the same namespace: `ByteConverter`, `ShortConverter`, `IntC
 | 7 | `KeyObject` | KeyObj | read | **physical button presses** |
 | 8 | `FanSpeed` | Byte | writable | |
 | 10 | `Pulse` | Pulse | writable | heart rate |
-| 12 | `WorkoutMode` | Mode | writable | |
+| 12 | `WorkoutMode` | Mode | writable | state machine — see **Sleep** below |
 | 13 | `Calories` | Calories | read | |
 | 16 | `ActualKph` | Speed | read | **what the belt is really doing** |
 | 17 | `ActualIncline` | Grade | read | **actual incline** |
 | 20 | `CurrentTime` | Int | read | elapsed |
 | 27 / 28 | `MaxGrade` / `MinGrade` | Grade | read | **machine reports its own limits** |
 | 30 / 31 | `MaxKph` / `MinKph` | Speed | read | **ditto** |
+| 34 | `IdleTimeout` | Short | writable | seconds; **reads 120 on this machine** |
 | 67 / 68 | `BeltTotalTime` / `BeltTotalMeters` | Int | read | lifetime totals |
+| 95 | `IdleModeLockout` | Bool | writable | **reads 0 on this machine** |
 | 96 | `StartRequested` | Bool | read | |
 | 98 | `FanState` | FanState | writable | |
+| 107 | `SleepTimerState` | Bool | writable | **not supported on this machine** |
 
 Target vs actual is a real distinction: write `Kph` (0), read `ActualKph` (16) to see the belt
 respond. Query fields 27/28/30/31 at startup rather than hardcoding limits — but still clamp
@@ -318,6 +321,71 @@ in it is invalid.** `WorkoutMode` is the usual culprit, being a state machine �
 will not accept from its current state fails the `KPH` write travelling alongside it, with no
 indication which field was at fault. Send mode changes in their own frame. That also gets the
 ordering right for the interlock above: mode first, then the speed it enables.
+
+## `WorkoutMode` (field 12) — the values
+
+The state machine the belt interlock and the safety key both live in. Taken from ICON's own
+enumeration; the ones marked have been seen on hardware.
+
+| | | | | | |
+|---|---|---|---|---|---|
+| 0 | `Unknown` | | 9 | `Demo` | |
+| 1 | `Idle` | ✓ | 10 | `WarmUp` | |
+| 2 | `Running` | ✓ | 11 | `CoolDown` | |
+| 3 | `Pause` | ✓ | **12** | **`Sleep`** | see below |
+| 4 | `Results` | | 13 | `Resume` | |
+| 5 | `Debug` | | 14 | `Locked` | |
+| 6 | `Log` | | 20 | `PauseOverride` | |
+| 7 | `Maintenance` | | | | |
+| 8 | `Dmk` | ✓ | | | |
+
+`Dmk` (8) is the safety key being out, and it is reported in bursts rather than held — latch it
+or you will miss it.
+
+Note the asymmetry in ICON's own mapping: it *writes* 12 to put a machine to sleep, but maps a
+12 it *reads* back to "unknown". Do not copy that. 12 is the one value an implementation most
+needs to recognise, for the reason below.
+
+## Sleep — the machine has its own, and it is not the console's
+
+**The board goes dormant on a timer of its own, and a dormant board is not a broken one.** This
+is the second thing (after the lock) most likely to make a working implementation look like dead
+hardware, and it presents almost identically: the Android side is fine, the display draws, every
+button answers, and the belt will not move for anything.
+
+Three writable fields describe it. Read back from the machine here (NordicTrack, FitPro1,
+master library version 84) on 2026-09-03:
+
+| Field | ID | Read back |
+|---|---|---|
+| `IdleTimeout` | 34 | `120` — seconds |
+| `IdleModeLockout` | 95 | `0` |
+| `SleepTimerState` | 107 | **unsupported** — the board answers a 5-byte frame with no data |
+
+Read them one per frame. The board rejects a whole frame over a single field it does not
+support, so asking for all three together gets you nothing rather than the two that exist.
+
+ICON's console sets `IdleModeLockout` from the machine's own shape at startup —
+`!supportsRequireStartRequested || !isBeltBasedMachine`, which is `false` on a treadmill with a
+physical START — and sets it `true` again whenever an aerobic machine leaves a workout state.
+
+### Waking it
+
+Write `WorkoutMode = Idle` (1), **in a frame of its own**. That is the transition ICON's console
+makes to bring a board out of any non-idle state, and idle is where the belt interlock expects to
+start from — so the same write both wakes the machine and leaves it ready.
+
+Two failure shapes, and they want different answers:
+
+* **The board answers, reporting mode 12.** It is asleep and saying so. The mode write is all
+  that is needed.
+* **The board answers nothing at all.** It may be asleep at a deeper level, or it may have left
+  the USB bus — that has been seen, and nothing but a fresh `openDevice` fixes it. Look for the
+  device again before concluding anything, and do it on a timer rather than at poll rate.
+
+Worth separating the two halves in any console that has a screen of its own: waking a panel is
+one gesture, and waking a machine spins a motor controller up in whatever room it is standing in.
+ICON's own console asked before doing the second, which is the right instinct.
 
 ## Remaining unknowns
 

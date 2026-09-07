@@ -400,15 +400,6 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
     <button class="pill" id="btnSettings"><span class="lab">SETTINGS</span></button>
   </div>
 
-  <div class="step gone" id="stMode">
-    <div class="ask" style="top:130px" id="askMode">Walking or running?</div>
-    <div class="row2">
-      <button class="slab" id="pickWalk">
-        <span class="nm">Walk</span><span class="bl">up to 6.5 km/h</span></button>
-      <button class="slab" id="pickRun">
-        <span class="nm">Run</span><span class="bl">6.5 and up</span></button>
-    </div>
-  </div>
 
   <div class="step gone" id="stControl">
     <div class="ask" id="controlAsk" style="top:130px">Free run, or a route?</div>
@@ -679,7 +670,7 @@ window.plan = function(p){
 };
 
 /* ---- setup --------------------------------------------------------------- */
-const STEPS = {profile:'stProfile', mode:'stMode', control:'stControl', plan:'stPlan'};
+const STEPS = {profile:'stProfile', control:'stControl', plan:'stPlan'};
 const flow = STRIDE.flow((step, f) => {
   Object.keys(STEPS).forEach(k => $(STEPS[k]).classList.toggle('gone', k !== step));
   $('btnBack').classList.toggle('gone', step === 'profile');
@@ -690,7 +681,6 @@ const flow = STRIDE.flow((step, f) => {
   // over MQTT while this screen is open — so it is decided on arrival at the
   // step, not once at load.
   if (step === 'control') refreshControl();
-  if (step === 'mode') $('askMode').textContent = 'Walking or running, ' + f.profile + '?';
 });
 
 /* Read from Settings, never written here. A name offered on this picker
@@ -791,8 +781,6 @@ function refreshControl() {
 
 renderPlan();
 
-tap($('pickWalk'),   () => flow.setMode('walk'));
-tap($('pickRun'),    () => flow.setMode('run'));
 tap($('pickCasual'), () => flow.setControl('casual'));
 tap($('pickGuided'), () => { flow.setControl('guided'); renderPlan(); });
 tap($('pickRoutes'), () => { flow.setControl('routes'); renderPlan(); });
@@ -894,10 +882,13 @@ $('sleep').addEventListener('mousedown',  e => { e.preventDefault(); wake(); });
 function wake(){
   lastTouch = performance.now();
   if (!asleep) return;
-  asleep = false;
-  STRIDE.suppress(500);
-  $('sleep').classList.remove('on');
-  Stride.dim(false);
+  /* The tap wakes the panel; the machine behind it is a second question, and
+     only asked when there is one to ask. See STRIDE.wakeStep. */
+  STRIDE.wakeStep($('sleep'), function(){
+    asleep = false;
+    STRIDE.suppress(500);
+    $('sleep').classList.remove('on');
+  });
 }
 document.addEventListener('touchstart', () => { lastTouch = performance.now(); }, {capture:true, passive:true});
 document.addEventListener('mousedown',  () => { lastTouch = performance.now(); }, {capture:true});
@@ -956,7 +947,7 @@ window.render = function(raw){
     : s.phase === 'cooldown' ? 'COOLING DOWN'
     : s.phase === 'paused'   ? 'PAUSED'
     : s.ramping === 'resuming' ? 'RESUMING'
-    : s.mode === 'run' ? 'RUNNING' : 'WALKING';
+    : 'WORKING OUT';
 
   $('speed').textContent   = s.belt.speed.toFixed(1);
   $('incline').textContent = s.belt.incline.toFixed(1);
@@ -1060,13 +1051,13 @@ function renderWarm(s){
   const warm = s.phase === 'warmup';
   $('warmTitle').textContent = warm ? 'WARM-UP · TAKE IT EASY' : 'COOL-DOWN · EASING OFF';
   $('warmClock').textContent = mmss(s.phaseLeft);
-  $('warmNote').textContent = !warm ? 'that is the walk done — skip to finish'
+  $('warmNote').textContent = !warm ? 'that is the workout done — skip to finish'
     : s.plan.steps.length ? 'the hills start when this hits zero'
     : 'then it is all yours — skip whenever';
 }
 
 function renderSummary(s){
-  $('sumKind').textContent = ((s.plan.name || (s.mode === 'run' ? 'A run' : 'A walk')) +
+  $('sumKind').textContent = ((s.plan.name || 'A workout') +
     ' · ' + Math.round(s.session.elapsed / 60) + ' minutes').toUpperCase();
   // Runs of climbing, not segments that happen to tilt upward — see
   // STRIDE.hillCount. One hill on a route arrives as a dozen 25 m steps.

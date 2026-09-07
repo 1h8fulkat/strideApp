@@ -178,8 +178,15 @@ button{font-family:inherit;color:inherit;background:none;border:none;
           letter-spacing:-.04em;font-variant-numeric:tabular-nums}
 .gauge .u{margin-top:10px;font-size:19px;color:var(--dim)}
 .gauge .bar{margin-top:28px;width:200px;height:6px;background:var(--line);position:relative}
+/* Left and width are both driven, so the fill can grow either side of the zero
+   mark — a decline is a bar running backwards, not an empty track. */
 .gauge .bar i{position:absolute;left:0;top:0;height:6px;width:0;background:var(--accent);
-              transition:width .3s ease}
+              transition:width .3s ease,left .3s ease}
+/* Where 0% sits on a scale that runs from -3 to +12. Drawn so the fill has
+   something to be measured against; without it a short backwards bar and a
+   short forwards bar look the same. */
+.gauge .bar u{position:absolute;top:-3px;width:1px;height:12px;background:var(--dim);
+              left:40px;opacity:.5}
 .gauge .sug{margin-top:22px;font-size:19px;color:var(--accent);min-height:26px}
 
 /* ---- hero: casual lap track ---------------------------------------------- */
@@ -395,15 +402,6 @@ button{font-family:inherit;color:inherit;background:none;border:none;
     <button class="foot right" id="btnSettings">SETTINGS</button>
   </div>
 
-  <div class="step gone" id="stMode">
-    <div class="ask" id="askMode">Walk or run?</div>
-    <div class="row2">
-      <button class="card" id="pickWalk">
-        <span class="big">Walk</span><span class="sub">up to 6.5 km/h</span></button>
-      <button class="card" id="pickRun">
-        <span class="big">Run</span><span class="sub">6.5 km/h and up</span></button>
-    </div>
-  </div>
 
   <div class="step gone" id="stControl">
     <div class="ask" id="controlAsk">On your own, or with a plan?</div>
@@ -443,7 +441,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;
     <div class="cap">INCLINE</div>
     <div class="v" id="incline">0.0</div>
     <div class="u">% grade &middot; <span id="inclineNote">yours</span></div>
-    <div class="bar"><i id="inclineBar"></i></div>
+    <div class="bar"><u></u><i id="inclineBar"></i></div>
   </div>
 
   <div class="gauge r">
@@ -668,7 +666,7 @@ function drawProfile(){
 }
 
 /* ---- setup flow ---------------------------------------------------------- */
-const STEPS = {profile:'stProfile', mode:'stMode', control:'stControl', plan:'stPlan'};
+const STEPS = {profile:'stProfile', control:'stControl', plan:'stPlan'};
 
 const flow = STRIDE.flow((step, f) => {
   Object.keys(STEPS).forEach(k => $(STEPS[k]).classList.toggle('gone', k !== step));
@@ -680,7 +678,6 @@ const flow = STRIDE.flow((step, f) => {
   // over MQTT while this screen is open — so it is decided on arrival at the
   // step, not once at load.
   if (step === 'control') refreshControl();
-  if (step === 'mode') $('askMode').textContent = 'Walk or run, ' + f.profile + '?';
 });
 
 /* Read from Settings, never written here. A name offered on this picker
@@ -784,8 +781,6 @@ function refreshControl() {
 
 renderPlan();
 
-tap($('pickWalk'),   () => flow.setMode('walk'));
-tap($('pickRun'),    () => flow.setMode('run'));
 tap($('pickCasual'), () => flow.setControl('casual'));
 tap($('pickGuided'), () => { flow.setControl('guided'); renderPlan(); });
 tap($('pickRoutes'), () => { flow.setControl('routes'); renderPlan(); });
@@ -899,10 +894,13 @@ $('sleep').addEventListener('mousedown',  e => { e.preventDefault(); wake(); });
 function wake(){
   lastTouch = performance.now();
   if (!asleep) return;
-  asleep = false;
-  STRIDE.suppress(500);
-  $('sleep').classList.remove('on');
-  Stride.dim(false);
+  /* The tap wakes the panel; the machine behind it is a second question, and
+     only asked when there is one to ask. See STRIDE.wakeStep. */
+  STRIDE.wakeStep($('sleep'), function(){
+    asleep = false;
+    STRIDE.suppress(500);
+    $('sleep').classList.remove('on');
+  });
 }
 document.addEventListener('touchstart', () => { lastTouch = performance.now(); },
                           {capture:true, passive:true});
@@ -961,7 +959,7 @@ window.render = function(raw){
     : s.phase === 'cooldown' ? 'COOLING DOWN'
     : s.phase === 'paused'   ? 'PAUSED'
     : s.ramping === 'resuming' ? 'RESUMING'
-    : s.mode === 'run' ? 'RUNNING' : 'WALKING';
+    : 'WORKING OUT';
 
   /* Belt figures, always from the hardware. */
   $('incline').textContent = s.belt.incline.toFixed(1);
@@ -969,7 +967,12 @@ window.render = function(raw){
   $('inclineNote').textContent = !guided ? 'yours'
                                : s.targets.inclineAuto ? 'set for you'
                                : 'yours until the next stretch';
-  $('inclineBar').style.width = Math.max(0, Math.min(200, s.belt.incline / 12 * 200)) + 'px';
+  /* The deck runs from -3% to +12%, so the bar has a zero mark at 40px and
+     fills either side of it. It used to be `Math.max(0, …)` from the left edge,
+     which drew nothing at all for a decline — and the deck does go negative. */
+  var incPx = Math.max(-3, Math.min(12, s.belt.incline)) / 15 * 200;
+  $('inclineBar').style.left  = (40 + Math.min(0, incPx)) + 'px';
+  $('inclineBar').style.width = Math.abs(incPx) + 'px';
 
   /* A suggestion. The plan never applies it — the person on the treadmill
      decides the pace, always — but they can take it with one tap. */
@@ -1033,8 +1036,7 @@ window.render = function(raw){
   if (s.phase === 'paused'){
     $('paused').classList.add('on');
     $('pausedAt').textContent = 'Paused at ' + mmss(s.session.elapsed);
-    // It says WALK on a walk and RUN on a run. It used to say WALK always.
-    $('endLab').textContent = s.mode === 'run' ? 'END RUN' : 'END WALK';
+    $('endLab').textContent = 'END WORKOUT';
     $('pausedWhere').textContent = guided && s.segment.count
       ? s.segment.name + ' · ' + s.segment.index + ' of ' + s.segment.count +
         ' · the belt has stopped. Nothing is lost.'
@@ -1098,7 +1100,7 @@ function renderSummary(s){
   $('sumCoach').textContent = s.summaryLine || '';
   $('sumKind').textContent  = s.plan.name
     ? (Math.round(s.session.elapsed / 60) + ' minutes of ' + s.plan.name).toUpperCase()
-    : (s.mode === 'run' ? 'A RUN' : 'A WALK');
+    : 'A WORKOUT';
   $('sumTime').textContent  = mmss(s.session.elapsed);
   $('sumDist').textContent  = STRIDE.km(s.session.distance);
   $('sumCals').textContent  = nf(s.session.calories);

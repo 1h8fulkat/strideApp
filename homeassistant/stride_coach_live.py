@@ -93,17 +93,17 @@ KINDS = {
                 "reasons. Mention zones only if `hr_zone` is non-zero, and even "
                 "then in words — see the note under it below.",
     "hr_settled": "His heart rate has come back down to his session average "
-                  "after a spell of working harder, and he is still walking. "
+                  "after a spell of working harder, and he has not stopped. "
                   "That is recovery on the move and it is worth noticing once. "
                   "Keep it light — no physiology lecture, no numbers he does "
                   "not need.",
     "zone_low": "His heart rate has been sitting below the easy aerobic range "
-                "this walk is aiming for, for a full minute. This is an "
+                "this workout is aiming for, for a full minute. This is an "
                 "invitation, not a correction — he may be deliberately taking "
                 "it gently, and that is allowed. Offer the pace the console "
                 "suggests, say it is there if he wants it, and let him decline "
                 "it without being nagged. Never imply he is doing badly.",
-    "zone_high": "His heart rate has been above the range this walk is aiming "
+    "zone_high": "His heart rate has been above the range this workout is aiming "
                  "for, for a full minute. Deal with form before pace: a longer "
                  "stride and longer breathing often settle it on their own, and "
                  "that is the first thing to say. Then offer the easier pace as "
@@ -117,15 +117,15 @@ KINDS = {
                "with it — this is heard a few seconds BEFORE it arrives, so speak "
                "in the future, not the past. Never announce a hill he is already "
                "climbing.",
-    "summary": "The walk is ending. This one line sits on the summary screen, "
+    "summary": "The workout is ending. This one line sits on the summary screen, "
                "beside the distance, time, calories and climb, which are all "
                "already printed there in large numbers. "
                "DO NOT REPEAT ANY OF THEM. "
                "\"Good work, 3 km in 5 minutes\" is worthless — he is looking at "
                "the 3 km. "
-               "Say the thing the screen cannot: what the walk was like, what he "
+               "Say the thing the screen cannot: what the workout was like, what he "
                "did well in it, what held up or did not, what it means next to "
-               "the walks before it. If nothing stands out, one plain sentence "
+               "the workouts before it. If nothing stands out, one plain sentence "
                "is better than a manufactured observation. "
                "This is both shown and read aloud as he steps off, so keep it "
                "to something you would actually say out loud — two sentences at "
@@ -203,7 +203,6 @@ INSTRUCTIONS = (
     + """
 
 THE SESSION SO FAR
-- Workout: {{ trigger.payload_json.workout }}
 - Time so far: {{ (trigger.payload_json.elapsed / 60) | round(0) | int }} minutes
 - Distance so far: {{ trigger.payload_json.distance }} m
 - Pace right now: {{ trigger.payload_json.speed }} km/h (session average
@@ -217,14 +216,14 @@ THE SESSION SO FAR
 {% if trigger.payload_json.hr_zone | int > 0 %}
 - Effort: {{ ['', 'barely ticking over', 'easy aerobic', 'steady',
               'working hard', 'flat out'][trigger.payload_json.hr_zone | int] }}
-  for him. This walk is aiming for easy aerobic through steady.
+  for him. This workout is aiming for easy aerobic through steady.
   Say it in those words. Do NOT say "zone", do not say a percentage, and do
   not quote his maximum: it is estimated from his age with about ten beats of
   slack either way, and reciting it would give a rough number the authority of
   a measured one.
 {% endif %}
 {% elif trigger.payload_json.avg_pulse | int > 0 %}
-- Heart rate: not reading at this moment — the strap has dropped out mid-walk
+- Heart rate: not reading at this moment — the strap has dropped out mid-workout
   and should be back shortly. Earlier in this session it averaged
   {{ trigger.payload_json.avg_pulse }} bpm. Say nothing about it; a gap in the
   signal is not something he did.
@@ -240,7 +239,7 @@ HOW THIS COMPARES
 - Treadmill distance this month:
   {{ states('sensor.treadmill_distance_monthly') | float(0) | round(0) | int }} m
   These are running totals, not single sessions. Do not describe any of them as
-  one walk, and do not call anything a record — you have not been shown one.
+  one workout, and do not call anything a record — you have not been shown one.
 - He weighs {{ states('""" + W + """') }} kg, working towards 5 kg down.
   Only mention weight if the moment genuinely calls for it, which is rarely.
 

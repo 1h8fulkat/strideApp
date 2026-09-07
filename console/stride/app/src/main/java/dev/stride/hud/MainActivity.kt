@@ -58,6 +58,50 @@ class MainActivity : Activity() {
          *  not settled here and incline is not what was reported broken. */
         const val KPH_STEP = 0.1
 
+        /**
+         * What a session is called, now that there is only one kind.
+         *
+         * Was "walk" or "run", chosen on a screen of its own. The distinction
+         * bought a word and cost a tap, and the ceiling it advertised — 6.5 km/h
+         * against 19 — was never enforced anywhere: both clamp to the board's
+         * own MIN_KPH/MAX_KPH. Deriving it from pace instead would be a guess,
+         * because 7-8 km/h is a walk for some people and a jog for the same
+         * person on a different day. The console does not know, so it does not
+         * say. Sessions recorded before 2026-09-07 still read "walk"; nothing
+         * rewrites them.
+         */
+        const val WORKOUT = "workout"
+
+        /**
+         * How far the wall clock may disagree with the monotonic clock before
+         * it counts as having been corrected rather than merely drifting.
+         *
+         * NTP moves this board by *sixteen years*, so anything in the region of
+         * a minute separates the two cases with room to spare. Small enough to
+         * catch an ordinary time-zone correction too; large enough that normal
+         * clock skew over a 40-minute walk never trips it.
+         */
+        const val CLOCK_JUMP_MS = 60_000L
+
+        /**
+         * Before this, a date is the board's boot clock rather than a date.
+         *
+         * 2024-01-01. The console cannot have recorded a walk before it was
+         * built, so anything earlier is the 2010 epoch this board comes up on —
+         * whatever year it happens to claim.
+         */
+        const val SANE_EPOCH_MS = 1_704_067_200_000L
+
+        /**
+         * Longer than this between two live pulse readings and the seconds in
+         * between are credited to no zone.
+         *
+         * The strap reports about once a second; four seconds is a dropout, and
+         * on 17 August 2026 one lasted from the end of the walk until the strap
+         * was taken off entirely. Time nobody was measured is not time in a zone.
+         */
+        const val ZONE_MAX_GAP_MS = 4_000L
+
         /** Fan is polled on its own exchange, not folded into TELEMETRY —
          *  see [readFan]. */
         const val FAN_EVERY_MS = 1000L
@@ -80,6 +124,29 @@ class MainActivity : Activity() {
          *  refusal surfaces while the person is still looking at the button. */
         const val WRITE_TRIES = 15
         const val MQTT_EVERY_MS = 1000L
+
+        /**
+         * How long the board may say nothing before it counts as not answering.
+         *
+         * Distinct from a refused frame, which is the board talking. Silence is
+         * either the machine asleep — see [FitPro.Mode.SLEEP] — or the board
+         * gone from the USB bus, and the second of those is only ever fixed by
+         * a new connection.
+         */
+        const val SILENCE_MS = 5_000L
+
+        /** How long to leave between two attempts at rebuilding the transport.
+         *  Nothing about a silent board is urgent enough to retry at poll rate. */
+        const val REACQUIRE_MS = 5_000L
+
+        /**
+         * How long a wake is given before it is called a failure.
+         *
+         * Long enough for a reacquire and a mode write to land at 5 Hz, short
+         * enough that somebody standing in front of a dark machine at 6am gets
+         * a straight answer rather than a spinner.
+         */
+        const val WAKE_WAIT_MS = 8_000L
 
         /**
          * How long to wait before trying the *first* MQTT connection again,
@@ -183,6 +250,23 @@ class MainActivity : Activity() {
          * an exact zero would nag forever.
          */
         const val STOPPED_KPH = 0.3
+
+        /**
+         * Metres the odometer must advance before an idle belt counts as moving.
+         *
+         * Distance is whole metres, so one of them can appear at the boundary of
+         * a walk that has just ended. Two cannot arrive on a belt that is
+         * standing still — nothing fabricates metres.
+         */
+        const val IDLE_ODO_METRES = 2.0
+
+        /**
+         * No odometer movement at all for this long, and the idle belt really is
+         * stopped. Only ever consulted when *nothing* has moved: a belt crawling
+         * too slowly to have covered [IDLE_ODO_METRES] yet keeps its anchor, so
+         * a slow runaway is still caught, however long it takes to prove.
+         */
+        const val IDLE_STILL_MS = 4000L
 
         /** Close enough to level to stop asking. The deck reports whole percent. */
         const val LEVEL_GRADE = 0.5
@@ -293,6 +377,13 @@ class MainActivity : Activity() {
         /** Kept out of TELEMETRY on purpose — see [readFan]. */
         val FAN_READ = listOf(FitPro.Field.FAN_STATE)
 
+        /** The board's own idle timer, read once at startup — see [readSleepConfig]. */
+        val SLEEP_FIELDS = listOf(
+            FitPro.Field.IDLE_TIMEOUT,
+            FitPro.Field.IDLE_MODE_LOCKOUT,
+            FitPro.Field.SLEEP_TIMER_STATE,
+        )
+
         /** KPH/GRADE are the board's *targets* — read so physical buttons don't desync us. */
         val READS = listOf(FitPro.Field.KPH, FitPro.Field.GRADE) + TELEMETRY
 
@@ -324,6 +415,15 @@ class MainActivity : Activity() {
     private var unlockAttempts = 0
     private var lastUnlockMs = 0L
 
+    /** When the board last said anything at all — a refusal counts, silence
+     *  does not. See [boardAwake] and the null branch of [pollLoop]. */
+    @Volatile private var lastReplyMs = 0L
+    @Volatile private var lastReacquireMs = 0L
+
+    /** When somebody last asked for the machine to be woken, or 0 if nobody
+     *  has since it was last awake. See [wakeState]. */
+    @Volatile private var wakeAskedAt = 0L
+
     /** When we last wrote a target. Until this settles, our value outranks the
      *  board's echo of it — see the follow block in [pollLoop]. */
     private var lastWriteMs = 0L
@@ -342,6 +442,40 @@ class MainActivity : Activity() {
 
     /** Snap to a step grid, killing float drift like 6.500000000000001. */
     private fun quantise(v: Double, step: Double) = Math.round(v / step) * step
+
+    /**
+     * Average pace for the session, km/h, from distance over time.
+     *
+     * Both numbers are counters the board keeps, so this is measured rather than
+     * estimated — unlike the old average, which was the mean of the odometer
+     * estimator's per-poll output and therefore carried all of that estimator's
+     * drift into the summary screen.
+     */
+    private fun avgPace(): Double {
+        val secs = elapsedSec()
+        return if (secs > 1.0) sessionDistance / secs * 3.6 else 0.0
+    }
+
+    /**
+     * Which zone a share of maximum heart rate falls in, 0-5.
+     *
+     * The usual five-zone split on percentage of maximum. Zone 0 is everything
+     * below 50%, which is standing about rather than a training zone, and is
+     * counted separately so it cannot inflate zone 1.
+     *
+     * Kept here rather than shared with Coach.zoneOf deliberately: that one
+     * answers "what should the coach call this effort right now" and returns
+     * 1-5 with no floor, because a coach saying "barely ticking over" about a
+     * 45% share is right. This one is dividing up a walk and needs the floor.
+     */
+    private fun zoneIndex(share: Double): Int = when {
+        share < 0.50 -> 0
+        share < 0.60 -> 1
+        share < 0.70 -> 2
+        share < 0.80 -> 3
+        share < 0.90 -> 4
+        else -> 5
+    }
 
     /** Pace at the moment of pausing, and the speed the resume ramp is climbing
      *  towards. Zero for either means no ramp is in progress. */
@@ -431,8 +565,51 @@ class MainActivity : Activity() {
     /** The grade the board last reported, for enforceLevel. */
     @Volatile private var lastActualGrade = 0.0
 
+    /**
+     * How fast the belt is turning while no workout is running, from the
+     * odometer. See [idleBeltSpeed] — this is what [enforceStopped] actually
+     * runs on, because [lastActualKph] is zero on this board at every speed.
+     */
+    @Volatile private var idleBeltKph = 0.0
+    /** Odometer anchor for [idleBeltSpeed]; negative means "not anchored yet". */
+    private var idleOdoMetres = -1.0
+    private var idleOdoAt = 0L
+
     /** How many times we have had to re-command a stop. Reset when it takes. */
     @Volatile private var stopNags = 0
+
+    /** Wall clock and uptime at which the current runaway was first seen. */
+    private var runawayAtWall = 0L
+    private var runawayAtUptime = 0L
+    private var runawayPeakKph = 0.0
+
+    /**
+     * Write one line to the console's own incident record.
+     *
+     * Not Log.w. Logcat on this console holds roughly a day and had already
+     * rolled past the start of the 2026-08-28 runaway by the time anyone
+     * looked — the whole reason that morning has no answer. This file is small,
+     * append-only, and survives both the buffer and a reboot.
+     *
+     * The clock is stamped as well as the uptime because this board boots at
+     * 2010-01-01 and only jumps to the real time once the network is up. A line
+     * claiming 2010 is not a broken record; it is a runaway that began before
+     * NTP landed, and the uptime is what orders it.
+     */
+    private fun recordIncident(line: String) {
+        try {
+            val f = java.io.File(filesDir, "incidents.log")
+            // Keep it bounded. This should be a handful of lines a year, and a
+            // file that can grow without limit on a device nobody logs into is
+            // its own bug.
+            if (f.length() > 64 * 1024) f.delete()
+            val when_ = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+                .format(java.util.Date())
+            f.appendText("$when_ (up ${SystemClock.elapsedRealtime() / 1000}s) $line\n")
+        } catch (e: Exception) {
+            Log.w(TAG, "could not write incident record: ${e.message}")
+        }
+    }
     /** True while the deck is being walked back to level after a workout. */
     @Volatile private var levelling = false
     @Volatile private var levelNags = 0
@@ -477,6 +654,40 @@ class MainActivity : Activity() {
     @Volatile private var maxPulse = 0
     @Volatile private var pulseSum = 0L
     @Volatile private var pulseSamples = 0
+
+    /**
+     * Seconds in each heart-rate zone, 0-5. Index 0 is below zone 1.
+     *
+     * Accumulated in wall-clock time rather than in samples, so a strap that
+     * drops out for a minute does not quietly donate that minute to whichever
+     * zone it was in when it went. Only advanced while a reading is live.
+     */
+    private val zoneSecs = DoubleArray(6)
+    @Volatile private var lastZoneAt = 0L
+
+    /**
+     * Metres climbed, integrated as the walk goes.
+     *
+     * The HUD has always computed this in the page (see profile() in
+     * stride-core.js) and thrown it away at the end. History needs it after the
+     * fact, so it is accumulated here too, from the same rise-over-run.
+     */
+    @Volatile private var climbM = 0.0
+    @Volatile private var lastClimbMetres = 0.0
+
+    /** Set once when the belt stops, so the summary screen can show it. */
+    @Volatile private var earned: List<String> = emptyList()
+    @Volatile private var sessionStartedAt = 0L
+
+    /**
+     * The same instant as [sessionStartedAt], on the clock that cannot be moved.
+     *
+     * [SystemClock.elapsedRealtime] counts since boot and is unaffected by NTP,
+     * which is the whole point: it is the only witness to how long ago the walk
+     * began that survives the wall clock being corrected underneath it. See
+     * [sessionStartWall].
+     */
+    @Volatile private var sessionStartedUptime = 0L
 
     @Volatile private var maxKph = 19.0
     @Volatile private var minKph = 1.6
@@ -525,10 +736,15 @@ class MainActivity : Activity() {
          *
          * The belt moves as a direct result of this tap, so the welcome screen
          * says so.
+         *
+         * Took a `type` of "walk" or "run" until 2026-09-07. Nothing downstream
+         * did anything with it but change a word, and the screen that asked for
+         * it sold the choice on a speed ceiling no code enforced — see flow()
+         * in stride-core.js. It is a workout.
          */
-        @JavascriptInterface fun choose(type: String) {
+        @JavascriptInterface fun choose() {
             if (dmk) return
-            workout = type
+            workout = WORKOUT
             clearPlan()
             resetSession()
             session = Session.WARMUP
@@ -538,7 +754,7 @@ class MainActivity : Activity() {
             rampTo = cfg.warmupKph()
             rampReason = "warmup"
             pendingWrite = mapOf(FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble())
-            Log.i(TAG, "workout chosen: $type — warming up to ${cfg.warmupKph()} km/h")
+            Log.i(TAG, "workout chosen — warming up to ${cfg.warmupKph()} km/h")
             repaint()
         }
 
@@ -575,7 +791,7 @@ class MainActivity : Activity() {
             inclineAuto = true
             lastInclineMoveAt = 0L
 
-            workout = "walk"
+            workout = WORKOUT
             resetSession()
             session = Session.ACTIVE
             activeSince = SystemClock.elapsedRealtime()
@@ -646,7 +862,7 @@ class MainActivity : Activity() {
             inclineAuto = true
             lastInclineMoveAt = 0L
 
-            workout = "walk"
+            workout = WORKOUT
             resetSession()
             session = Session.ACTIVE
             activeSince = SystemClock.elapsedRealtime()
@@ -1116,6 +1332,19 @@ class MainActivity : Activity() {
                 }
             }
         }
+
+        /**
+         * "awake" | "asleep" | "waking" | "unreachable".
+         *
+         * The sleep screen asks this on the tap that woke it, and keeps asking
+         * while a wake is in flight. "awake" is the ordinary answer and means
+         * the tap was the whole gesture — the question is only put when there
+         * is something to ask about.
+         */
+        @JavascriptInterface fun wakeState(): String = this@MainActivity.wakeState()
+
+        /** The second, deliberate half of the tap. See [wakeBoard]. */
+        @JavascriptInterface fun wakeBoard() = this@MainActivity.wakeBoard()
     }
 
     /**
@@ -1332,6 +1561,13 @@ class MainActivity : Activity() {
      */
     private val routes by lazy { Routes(this) }
 
+    /** Every walk this console has recorded — see History. */
+    private val history by lazy { History(this) }
+
+    /** The session's average pulse so far, or 0 if nothing ever read. */
+    private fun avgPulseNow(): Int =
+        if (pulseSamples > 0) (pulseSum / pulseSamples).toInt() else 0
+
     @Volatile private var haPersons: String = "[]"
 
     private fun onPersons(payload: String) {
@@ -1448,7 +1684,29 @@ class MainActivity : Activity() {
      * commanding a stop until it agrees. A treadmill running with nobody
      * driving it is the worst failure this project has, and one dropped USB
      * frame should not be able to cause it.
+     *
+     * It then spent a month unable to fire. What it asked the board was
+     * ActualKph, which this board reports as 0.00 at every speed — the same
+     * fact [beltSpeed] and [probeSpeed] are both written around — so the guard
+     * returned at `actualKph < STOPPED_KPH` on every poll of every day. On
+     * 2026-08-28 the belt was found running against the welcome screen with
+     * twenty-three hours of log behind it and not one line from here.
+     *
+     * The lesson is narrower than "test the net": the net *was* reasoned about
+     * carefully. It was wired to the one signal the codebase already knew was
+     * dead, in a different file, in a comment written by the same hand. A
+     * safety check has to be fed something proven to move — see [beltStillKph].
      */
+    /**
+     * The best evidence available that the belt is turning, km/h.
+     *
+     * Whichever source can see it: the board's own ActualKph if it ever starts
+     * answering, and otherwise the odometer — see [idleBeltSpeed]. Taking the
+     * larger means a broken field reading zero can no longer outvote a moving
+     * belt, which is exactly how the net came to be dead.
+     */
+    private fun beltStillKph(): Double = maxOf(lastActualKph, idleBeltKph)
+
     private fun enforceStopped(actualKph: Double): Map<FitPro.Field, Double>? {
         if (Session.isMoving(session)) return null
         if (actualKph < STOPPED_KPH) return null
@@ -1464,6 +1722,17 @@ class MainActivity : Activity() {
                     "— stopping the belt outright")
         }
         stopNags++
+        runawayPeakKph = maxOf(runawayPeakKph, actualKph)
+        if (stopNags == 1) {
+            runawayAtWall = System.currentTimeMillis()
+            runawayAtUptime = SystemClock.elapsedRealtime()
+            val stamp = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+                .format(java.util.Date(runawayAtWall))
+            recordIncident("BELT RUNNING UNATTENDED at ${"%.1f".format(actualKph)} km/h " +
+                    "(session=${Session.name(session)}, boardMode=$lastBoardMode) " +
+                    "— commanding stop")
+            mqtt.publishRunaway(true, actualKph, stamp, 0L)
+        }
         if (stopNags == 1 || stopNags % 25 == 0) {
             Log.w(TAG, "belt still moving at ${"%.1f".format(actualKph)} km/h " +
                     "outside a workout — commanding stop again (attempt $stopNags)")
@@ -1558,7 +1827,25 @@ class MainActivity : Activity() {
         rampTo = 0.0
         pausedKph = 0.0
         Log.i(TAG, "workout ended: ${"%.0f".format(sessionDistance)} m in " +
-                "${accumulatedMs / 1000} s, ${"%.0f".format(sessionCalories)} kcal")
+                "${accumulatedMs / 1000} s, ${"%.0f".format(sessionCalories)} kcal" +
+                if (pulseSamples > 0) ", hr ${avgPulseNow()}/${maxPulse}" else "")
+        // Recorded before the screen draws, so the summary can show what this
+        // walk beat. Guests are summarised and forgotten — see History.record.
+        earned = history.record(History.Walk(
+            who = walker,
+            startedAt = sessionStartWall(),
+            elapsed = accumulatedMs / 1000.0,
+            distance = sessionDistance,
+            calories = sessionCalories,
+            climbM = climbM,
+            avgSpeed = avgPace(),
+            maxSpeed = maxSpeed,
+            maxIncline = maxIncline,
+            avgPulse = avgPulseNow(),
+            maxPulse = maxPulse,
+            plan = planName,
+        ))
+        if (earned.isNotEmpty()) Log.i(TAG, "achievements: ${earned.joinToString("; ")}")
         if (stopping) return          // the wind-down parks the machine after it
         rampReason = ""
         targetKph = 0.0
@@ -1787,6 +2074,47 @@ class MainActivity : Activity() {
         maxPulse = 0
         pulseSum = 0L
         pulseSamples = 0
+        zoneSecs.fill(0.0)
+        lastZoneAt = 0L
+        climbM = 0.0
+        lastClimbMetres = 0.0
+        earned = emptyList()
+        sessionStartedAt = System.currentTimeMillis()
+        sessionStartedUptime = SystemClock.elapsedRealtime()
+    }
+
+    /**
+     * When this session actually began, in wall-clock time — or 0 if unknowable.
+     *
+     * This board boots at 2010-01-01 and only jumps to the real time once the
+     * network is up, which takes five to ten minutes. Start a walk inside that
+     * window and it is stamped 2010, which is what happened to three of the
+     * first five walks this console ever recorded: two of them are dated
+     * 2010-01-01 10:30 and 10:31, minutes apart, on days that were weeks apart.
+     *
+     * The correction is arithmetic rather than a guess. Two clocks started
+     * together at [resetSession]: the wall clock, which NTP can yank, and
+     * [SystemClock.elapsedRealtime], which it cannot. If the wall clock has
+     * advanced by more than the monotonic clock says has actually passed, it
+     * was corrected mid-walk — and *now* is trustworthy, so the true start is
+     * simply now minus however long the walk has really been running. A walk
+     * that began before NTP and ended after it dates itself exactly. Since
+     * walks run 25-40 minutes and NTP lands in 5-10, that is the usual case.
+     *
+     * The remaining case is a walk that both starts and ends before the network
+     * arrives. Nothing can date that one, so it returns 0 — "no date" — rather
+     * than 2010. History treats 0 as undateable and leaves it out of streaks
+     * and weekly counts instead of quietly filing it under a day in 2010 and
+     * reporting a number that is wrong. Same rule as everywhere else here:
+     * withhold rather than caption.
+     */
+    private fun sessionStartWall(): Long {
+        if (sessionStartedAt <= 0L || sessionStartedUptime <= 0L) return 0L
+        val ran = SystemClock.elapsedRealtime() - sessionStartedUptime
+        val now = System.currentTimeMillis()
+        val drifted = Math.abs(now - (sessionStartedAt + ran)) > CLOCK_JUMP_MS
+        val started = if (drifted) now - ran else sessionStartedAt
+        return if (started < SANE_EPOCH_MS) 0L else started
     }
 
     private fun elapsedSec(): Double {
@@ -2031,6 +2359,7 @@ class MainActivity : Activity() {
         // telemetry and every workout command all depend on this.
         unlockWithRetries()
         readLimits()
+        readSleepConfig()
         mqtt.onMessage(mqtt.coachTopic, ::onCoachLine)
         mqtt.onMessage(mqtt.uiTopic, ::onUiCommand)
         mqtt.onMessage(mqtt.personsTopic, ::onPersons)
@@ -2068,7 +2397,7 @@ class MainActivity : Activity() {
                                queued.getValue(FitPro.Field.WORKOUT_MODE))
             }
 
-            val writes = enforceStopped(lastActualKph)
+            val writes = enforceStopped(beltStillKph())
                 ?: enforceLevel(lastActualGrade)
                 ?: enforceFanOff()
                 ?: queued ?: decelStep() ?: rampStep()
@@ -2082,9 +2411,22 @@ class MainActivity : Activity() {
                 // and push nothing at all, which froze the screen for as long
                 // as the USB read kept timing out — a second per attempt.
                 repaint(boardOk = false)
+                // Silence is two different things wearing the same face. The
+                // machine asleep still owns its USB endpoint and is woken
+                // deliberately — see [wakeBoard], which is the person's call,
+                // not ours. But the board has also been seen to leave the bus
+                // outright, and that one nothing but a fresh connection fixes;
+                // before this, the poll loop read into a closed pipe for ever
+                // and the only cure was the switch on the wall.
+                val quiet = SystemClock.elapsedRealtime() - lastReplyMs
+                if (quiet > SILENCE_MS &&
+                    SystemClock.elapsedRealtime() - lastReacquireMs > REACQUIRE_MS) {
+                    reacquire()
+                }
                 Thread.sleep(POLL_MS)
                 continue
             }
+            lastReplyMs = SystemClock.elapsedRealtime()
 
             // The board asking to be unlocked is not a dropped frame — it is a
             // request, and the only correct answer is to authenticate again.
@@ -2256,17 +2598,21 @@ class MainActivity : Activity() {
     /** Fold one board reading into the session and return what to display. */
     private fun accumulate(v: Map<FitPro.Field, Double>): Snapshot {
         advancePhase()
-        // Mode 8 is WorkoutMode.Dmk — the dead man's key has been pulled.
+        // WorkoutMode.Dmk — the dead man's key has been pulled.
         val boardMode = v[FitPro.Field.WORKOUT_MODE]?.toInt()
         // The board reports 8 only in bursts, dropping back to Pause(3) while the
         // key may still be out — so treat it as an edge and latch it. The banner
         // then stays up until acknowledged, and re-arms instantly if 8 recurs.
-        val keyOut = boardMode == 8
+        val keyOut = boardMode == FitPro.Mode.DMK
         if (keyOut) dmkLatched = true
         if (boardMode != null && boardMode != lastBoardMode) {
             Log.i(TAG, "board WorkoutMode -> $boardMode (${FitPro.Mode.name(boardMode)})")
             lastBoardMode = boardMode
         }
+        // Any mode but Sleep means the machine is up, however it got there —
+        // our write, the physical START, or somebody's foot on the belt. The
+        // wake is then over and a later tap starts a fresh one.
+        if (boardMode != null && boardMode != FitPro.Mode.SLEEP) wakeAskedAt = 0L
         if (keyOut && !dmk) Log.w(TAG, "safety key removed")
         dmk = dmkLatched
         if (keyOut && Session.isMoving(session)) {
@@ -2297,8 +2643,23 @@ class MainActivity : Activity() {
 
         val actual = v[FitPro.Field.ACTUAL_KPH] ?: 0.0
         lastActualKph = actual
-        if (actual < STOPPED_KPH && stopNags > 0) {
+        // Must come before the "confirmed stopped" check below, which is about
+        // the belt rather than about ActualKph and has to see this frame's
+        // verdict, not the previous one's.
+        idleBeltSpeed(rawDistance)
+        // Both sources, because "stopped" has to be true of the belt and not
+        // merely of the field that never populates. ActualKph reading zero was
+        // enough to declare the belt stopped after a single nag, which retired
+        // the nag counter without anything having stopped.
+        if (beltStillKph() < STOPPED_KPH && stopNags > 0) {
             Log.i(TAG, "belt confirmed stopped after $stopNags nag(s)")
+            val ran = (SystemClock.elapsedRealtime() - runawayAtUptime) / 1000
+            val stamp = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+                .format(java.util.Date(runawayAtWall))
+            recordIncident("belt stopped after ${ran}s unattended, " +
+                    "peak ${"%.1f".format(runawayPeakKph)} km/h, $stopNags nag(s)")
+            mqtt.publishRunaway(false, runawayPeakKph, stamp, ran)
+            runawayPeakKph = 0.0
             stopNags = 0
         }
         val incline = v[FitPro.Field.ACTUAL_INCLINE] ?: 0.0
@@ -2316,16 +2677,24 @@ class MainActivity : Activity() {
             missingSpeedPolls = 0
         }
 
-        // The estimator settles itself now — see beltSpeed(). There used to be
-        // a band here that swapped the readout for the commanded pace once the
-        // two came close, and stepping out of it was the jump.
+        // The dial shows the setpoint. See Snapshot.speed for why, at length —
+        // the short version is that the estimate below is built on a whole-metre
+        // odometer, wanders by a few tenths whenever the deck tilts, and made a
+        // 0.1 button press land two tenths away.
+        //
+        // The estimate is still computed, still corrected, and still allowed to
+        // disagree; it just does not draw anything. It is carried as beltKph so
+        // a belt that cannot reach the commanded pace still shows up — see
+        // Snapshot.slipping — and so this stays diagnosable if the board ever
+        // starts filling ActualKph in.
         val derived = beltSpeed(rawDistance)
-        val speed = when {
+        val beltKph = when {
             actual > 0.0 -> actual          // if the board ever starts answering
             !Session.isMoving(session) -> 0.0
             derived != null -> derived      // model, corrected by the odometer
             else -> targetKph
         }
+        val speed = if (Session.isMoving(session)) targetKph else 0.0
 
         val pulse = pulseNow(v[FitPro.Field.PULSE]?.toInt() ?: 0)
 
@@ -2337,11 +2706,32 @@ class MainActivity : Activity() {
             speedSum += speed
             inclineSum += incline
             samples++
+
+            // Rise over run, against ground actually covered. Guarded against
+            // the odometer jumping backwards, which it does when the board
+            // resets its own counter mid-session.
+            val ran = sessionDistance - lastClimbMetres
+            if (ran > 0.0 && ran < 100.0) climbM += ran * incline / 100.0
+            lastClimbMetres = sessionDistance
+
             // Zero is "no reading", never "no pulse" — see pulseNow.
             if (pulse > 0) {
                 if (pulse > maxPulse) maxPulse = pulse
                 pulseSum += pulse
                 pulseSamples++
+                if (walkerHrMax > 0) {
+                    val nowMs = SystemClock.elapsedRealtime()
+                    // Only credit time we were actually reading through. A gap
+                    // longer than a couple of polls is a strap dropout, and the
+                    // seconds inside it belong to no zone.
+                    if (lastZoneAt > 0L && nowMs - lastZoneAt < ZONE_MAX_GAP_MS) {
+                        val z = zoneIndex(pulse.toDouble() / walkerHrMax)
+                        zoneSecs[z] += (nowMs - lastZoneAt) / 1000.0
+                    }
+                    lastZoneAt = nowMs
+                }
+            } else {
+                lastZoneAt = 0L
             }
         }
 
@@ -2354,6 +2744,7 @@ class MainActivity : Activity() {
 
         return Snapshot(
             speed = speed,
+            beltKph = beltKph,
             incline = incline,
             targetSpeed = targetKph,
             targetIncline = targetGrade,
@@ -2368,14 +2759,22 @@ class MainActivity : Activity() {
             ramping = if (rampTo > 0.0) rampReason else "",
             phaseLeft = phaseLeftSec(),
             boardMode = boardMode ?: -1,
-            avgSpeed = if (samples > 0) speedSum / samples else 0.0,
+            // Ground covered over time on the belt, not the average of a
+            // sampled estimate. This is the one speed figure that can be
+            // measured rather than modelled, and it is exact: both halves come
+            // off counters the board keeps itself.
+            avgSpeed = avgPace(),
             maxSpeed = maxSpeed,
             avgIncline = if (samples > 0) inclineSum / samples else 0.0,
             maxIncline = maxIncline,
             avgPulse = if (pulseSamples > 0) (pulseSum / pulseSamples).toInt() else 0,
             maxPulse = maxPulse,
             hrMax = walkerHrMax,
+            zoneSecs = if (walkerHrMax > 0) zoneSecs.map { Math.round(it).toInt() }
+                       else emptyList(),
+            achievements = earned,
             who = walker,
+            whoId = cfg.person(walker)?.id ?: "",
             plan = planName,
             segment = if (step != null) stepIndex + 1 else 0,
             segments = planSteps.size,
@@ -2550,6 +2949,59 @@ class MainActivity : Activity() {
         trimKph = trimKph.coerceIn(-TRIM_MAX_KPH, TRIM_MAX_KPH)
 
         return (modelKph + trimKph).coerceIn(0.0, maxKph)
+    }
+
+    /**
+     * How fast the belt is turning while no workout is running.
+     *
+     * [enforceStopped] is the net that catches a belt running with nobody
+     * driving it, and it was fed [lastActualKph] — which this board reports as
+     * 0.00 at every speed, as [probeSpeed] and [beltSpeed] both say at length.
+     * A net whose input is always zero can never fire, so on this hardware the
+     * one failure the net exists for was completely unguarded. On the morning of
+     * 2026-08-28 the belt was found running on the welcome screen, and there is
+     * not one "belt still moving" line in the log for the twenty-three hours
+     * before it: the check ran every poll and returned at the first `if` every
+     * time.
+     *
+     * Distance is the signal that works. It is whole metres and monotonic, it is
+     * already polled every [POLL_MS], and it only advances when the belt turns —
+     * so it says nothing about how fast, but it is decisive about *whether*,
+     * which is the entire question the net asks.
+     *
+     * [beltSpeed] cannot serve here: it returns null unless a walk is in
+     * progress, which is precisely when this is not needed.
+     */
+    private fun idleBeltSpeed(rawDistance: Double) {
+        if (Session.isMoving(session)) {
+            idleOdoMetres = -1.0
+            idleBeltKph = 0.0
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        // First idle frame, or an odometer that has gone backwards because the
+        // board reseeded it: anchor here and claim nothing.
+        if (idleOdoMetres < 0.0 || rawDistance < idleOdoMetres) {
+            idleOdoMetres = rawDistance
+            idleOdoAt = now
+            idleBeltKph = 0.0
+            return
+        }
+        val moved = rawDistance - idleOdoMetres
+        val dt = now - idleOdoAt
+        if (moved >= IDLE_ODO_METRES) {
+            idleBeltKph = if (dt > 0L) moved / (dt / 1000.0) * 3.6 else 0.0
+            idleOdoMetres = rawDistance
+            idleOdoAt = now
+        } else if (moved <= 0.0 && dt > IDLE_STILL_MS) {
+            // Nothing has moved at all for long enough to call it still. Only
+            // then is the anchor thrown away — a belt that has crawled one metre
+            // keeps it, so slow movement still accumulates to a verdict instead
+            // of being reset out of existence on every timeout.
+            idleBeltKph = 0.0
+            idleOdoMetres = rawDistance
+            idleOdoAt = now
+        }
     }
 
     /**
@@ -2761,6 +3213,136 @@ class MainActivity : Activity() {
         if (level != fanState) {
             fanState = level
             Log.i(TAG, "fan: board says $level")
+        }
+    }
+
+    /* ---------------------------------------------------------------- *
+     * Sleep
+     * ---------------------------------------------------------------- *
+     *
+     * Two things on this console sleep, and only one of them was ever ours.
+     *
+     * The panel dims itself after five idle minutes and comes back on a tap —
+     * each UI owns that, since each owns its own sleep screen. The control
+     * board runs a separate idle timer that STRIDE neither sets nor is told
+     * about, and when it expires the machine goes dormant: [FitPro.Mode.SLEEP].
+     * Come back after a week away and the Android side is perfectly fine, the
+     * HUD draws, every button answers — and the belt will not move for
+     * anything, because the hardware behind it is asleep. Until now the only
+     * known cure was the switch on the wall.
+     *
+     * iFit's own console had the step this restores. A tap woke the display,
+     * and then it asked, separately and deliberately, whether to wake the
+     * machine as well. That separation is the right one and not just history:
+     * waking the board spins a motor controller up in a dark room, and
+     * somebody walking past to read the clock has not asked for that.
+     */
+
+    /**
+     * True when the board is up and talking.
+     *
+     * Both halves matter and they fail differently. A board that has stopped
+     * answering may be asleep or may be off the bus; a board that answers
+     * [FitPro.Mode.SLEEP] is plainly asleep and saying so.
+     */
+    private fun boardAwake(): Boolean =
+        lastReplyMs > 0L &&
+        SystemClock.elapsedRealtime() - lastReplyMs < SILENCE_MS &&
+        lastBoardMode != FitPro.Mode.SLEEP
+
+    /** Where the wake step has got to, for the page that is asking. */
+    private fun wakeState(): String = when {
+        boardAwake() -> "awake"
+        wakeAskedAt == 0L -> "asleep"
+        SystemClock.elapsedRealtime() - wakeAskedAt < WAKE_WAIT_MS -> "waking"
+        else -> "unreachable"
+    }
+
+    /**
+     * Ask the machine to come back.
+     *
+     * Writing [FitPro.Mode.IDLE] is the transition ICON's own console makes to
+     * bring a board out of any state that is not idle, and idle is the state a
+     * workout starts from — so this both wakes the machine and leaves it where
+     * the START button expects to find it.
+     *
+     * Queued rather than sent from here: one thread owns the USB pipe (see
+     * FitProConnection.exchange), and the mode is queued alone because the
+     * board rejects a whole frame over one field it will not accept. The
+     * enforcers that outrank a queued write are all about a belt or a deck
+     * that is doing something it should not be, and a sleeping machine is
+     * doing nothing at all, so none of them can starve this.
+     */
+    private fun wakeBoard() {
+        wakeAskedAt = SystemClock.elapsedRealtime()
+        Log.i(TAG, "wake: asked for the machine — board is ${
+            if (lastBoardMode == null) "not answering" else FitPro.Mode.name(lastBoardMode!!)
+        }")
+        // Somebody is standing in front of it: worth an attempt at the
+        // transport now rather than at the end of the retry gap.
+        lastReacquireMs = 0L
+        pendingWrite = mapOf(FitPro.Field.WORKOUT_MODE to FitPro.Mode.IDLE.toDouble())
+    }
+
+    /**
+     * Rebuild the connection to the board without restarting the console.
+     *
+     * [acquireBoard] runs once, at startup, and stops the moment the poll loop
+     * starts — so a board that left the bus afterwards was never looked for
+     * again. This is that same search, from the poll thread, rate-limited by
+     * [REACQUIRE_MS].
+     *
+     * Note the order: find the device *before* closing what we have. A board
+     * that is merely asleep is still enumerated, and throwing away a working
+     * handle to go looking for one would be the more expensive mistake.
+     */
+    private fun reacquire(): Boolean {
+        lastReacquireMs = SystemClock.elapsedRealtime()
+        val device = conn.findDevice()
+        if (device == null) {
+            Log.w(TAG, "board silent and not on the USB bus — waiting for it to re-enumerate")
+            return false
+        }
+        if (!conn.hasPermission(device)) {
+            Log.w(TAG, "board is back on the bus but USB permission is gone — needs a relaunch")
+            return false
+        }
+        conn.close()
+        val err = conn.open(device)
+        if (err != null) { Log.w(TAG, "board silent — reopen failed: $err"); return false }
+        if (!resolveDeviceId()) {
+            Log.w(TAG, "board silent — reopened, but it answers on neither 4 nor 2")
+            return false
+        }
+        Log.i(TAG, "board is answering again on device $deviceId")
+        lastReplyMs = SystemClock.elapsedRealtime()
+        // A board that has been away has usually re-locked while it was gone.
+        unlockWithRetries()
+        return true
+    }
+
+    /**
+     * What the board's own idle timer is set to, read once and logged.
+     *
+     * Nothing reads these back: they are here because the machine going to
+     * sleep is a decision the hardware makes on its own, and this is the only
+     * account of that decision we can get. All three are writable on the board
+     * and none of them is written — waking is a mode change, and changing how
+     * long the machine stays awake is a different question that nobody has
+     * asked.
+     *
+     * One exchange each, the way [readFan] is. The board rejects a whole frame
+     * over a single field it does not support, and one missing value should
+     * not take the other two down with it.
+     */
+    private fun readSleepConfig() {
+        for (f in SLEEP_FIELDS) {
+            val one = listOf(f)
+            val reply = conn.exchange(FitPro.readWrite(deviceId, one))
+            if (reply == null) { Log.i(TAG, "sleep: no answer for ${f.name}"); continue }
+            val why = FitPro.rejectReason(reply, one)
+            if (why != null) { Log.i(TAG, "sleep: board will not report ${f.name} ($why)"); continue }
+            Log.i(TAG, "sleep: ${f.name} = ${FitPro.parse(reply, one)[f]}")
         }
     }
 

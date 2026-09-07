@@ -476,7 +476,6 @@ function adapt(raw) {
 
   return {
     profile:  raw.who || '',
-    mode:     raw.workout === 'run' ? 'run' : 'walk',
     control:  segments > 0 ? 'guided' : 'casual',
 
     /* welcome | warmup | active | paused | cooldown | summary.
@@ -484,9 +483,17 @@ function adapt(raw) {
        and a run is a mode, not a phase — 'running' meant both. */
     phase:    mode === 'running' ? 'active' : mode,
 
-    /* From the belt controller. Never optimistic local state: the readout has
-       to be what the machine is doing, not what it was asked to do. */
-    belt:     { speed: raw.speed || 0, incline: incline },
+    /* `speed` is the pace the console is holding — the setpoint. It is not the
+       odometer estimate, and that is deliberate: see Snapshot.speed in
+       Session.kt. Showing the estimate is what made the dial wander by a couple
+       of tenths whenever the deck tilted, so a 0.1 press landed 0.2 away.
+
+       `measured` is that estimate, kept for anyone who wants it, and `slipping`
+       is the case it exists to catch — the belt genuinely not reaching what was
+       asked for. Nothing has to draw either. */
+    belt:     { speed: raw.speed || 0, incline: incline,
+                measured: raw.beltKph || 0,
+                slipping: !!raw.slipping },
 
     /* Guided owns incline only. `speed` here is a suggestion the user is free
        to ignore, and nothing may apply it to the belt. */
@@ -533,7 +540,21 @@ function adapt(raw) {
                 lapFraction: (distance % 400) / 400,
                 pulse: raw.pulse || 0,
                 avgSpeed: raw.avgSpeed || 0, maxSpeed: raw.maxSpeed || 0,
-                avgIncline: raw.avgIncline || 0, maxIncline: raw.maxIncline || 0 },
+                avgIncline: raw.avgIncline || 0, maxIncline: raw.maxIncline || 0,
+                avgPulse: raw.avgPulse || 0, maxPulse: raw.maxPulse || 0,
+
+                /* The walker's own maximum, 0 when they have not given an age.
+                   Zero is the ordinary case and the whole UI has to cope with
+                   it: no age means no zones, and a console that drew five bars
+                   off 220-minus-a-guess would be inventing physiology. */
+                hrMax: raw.hrMax || 0,
+
+                /* Seconds per zone, index 0-5, where 0 is below zone 1. Empty
+                   when there is no maximum to divide by. */
+                zones: raw.zoneSecs || [],
+
+                /* Filled once, when the belt stops. See History.kt. */
+                achievements: raw.achievements || [] },
 
     safetyKey: raw.dmk ? 'out' : 'in',
     fan:       raw.fan || 0,
@@ -560,6 +581,70 @@ function adapt(raw) {
 
     raw: raw
   };
+}
+
+/**
+ * The five heart-rate zones, as shares of maximum.
+ *
+ * The textbook split. `name` is what gets drawn; the percentages stay off the
+ * screen because they are the crude part — 220-minus-age is ±10-12 bpm between
+ * two people of the same age, so the boundary is softer than a printed "80%"
+ * makes it look. The colours run cool to hot and are the same five in every
+ * theme, so a glance at the summary means the same thing whichever UI is on.
+ */
+var ZONES = [
+  { key: 'z0', name: 'Resting',   from: 0.00, colour: '#3a4348' },
+  { key: 'z1', name: 'Very light',from: 0.50, colour: '#5aa9c8' },
+  { key: 'z2', name: 'Light',     from: 0.60, colour: '#5fc08a' },
+  { key: 'z3', name: 'Moderate',  from: 0.70, colour: '#e0c264' },
+  { key: 'z4', name: 'Hard',      from: 0.80, colour: '#e08a4a' },
+  { key: 'z5', name: 'Maximum',   from: 0.90, colour: '#d75d5d' }
+];
+
+/**
+ * Turn the raw per-zone seconds into rows worth drawing.
+ *
+ * Zone 0 is dropped: "you spent four minutes below half your maximum" is the
+ * warm-up and the cool-down, and listing it pushes the zones that mean
+ * something down the screen. Zones with no time in them are dropped too — an
+ * empty bar is a row that says nothing.
+ *
+ * `share` is against the *drawn* total rather than the session, so the bars
+ * fill the width they are given and a walk that was half warm-up does not
+ * render four stubs.
+ *
+ * Returns [] when there is nothing to show, which is the signal to fall back to
+ * average and peak — see any theme's renderSummary.
+ */
+function zoneRows(zones) {
+  if (!zones || zones.length < 2) return [];
+  var rows = [], total = 0, i;
+  for (i = 1; i < zones.length && i < ZONES.length; i++) {
+    var secs = zones[i] || 0;
+    if (secs <= 0) continue;
+    total += secs;
+    rows.push({ zone: i, name: ZONES[i].name, colour: ZONES[i].colour, secs: secs });
+  }
+  if (!total) return [];
+  for (i = 0; i < rows.length; i++) rows[i].share = rows[i].secs / total;
+  return rows;
+}
+
+/**
+ * A CSS animation-duration that makes something beat at the shown rate.
+ *
+ * The point of the animation is that it agrees with the number beside it, so it
+ * is driven by the number rather than being a fixed pulse that happens to look
+ * heart-ish. Clamped either side: below about 30 bpm the strap is wrong rather
+ * than the heart being slow, and above 220 the animation is a flicker.
+ *
+ * Returns '' when there is no reading, which stops the animation entirely
+ * rather than leaving it beating at whatever the last value was — a heart that
+ * carries on after the strap comes off is the one thing this must not do.
+ */
+function beatStyle(bpm) {
+  if (!bpm || bpm < 30 || bpm > 220) return '';
+  return (60 / bpm).toFixed(3) + 's';
 }
 
 /**
@@ -684,13 +769,21 @@ var SHAPES = [
 
 /**
  * @param onStep  called with (stepId, flow) whenever the step changes, so the
- *                UI can show the right card. Steps: profile | mode | control | plan.
+ *                UI can show the right card. Steps: profile | control | plan.
+ *
+ * There is no walk-or-run step, and deliberately no walk-or-run *anything*.
+ * It cost a tap on every session to set a noun, and it sold itself on a speed
+ * ceiling — "up to 6.5 km/h" against "6.5 and up" — that nothing enforced:
+ * speed has always clamped to the board's own MIN_KPH/MAX_KPH whichever card
+ * was tapped. Deriving the noun from pace instead was considered and dropped,
+ * because 7-8 km/h is honestly ambiguous — the same person walks and jogs at
+ * that speed — and a console that guessed would be captioning a number it
+ * cannot know. It is a workout. See Snapshot.workout in Session.kt.
  */
 function flow(onStep) {
   var f = {
     step: 'profile',
     profile: defaultWalker() || profiles()[0],
-    mode: 'walk',
     control: 'guided',   // the accented, recommended card on screen 03
     minutes: 30,
     shape: 'rolling',
@@ -711,16 +804,6 @@ function flow(onStep) {
     setProfile: function (name) {
       f.profile = name;
       global.Stride.setWalker(name);
-      return f.go('mode');
-    },
-
-    /* A guided run is a different problem and nobody has asked for it —
-       Plan.kt is walk-only and chooseGuided() records the workout as a walk.
-       So run skips the casual/guided question rather than offering a choice
-       that would quietly become a walk. */
-    setMode: function (m) {
-      f.mode = m;
-      if (m === 'run') { f.control = 'casual'; return f.commit(); }
       return f.go('control');
     },
 
@@ -773,7 +856,7 @@ function flow(onStep) {
 
     /** The one call that arms the belt. */
     commit: function () {
-      if (f.control === 'casual') { global.Stride.choose(f.mode); return f; }
+      if (f.control === 'casual') { global.Stride.choose(); return f; }
       if (f.control === 'routes') {
         // Nothing to arm the belt with if no route was picked.
         if (f.route) global.Stride.chooseRoute(f.route, f.loop);
@@ -785,8 +868,7 @@ function flow(onStep) {
 
     back: function () {
       if (f.step === 'plan')    return f.go('control');
-      if (f.step === 'control') return f.go('mode');
-      if (f.step === 'mode')    return f.go('profile');
+      if (f.step === 'control') return f.go('profile');
       return f;
     }
   };
@@ -1068,7 +1150,7 @@ function fanLabel(n) { return n ? n + ' OF 4' : 'OFF'; }
 var BRIDGE = ['choose', 'chooseGuided', 'chooseRoute', 'skipWarmup', 'skipCooldown', 'pause',
               'setSpeed',
               'resume', 'end', 'home', 'speed', 'incline', 'fan', 'setFan',
-              'setWalker', 'ackDmk', 'hushCoach', 'dim', 'setUi'];
+              'setWalker', 'ackDmk', 'hushCoach', 'dim', 'setUi', 'wakeBoard'];
 
 /** @return true if this page is running without the console behind it. */
 function stub() {
@@ -1082,6 +1164,20 @@ function stub() {
   });
   /* The two that return something. On a desktop every UI is "available", which
      is what you want when you are comparing them side by side in a browser. */
+  /* The machine is awake on a desktop, unless you are here to look at the
+     wake step — `?asleep=1` opens on a console whose board has gone to sleep,
+     and the pretend board comes back a second and a half after WAKE, the way
+     a real one does. `?asleep=dead` never comes back, which is the branch
+     that is otherwise only reachable by unplugging a treadmill. */
+  var pretendWake = /(^|[?&])asleep=/.test(global.location.search) ? 'asleep' : 'awake';
+  var pretendDead = /(^|[?&])asleep=dead/.test(global.location.search);
+  s.wakeState = function () { return pretendWake; };
+  s.wakeBoard = function () {
+    pretendWake = 'waking';
+    if (pretendDead) return;
+    global.setTimeout(function () { pretendWake = 'awake'; }, 1500);
+  };
+
   var pretendUi = 'original';
   s.currentUi = function () { return pretendUi; };
   s.availableUis = function () {
@@ -1107,6 +1203,135 @@ function stub() {
   };
   global.Stride = s;
   return true;
+}
+
+/* ===========================================================================
+   6b. WAKING THE MACHINE
+   ---------------------------------------------------------------------------
+   Two things on this console sleep, and the tap only ever woke one of them.
+
+   The panel dims itself after five idle minutes; each UI owns that, because
+   each owns its own sleep screen. The control board runs an idle timer of its
+   own that STRIDE does not set, and when it expires the machine goes dormant —
+   FitPro.Mode.SLEEP, which the HUD reads every poll and used to render as a
+   shrug. Come back after a week away and everything looks right: the screen
+   lights, the buttons answer, and the belt will not move for anything.
+
+   iFit's own console had the step this restores. A tap woke the display, and
+   then it asked, separately, whether to wake the machine as well. Keeping the
+   two apart is right and not merely nostalgic: waking the board spins a motor
+   controller up in a dark room, and somebody walking past to read the clock
+   has not asked for that.
+
+   So the tap always wakes the panel. If the board is already up — the ordinary
+   morning — nothing else happens and the tap is the whole gesture, exactly as
+   it has always been. The question is only put when there is something to ask.
+   =========================================================================== */
+
+var WAKE_POLL_MS = 300;
+var WAKE_LINES = {
+  asleep:      ['The treadmill is asleep.',
+                'The screen is awake. Wake the machine as well?'],
+  waking:      ['Waking the machine\u2026', 'It takes a moment to come back.'],
+  unreachable: ['The machine did not answer.',
+                'Switch it off at the wall, wait a moment, and switch it back on.']
+};
+
+/* One wake at a time. Every press inside the question also reaches the
+   overlay's own tap handler underneath it, and without this each one would
+   tear down the exchange it was answering. */
+var wakeBusy = false;
+
+/**
+ * The tap on a sleeping console.
+ *
+ * Always wakes the panel. Calls `done` — the UI's own "put the sleep screen
+ * away" — either immediately, when the machine is up and there is nothing to
+ * ask, or once the question has been answered one way or the other.
+ */
+function wakeStep(overlay, done) {
+  /* Unconditionally and first: whatever gets decided about the machine, the
+     tap that arrived was aimed at a dark screen. */
+  Stride.dim(false);
+  if (wakeBusy) return;
+  if (!overlay || Stride.wakeState() === 'awake') { done(); return; }
+  wakeBusy = true;
+
+  var ask = overlay.querySelector('.wakeask');
+  if (!ask) {
+    /* Built here rather than in five documents, and styled inline for the same
+       reason: this is one question with one answer, and the five sleep screens
+       are all but identical — a dark field with a clock on it. Deliberately
+       colourless, so it does not have to pick a side between five accents. */
+    ask = document.createElement('div');
+    ask.className = 'wakeask';
+    ask.style.cssText = 'position:absolute;top:0;right:0;bottom:0;left:0;' +
+      'display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+      'text-align:center;color:#d6d1cb;font-weight:200;z-index:1';
+    ask.innerHTML =
+      '<div class="wt" style="font-size:44px;letter-spacing:.01em"></div>' +
+      '<div class="ws" style="margin-top:20px;font-size:20px;color:#837d75"></div>' +
+      '<div class="wb" style="margin-top:54px;display:flex"></div>';
+    overlay.appendChild(ask);
+  }
+
+  /* The clock and "tap to wake" belong to the sleeping screen, not to this
+     one. Hidden rather than removed — they are the UI's markup, and they go
+     back exactly as they were. */
+  var hidden = [];
+  for (var i = 0; i < overlay.children.length; i++) {
+    if (overlay.children[i] === ask) continue;
+    hidden.push(overlay.children[i]);
+    overlay.children[i].style.visibility = 'hidden';
+  }
+
+  var timer = null;
+
+  function button(label, fn) {
+    var b = document.createElement('div');
+    b.style.cssText = 'margin:0 14px;padding:0 46px;height:84px;line-height:84px;' +
+      'font-size:19px;letter-spacing:.22em;border:1px solid #4d4841;color:#d6d1cb;' +
+      'touch-action:manipulation';
+    b.textContent = label;
+    return tap(b, fn);
+  }
+
+  function show(state, buttons) {
+    ask.querySelector('.wt').textContent = WAKE_LINES[state][0];
+    ask.querySelector('.ws').textContent = WAKE_LINES[state][1];
+    var row = ask.querySelector('.wb');
+    row.innerHTML = '';
+    buttons.forEach(function (b) { row.appendChild(b); });
+    ask.style.display = 'flex';
+    /* The finger that opened this is still on the glass, over whichever
+       button has just been drawn under it. Same rule as waking the screen. */
+    suppress(400);
+  }
+
+  function close() {
+    if (timer) { global.clearInterval(timer); timer = null; }
+    ask.style.display = 'none';
+    hidden.forEach(function (c) { c.style.visibility = ''; });
+    wakeBusy = false;
+    done();
+  }
+
+  show('asleep', [
+    button('WAKE', function () {
+      Stride.wakeBoard();
+      show('waking', []);
+      timer = global.setInterval(function () {
+        var state = Stride.wakeState();
+        if (state === 'awake') { close(); return; }
+        if (state === 'unreachable') {
+          global.clearInterval(timer);
+          timer = null;
+          show('unreachable', [button('CLOSE', close)]);
+        }
+      }, WAKE_POLL_MS);
+    }),
+    button('NOT NOW', close)
+  ]);
 }
 
 /* ===========================================================================
@@ -1174,7 +1399,7 @@ function demo(opts) {
       targetSpeed: speed, targetIncline: guided ? step.incline : 1.5,
       distance: Math.round(dist), elapsed: Math.round(t),
       calories: Math.round(cals), pulse: 0, fan: 2,
-      workout: 'walk', dmk: q.dmk === '1',
+      workout: 'workout', dmk: q.dmk === '1',
       ramping: '', phaseLeft: phase === 'warmup' ? 161 : 0, boardMode: 2,
       avgSpeed: 5.2, maxSpeed: 6.1, avgIncline: 3.4, maxIncline: 9.5,
       who: 'Sam',
@@ -1340,6 +1565,7 @@ global.STRIDE = {
   hold: hold,
   suppress: suppress,
   justWoke: justWoke,
+  wakeStep: wakeStep,
 
   mmss: mmss,
   nf: nf,
@@ -1347,6 +1573,10 @@ global.STRIDE = {
   durationLabel: durationLabel,
   fanName: fanName,
   fanLabel: fanLabel,
+
+  ZONES: ZONES,
+  zoneRows: zoneRows,
+  beatStyle: beatStyle,
 
   stub: stub,
   demo: demo,

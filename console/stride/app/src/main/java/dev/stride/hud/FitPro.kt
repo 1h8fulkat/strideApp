@@ -73,14 +73,41 @@ object FitPro {
         const val RUNNING = 2
         const val PAUSE = 3
         const val RESULTS = 4
+        const val DEBUG = 5
+        const val LOG = 6
+        const val MAINTENANCE = 7
+        /** The safety key is out. See MainActivity.accumulate. */
+        const val DMK = 8
+        const val DEMO = 9
         const val WARM_UP = 10
         const val COOL_DOWN = 11
+
+        /**
+         * The machine itself is dormant — not the panel, the hardware.
+         *
+         * The board runs an idle timer of its own and drops into this mode
+         * when it expires, which on a treadmill left alone for a week is what
+         * you come back to: the Android side is fine, the HUD draws, and the
+         * belt will not move for anything. Writing [IDLE] is the way back —
+         * it is the transition ICON's own console makes to bring a board out
+         * of any non-idle state.
+         *
+         * The whole reason this list is now complete: 12 used to render as
+         * "mode12" in the log, which is not a thing anybody recognises as a
+         * sleeping treadmill.
+         */
+        const val SLEEP = 12
         const val RESUME = 13
+        const val LOCKED = 14
+        const val PAUSE_OVERRIDE = 20
 
         fun name(v: Int) = when (v) {
             UNKNOWN -> "unknown"; IDLE -> "idle"; RUNNING -> "running"
-            PAUSE -> "pause"; RESULTS -> "results"; WARM_UP -> "warmup"
-            COOL_DOWN -> "cooldown"; RESUME -> "resume"
+            PAUSE -> "pause"; RESULTS -> "results"; DEBUG -> "debug"
+            LOG -> "log"; MAINTENANCE -> "maintenance"; DMK -> "safetyKeyOut"
+            DEMO -> "demo"; WARM_UP -> "warmup"; COOL_DOWN -> "cooldown"
+            SLEEP -> "sleep"; RESUME -> "resume"; LOCKED -> "locked"
+            PAUSE_OVERRIDE -> "pauseOverride"
             else -> "mode$v"
         }
     }
@@ -119,8 +146,17 @@ object FitPro {
         MIN_GRADE(28, 2, 0.01, true, false, "Min incline", "%"),
         MAX_KPH(30, 2, 0.01, false, false, "Max speed", "km/h"),
         MIN_KPH(31, 2, 0.01, false, false, "Min speed", "km/h"),
+        /* The board's own account of when it will go to sleep. All three are
+           writable on the hardware and all three are declared read-only here
+           on purpose: waking the machine is a [Mode] change, and changing how
+           long it stays awake is a different decision that nobody has asked
+           for. Read once at startup and logged — see MainActivity's
+           readSleepConfig. */
+        IDLE_TIMEOUT(34, 2, 1.0, false, false, "Idle timeout", "s"),
+        IDLE_MODE_LOCKOUT(95, 1, 1.0, false, false, "Idle lockout", ""),
         // FanState: 0 Off, 1 Low, 2 Medium, 3 High, 4 Auto
         FAN_STATE(98, 1, 1.0, false, true, "Fan", ""),
+        SLEEP_TIMER_STATE(107, 1, 1.0, false, false, "Sleep timer", ""),
         ;
 
         /** Decode this field's raw bytes into a scaled value. */

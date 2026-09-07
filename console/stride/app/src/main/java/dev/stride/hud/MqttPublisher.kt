@@ -43,6 +43,22 @@ class MqttPublisher(
     /** A coaching moment, on its way to HA to be turned into words. */
     val eventTopic get() = "$prefix/treadmill/event"
 
+    /**
+     * The belt is turning and no workout is running.
+     *
+     * Retained, and deliberately the one topic that survives everything: on
+     * 2026-08-28 the belt was found running and the question "what time did it
+     * start" had no answer anywhere. The console's logcat holds about a day and
+     * had already rolled past it, and nothing else on the machine keeps a
+     * record — a runaway is precisely the event during which the console is
+     * *not* recording a session, so every ordinary figure it publishes reads
+     * zero.
+     *
+     * Home Assistant's recorder timestamps the ON transition, which is the
+     * missing answer. See MainActivity.enforceStopped.
+     */
+    val runawayTopic get() = "$prefix/treadmill/runaway"
+
     /** Per-person workout records live under here, one device each. */
     val personTopic get() = "$prefix/person"
 
@@ -118,7 +134,7 @@ class MqttPublisher(
             Sensor("maxPulse", "Pulse Max", "bpm", null, "mdi:heart-pulse"),
             Sensor("calories", "Calories", "kcal", null, "mdi:fire"),
             Sensor("mode", "Mode", null, null, "mdi:state-machine"),
-            Sensor("workout", "Workout", null, null, "mdi:walk"),
+            Sensor("workout", "Workout", null, null, "mdi:shoe-sneaker"),
         )
     }
 
@@ -265,7 +281,56 @@ class MqttPublisher(
             val topic = "homeassistant/sensor/$DEVICE_ID/${s.key}/config"
             publishRaw(topic, "{${parts.joinToString(",")}}", retained = true)
         }
-        Log.i(TAG, "mqtt discovery published for ${SENSORS.size} sensors")
+        // The runaway alarm, as a binary_sensor so HA gives it a proper
+        // on/off history rather than a string that has to be parsed back.
+        // json_attributes_topic carries how fast and since when, so the
+        // recorder keeps the detail alongside the transition.
+        val alarm = ArrayList<String>()
+        alarm += "\"name\":\"Belt Running Unattended\""
+        alarm += "\"unique_id\":\"${DEVICE_ID}_runaway\""
+        alarm += "\"state_topic\":\"$runawayTopic\""
+        alarm += "\"availability_topic\":\"$availTopic\""
+        alarm += "\"value_template\":\"{{ value_json.state }}\""
+        alarm += "\"json_attributes_topic\":\"$runawayTopic\""
+        alarm += "\"payload_on\":\"ON\""
+        alarm += "\"payload_off\":\"OFF\""
+        alarm += "\"device_class\":\"problem\""
+        alarm += device
+        publishRaw("homeassistant/binary_sensor/$DEVICE_ID/runaway/config",
+                   "{${alarm.joinToString(",")}}", retained = true)
+
+        // Give it a baseline, or the entity sits at "unknown" until the first
+        // runaway and there is nothing to see that it is working.
+        //
+        // Safe to publish OFF over a retained ON left by a runaway still in
+        // progress: enforceStopped re-raises it within a poll or two of the app
+        // coming up, because it re-derives the alarm from the belt rather than
+        // remembering it. A stale ON that nothing re-raises would be the worse
+        // failure — it would mean the belt had stopped and the alarm had not.
+        publishRaw(runawayTopic,
+                   "{\"state\":\"OFF\",\"kph\":0.0,\"started_at\":\"\",\"seconds\":0}",
+                   retained = true)
+
+        Log.i(TAG, "mqtt discovery published for ${SENSORS.size} sensors + runaway alarm")
+    }
+
+    /**
+     * Raise or clear the unattended-belt alarm.
+     *
+     * Retained on purpose. A runaway that ends because somebody pulled the
+     * safety key still has to be visible afterwards — the person who finds the
+     * treadmill running is not holding a phone, and the answer needs to still
+     * be there when they come looking.
+     */
+    fun publishRunaway(on: Boolean, kph: Double, startedAt: String, seconds: Long) {
+        if (!connected) return
+        val payload = buildString {
+            append("{\"state\":\"${if (on) "ON" else "OFF"}\",")
+            append("\"kph\":${"%.1f".format(kph)},")
+            append("\"started_at\":\"$startedAt\",")
+            append("\"seconds\":$seconds}")
+        }
+        publishRaw(runawayTopic, payload, retained = true)
     }
 
     /**
@@ -349,7 +414,7 @@ class MqttPublisher(
             Sensor("distance", "Treadmill Distance", "m", "distance", null),
             Sensor("elapsed", "Treadmill Time", "s", "duration", null),
             Sensor("calories", "Treadmill Calories", "kcal", null, "mdi:fire"),
-            Sensor("plan", "Last Walk", null, null, "mdi:map-marker-path"),
+            Sensor("plan", "Last Workout", null, null, "mdi:map-marker-path"),
         )
         for (sensor in sensors) {
             val parts = ArrayList<String>()
