@@ -1,0 +1,34 @@
+name: The install guide is wrong
+description: A step in docs/INSTALL.md did not match what your machine did.
+title: "[Guide] "
+labels: ["install guide"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Nobody who did not already know the answers has followed the guide end
+        to end. If you got stuck, that is a bug in the guide, not in you.
+  - type: input
+    id: step
+    attributes:
+      label: Which step
+      placeholder: "1.3, stop iFit locking you out again"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What the guide said would happen
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Treadmill model
+      placeholder: NordicTrack C 1750

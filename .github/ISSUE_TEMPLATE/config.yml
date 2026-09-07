@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: How the jailbreak works
+    url: https://theidea.works/blog/jailbreak-nordictrack-treadmill/
+    about: The write-up, if you want the story rather than the steps.
+  - name: Safety
+    url: https://github.com/keranm/strideApp/blob/main/SAFETY.md
+    about: Read this before changing anything that moves the belt.

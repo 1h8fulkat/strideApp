@@ -190,6 +190,23 @@ A few decisions that will save you reading the code to find them.
 
 ---
 
+## Fork it
+
+Please do. STRIDE is [Apache-2.0](LICENSE), so you can change it, ship it, sell
+it and build something else out of it without asking me. There's no CLA and you
+keep the copyright on whatever you write.
+
+The thing I'd most like back is **what board your treadmill has**, working or
+not. That list is one machine long today and it can only grow from other
+people's treadmills. There's an
+[issue template](https://github.com/keranm/strideApp/issues/new/choose) for it.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) covers getting set up, where things live,
+how to redesign an interface in a browser without touching a treadmill, and the
+rules I'd ask you to keep if you're changing anything that moves the belt.
+
+---
+
 ## Licence
 
 [Apache-2.0](LICENSE). No warranty, and see [SAFETY.md](SAFETY.md).

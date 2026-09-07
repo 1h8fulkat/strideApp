@@ -1,0 +1,51 @@
+name: Board report
+description: Tell us what board your treadmill has, working or not. This is the most useful issue you can open.
+title: "[Board] "
+labels: ["board report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. The known-good list is currently one machine, so every report
+        moves this forward. Reports where it did **not** work are just as useful.
+  - type: input
+    id: model
+    attributes:
+      label: Treadmill model
+      description: Whatever is on the sticker, e.g. NordicTrack C 1750, ProForm Pro 2000.
+      placeholder: NordicTrack C 1750
+    validations:
+      required: true
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Did it work?
+      options:
+        - Yes, STRIDE is running on it
+        - Partly, some of it works
+        - "No, it did not work"
+        - Have not tried yet, just reporting the board
+    validations:
+      required: true
+  - type: textarea
+    id: usbprobe
+    attributes:
+      label: usbprobe output
+      description: What console/usbprobe reported. Paste it as it appeared.
+      render: text
+  - type: input
+    id: build
+    attributes:
+      label: Build number
+      description: Settings, then About tablet, then Build number.
+      placeholder: EKA2_20221110
+  - type: input
+    id: android
+    attributes:
+      label: Android version
+      placeholder: "9"
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Where it stopped matching the guide, what the console did, what you had to work out for yourself.
