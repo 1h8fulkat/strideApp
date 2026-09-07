@@ -122,6 +122,10 @@ permissions is as far as it goes.
 
    ![Build number](screenshots/install-build-number.png)
 
+   Tapping Build number seven times is what turns on Developer Mode. After
+   about four taps the console starts counting down how many taps are left,
+   and confirms that Developer Mode is enabled on the seventh.
+
 3. Go to **Settings → Developer options**.
 
    ![Developer options](screenshots/install-developer-options.png)
