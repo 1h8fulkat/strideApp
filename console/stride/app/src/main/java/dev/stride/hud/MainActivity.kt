@@ -1350,10 +1350,11 @@ class MainActivity : Activity() {
     /**
      * Which pulse to believe.
      *
-     * The board's number comes from the handlebar grips and is real, but it is
-     * only there while both hands are on the bar — so it drops out on exactly
-     * the hills where it is worth having. A strap does not care what your arms
-     * are doing.
+     * The board's number comes from contact grips on machines that have them,
+     * and is only there while both hands are on the bar — so it drops out on
+     * exactly the hills where it is worth having. On a machine with no grips,
+     * which is most of them now, it is zero for the whole walk. A strap does
+     * not care what your arms are doing, and is the source that always works.
      *
      * Automatic prefers the strap and falls back, and the fallback is on the
      * strap's *reading* rather than its connection: a strap can be connected

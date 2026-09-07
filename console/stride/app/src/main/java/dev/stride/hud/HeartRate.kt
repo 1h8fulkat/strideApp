@@ -23,10 +23,12 @@ import java.util.UUID
 /**
  * A Bluetooth chest strap, read directly by the console.
  *
- * The board reports a pulse from the handlebar grips, and it is real, but it
- * costs both hands on the bar — so on a hill, exactly when the number is worth
- * having, it is not there. A strap reads continuously and does not care what
- * you are doing with your arms.
+ * The board has a pulse field, and on machines that wire contact grips into
+ * it the number is real, but it costs both hands on the bar — so on a hill,
+ * exactly when the number is worth having, it is not there. Plenty of machines
+ * have no grips at all, including the C 1750 this was built on, where the field
+ * sits at zero through an entire walk. A strap reads continuously, does not
+ * care what your arms are doing, and is the only source that works everywhere.
  *
  * **Standard service, no brand support.** `0x180D` and `0x2A37` are the
  * Bluetooth SIG's Heart Rate Service and Measurement characteristic, and every

@@ -700,13 +700,13 @@
   // --- heart rate ---
   function paneHeart(pane) {
     var sc = head(pane, 'Heart rate',
-      'The handlebar grips work but need both hands on the bar. A Bluetooth chest ' +
-      'strap reads continuously, which matters most on hills.');
+      'A Bluetooth chest strap is how most machines get a pulse here. Some ' +
+      'treadmills also wire contact grips on the handlebar to the board, but many do not, including the one STRIDE was built on.');
 
     var g = group('Where the pulse comes from');
     g.appendChild(row('Source',
-      'Automatic prefers a paired strap and falls back to the grips when it is not reading.',
-      segment('hr_source', [['auto', 'Automatic'], ['strap', 'Strap only'], ['grips', 'Grips only']],
+      'Automatic prefers a paired strap and falls back to the board. If your machine has no grips, the board reads zero and only a strap will work.',
+      segment('hr_source', [['auto', 'Automatic'], ['strap', 'Strap only'], ['grips', 'Board only']],
         S.hr_source || 'auto')));
     sc.appendChild(g);
 
@@ -762,7 +762,7 @@
 
       if (!st.available) {
         pairedBox.appendChild(el('div', 'sx-empty',
-          'Bluetooth is off, or this console has none.<br>The grips still work.'));
+          'Bluetooth is off, or this console has none.<br>Without a strap there is no pulse unless your machine has grips.'));
         return;
       }
       if (!st.address) {

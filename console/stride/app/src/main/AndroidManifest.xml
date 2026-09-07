@@ -13,8 +13,9 @@
 
     <!-- Bluetooth heart rate straps.
 
-         Not required: the console works without Bluetooth hardware, reading the
-         pulse from the handlebar grips as it always has.
+         Not required: the console runs fine without Bluetooth hardware, it
+         just has no heart rate unless the machine wires contact grips into the
+         board's pulse field. Many, including the one this was built on, do not.
 
          ACCESS_COARSE_LOCATION is the one that surprises people. A BLE scan can
          be used to infer position from nearby beacons, so from API 23 to 30 the

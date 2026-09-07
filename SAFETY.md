@@ -58,8 +58,8 @@ instructed never to give medical advice or express concern about a reading, and
 there is a setting to take a subject off the table entirely. It can still be
 wrong.
 
-Handlebar grips and Bluetooth straps are consumer heart rate sensors. If a
-number looks alarming, believe your body and a doctor.
+Bluetooth straps, and handlebar grips on machines that have them, are consumer
+heart rate sensors. If a number looks alarming, believe your body and a doctor.
 
 ---
 
