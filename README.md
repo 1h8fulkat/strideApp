@@ -108,7 +108,8 @@ and it says so at the top and marks the places it is weakest.
 In outline:
 
 1. **Factory reset the console.** Stay offline afterwards.
-2. **Enable privileged mode.** Tap ten times, wait seven seconds, tap ten more.
+2. **Enable privileged mode.** Tap ten times, wait seven seconds, tap ten more,
+   then answer the challenge code the console gives you.
 3. **Force stop iFit Admin** (`com.ifit.eru`) and take away its two
    permissions, then force stop and uninstall iFit (`com.ifit.standalone`).
 4. **Enable ADB over Wi-Fi.** Tap Build number seven times, turn on USB

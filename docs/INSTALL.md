@@ -80,12 +80,11 @@ On the iFit welcome screen:
 1. Tap a blank area of the screen ten times.
 2. Wait seven seconds. Nothing appears during the pause.
 3. Tap the same spot ten more times.
-4. Look for the confirmation message at the bottom of the screen.
-5. Swipe up from the bottom to get the Android home button.
-
-If the console asks for a challenge code, either ring NordicTrack support and
-ask for one, or use a third-party calculator such as
-<https://getresponsecode.com> (no connection to this project).
+4. The console shows a challenge code. Get the matching response code, either
+   by ringing NordicTrack support and asking for one, or from a third-party
+   calculator such as <https://getresponsecode.com> (no connection to this
+   project).
+5. Enter the response code.
 
 ### 1.3 Stop iFit locking you out again
 
