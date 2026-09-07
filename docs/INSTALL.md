@@ -106,15 +106,7 @@ Open **Settings → Apps**. Deal with two apps.
 ![Display over other apps](screenshots/install-display-over-other-apps.png)
 
 iFit Admin is a system app and cannot be uninstalled. Force stop plus those two
-permissions is as far as the console UI goes.
-
-> If **Modify system settings** or the full app list never finishes loading,
-> skip them here and run these two commands once you have ADB in step 1.4:
->
-> ```sh
-> adb shell appops set com.ifit.eru SYSTEM_ALERT_WINDOW deny
-> adb shell appops set com.ifit.eru WRITE_SETTINGS deny
-> ```
+permissions is as far as it goes.
 
 **iFit** (`com.ifit.standalone`):
 
