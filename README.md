@@ -141,7 +141,7 @@ In outline:
 Stop after step 7 and you've got a treadmill with no subscription. Steps 1 to 7
 need nothing installed on the Home Assistant side.
 
-If you aren't a confident coder (I'm not), point Claude Code at this repo, give
+If you'd rather not drive it by hand, point Claude Code at this repo, give
 it the treadmill's IP address, and ask it to follow the install guide over ADB.
 That's how most of my own installs have gone.
 
