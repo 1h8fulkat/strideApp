@@ -1,0 +1,338 @@
+package dev.stride.hud
+
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothGattServer
+import android.bluetooth.BluetoothGattServerCallback
+import android.bluetooth.BluetoothGattService
+import android.bluetooth.BluetoothManager
+import android.bluetooth.le.AdvertiseCallback
+import android.bluetooth.le.AdvertiseData
+import android.bluetooth.le.AdvertiseSettings
+import android.content.Context
+import android.os.ParcelUuid
+import android.util.Log
+import java.util.UUID
+
+/**
+ * The treadmill, as a standard Bluetooth fitness machine.
+ *
+ * Zwift, Kinomap and the rest do not know what a NordicTrack is. What they know
+ * is FTMS, the Bluetooth SIG's Fitness Machine Service, and a machine speaking
+ * it turns up in their device list next to the commercial ones. This publishes
+ * that service so the console can be paired with directly, with no phone in the
+ * middle and nothing installed anywhere else.
+ *
+ * **Why this can exist at all.** Being found by Zwift means being a BLE
+ * *peripheral*, and a peripheral has to advertise. Plenty of cheap MediaTek
+ * parts can only be a central, which is the role [HeartRate] already uses for
+ * the strap, and on one of those this file would be dead code. This console
+ * answers `isMultipleAdvertisementSupported = true`, on the same mt8163 Argon
+ * silicon that ciarancoffey/nordictrack-ftms-bridge runs on. That project is
+ * where the idea came from and is credited in the README. It is AGPL and this
+ * is Apache-2.0, so nothing was taken from it: the encoding below is the
+ * published FTMS spec, and the field order is the spec's order because the
+ * spec says it is normative.
+ *
+ * **Telemetry only, on purpose.** FTMS also defines a Control Point that lets
+ * the app on the other end set speed and incline. It is deliberately not here.
+ * The rule the whole guided walk is built on is that nothing sets the belt
+ * speed except the person standing on the belt (see MainActivity's setSpeed),
+ * and handing that to software on another device, in another room, is a
+ * different decision that nobody has asked for yet. Reading is safe. Driving
+ * is not the same thing.
+ */
+class Ftms(private val context: Context) {
+
+    companion object {
+        private val TAG = FitProConnection.TAG
+
+        /** Fitness Machine Service. */
+        val SERVICE: UUID = uuid16(0x1826)
+        /** Fitness Machine Feature: what this machine can report. Read. */
+        val FEATURE: UUID = uuid16(0x2ACC)
+        /** Treadmill Data: the telemetry itself. Notify. */
+        val TREADMILL_DATA: UUID = uuid16(0x2ACD)
+        /** Client Characteristic Configuration, the subscribe switch. */
+        val CCCD: UUID = uuid16(0x2902)
+
+        private fun uuid16(id: Int): UUID =
+            UUID.fromString(String.format("%08x-0000-1000-8000-00805f9b34fb", id))
+
+        /**
+         * Fitness Machine Feature, 4 bytes, then Target Setting Feature, 4
+         * bytes. Little endian, one bit per capability.
+         *
+         * Claimed: total distance (bit 2), inclination (bit 3), expended
+         * energy (bit 9), heart rate (bit 10), elapsed time (bit 12). Target
+         * settings are all zero, which is how a client is told there is no
+         * point writing to a control point that isn't there.
+         */
+        private const val FEATURES = (1 shl 2) or (1 shl 3) or
+                (1 shl 9) or (1 shl 10) or (1 shl 12)
+
+        /**
+         * Treadmill Data flags, 16 bits, saying which fields follow.
+         *
+         * Bit 0 is the odd one: it means *More Data*, and instantaneous speed
+         * is present when it is **clear**. So bit 0 stays 0 and the speed goes
+         * in. The rest name what follows it: total distance (2), inclination
+         * and ramp angle (3), expended energy (7), heart rate (8), elapsed
+         * time (10).
+         */
+        private const val FLAGS = (1 shl 2) or (1 shl 3) or
+                (1 shl 7) or (1 shl 8) or (1 shl 10)
+
+        /**
+         * The advertised payload that makes this a *treadmill* rather than an
+         * unspecified fitness machine: flags byte (bit 0, machine available),
+         * then the machine type as uint16 (bit 0, treadmill).
+         */
+        private val SERVICE_DATA = byteArrayOf(0x01, 0x01, 0x00)
+    }
+
+    private val manager =
+        context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+    private val adapter = manager?.adapter
+
+    private var server: BluetoothGattServer? = null
+    private var data: BluetoothGattCharacteristic? = null
+    private var advertiser: android.bluetooth.le.BluetoothLeAdvertiser? = null
+
+    /** Everyone currently subscribed. A notify to nobody is just radio. */
+    private val subscribers = LinkedHashSet<BluetoothDevice>()
+
+    @Volatile var advertising = false
+        private set
+
+    /** How many clients are listening, for the settings screen to show. */
+    val listeners: Int get() = synchronized(subscribers) { subscribers.size }
+
+    fun start() {
+        val a = adapter ?: run { Log.i(TAG, "ftms: no bluetooth adapter"); return }
+        if (!a.isEnabled) { Log.i(TAG, "ftms: bluetooth is off"); return }
+        if (!a.isMultipleAdvertisementSupported) {
+            // Not a failure worth shouting about. It is a property of the
+            // radio, it will never change, and everything else still works.
+            Log.i(TAG, "ftms: this radio cannot advertise, skipping")
+            return
+        }
+        if (server != null) return
+
+        val srv = manager?.openGattServer(context, callback) ?: run {
+            Log.w(TAG, "ftms: could not open a GATT server"); return
+        }
+        server = srv
+
+        val feature = BluetoothGattCharacteristic(
+            FEATURE,
+            BluetoothGattCharacteristic.PROPERTY_READ,
+            BluetoothGattCharacteristic.PERMISSION_READ,
+        ).apply { value = featureBytes() }
+
+        val treadmill = BluetoothGattCharacteristic(
+            TREADMILL_DATA,
+            BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+            0,   // notify carries no read permission of its own
+        ).apply {
+            addDescriptor(
+                BluetoothGattDescriptor(
+                    CCCD,
+                    BluetoothGattDescriptor.PERMISSION_READ or
+                        BluetoothGattDescriptor.PERMISSION_WRITE,
+                )
+            )
+        }
+        data = treadmill
+
+        val service = BluetoothGattService(SERVICE, BluetoothGattService.SERVICE_TYPE_PRIMARY)
+        service.addCharacteristic(feature)
+        service.addCharacteristic(treadmill)
+        srv.addService(service)
+
+        advertise(a)
+    }
+
+    private fun advertise(a: android.bluetooth.BluetoothAdapter) {
+        advertiser = a.bluetoothLeAdvertiser
+        val adv = advertiser ?: run { Log.w(TAG, "ftms: no advertiser"); return }
+
+        val settings = AdvertiseSettings.Builder()
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+            .setConnectable(true)
+            .setTimeout(0)
+            .build()
+
+        // The name goes in the scan response rather than the advertisement.
+        // An advertisement is 31 bytes, the service UUID and its service data
+        // take 16 of them, and a console called EwayMediatekArgon2 does not
+        // fit in what is left. A client that wants the name asks for it.
+        val payload = AdvertiseData.Builder()
+            .setIncludeDeviceName(false)
+            .addServiceUuid(ParcelUuid(SERVICE))
+            .addServiceData(ParcelUuid(SERVICE), SERVICE_DATA)
+            .build()
+        val scanResponse = AdvertiseData.Builder()
+            .setIncludeDeviceName(true)
+            .build()
+
+        adv.startAdvertising(settings, payload, scanResponse, advertiseCallback)
+    }
+
+    private val advertiseCallback = object : AdvertiseCallback() {
+        override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
+            advertising = true
+            Log.i(TAG, "ftms: advertising as a treadmill")
+        }
+        override fun onStartFailure(errorCode: Int) {
+            advertising = false
+            Log.w(TAG, "ftms: advertising refused (error $errorCode)")
+        }
+    }
+
+    private val callback = object : BluetoothGattServerCallback() {
+        override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
+            if (newState == BluetoothGatt.STATE_DISCONNECTED) {
+                synchronized(subscribers) { subscribers.remove(device) }
+                Log.i(TAG, "ftms: ${device.address} disconnected")
+            } else if (newState == BluetoothGatt.STATE_CONNECTED) {
+                Log.i(TAG, "ftms: ${device.address} connected")
+            }
+        }
+
+        override fun onCharacteristicReadRequest(
+            device: BluetoothDevice, requestId: Int, offset: Int,
+            characteristic: BluetoothGattCharacteristic,
+        ) {
+            val value = characteristic.value ?: ByteArray(0)
+            server?.sendResponse(
+                device, requestId, BluetoothGatt.GATT_SUCCESS, offset,
+                if (offset < value.size) value.copyOfRange(offset, value.size) else ByteArray(0),
+            )
+        }
+
+        override fun onDescriptorWriteRequest(
+            device: BluetoothDevice, requestId: Int, descriptor: BluetoothGattDescriptor,
+            preparedWrite: Boolean, responseNeeded: Boolean, offset: Int, value: ByteArray,
+        ) {
+            if (descriptor.uuid == CCCD) {
+                val on = value.isNotEmpty() && value[0].toInt() != 0
+                synchronized(subscribers) {
+                    if (on) subscribers.add(device) else subscribers.remove(device)
+                }
+                Log.i(TAG, "ftms: ${device.address} ${if (on) "subscribed" else "unsubscribed"}")
+            }
+            if (responseNeeded) {
+                server?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+            }
+        }
+
+        override fun onDescriptorReadRequest(
+            device: BluetoothDevice, requestId: Int, offset: Int,
+            descriptor: BluetoothGattDescriptor,
+        ) {
+            val on = synchronized(subscribers) { subscribers.contains(device) }
+            server?.sendResponse(
+                device, requestId, BluetoothGatt.GATT_SUCCESS, offset,
+                if (on) BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                else BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE,
+            )
+        }
+    }
+
+    /**
+     * Push one frame to everyone listening.
+     *
+     * Called from the poll loop, so it runs at whatever rate the board is being
+     * read at and costs nothing when nobody has subscribed.
+     */
+    fun update(s: Snapshot) {
+        val c = data ?: return
+        val srv = server ?: return
+        val who = synchronized(subscribers) { subscribers.toList() }
+        if (who.isEmpty()) return
+
+        c.value = frame(s)
+        for (d in who) {
+            try {
+                srv.notifyCharacteristicChanged(d, c, false)
+            } catch (e: Exception) {
+                Log.w(TAG, "ftms: notify to ${d.address} failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun featureBytes(): ByteArray {
+        val b = ByteArray(8)
+        le32(b, 0, FEATURES)
+        le32(b, 4, 0)          // no target settings: nothing here can be driven
+        return b
+    }
+
+    /**
+     * One Treadmill Data notification, in the order [FLAGS] promises.
+     *
+     * The speed sent is the setpoint rather than the odometer estimate, for the
+     * same reason the console's own dial shows it: see Snapshot.speed. The
+     * estimate wanders by a few tenths whenever the deck tilts, and a receiving
+     * app has no way to know that and would draw the wander as real.
+     */
+    private fun frame(s: Snapshot): ByteArray {
+        val b = ByteArray(19)
+        var i = 0
+        i = le16(b, i, FLAGS)
+        // Instantaneous speed, km/h at 0.01 resolution.
+        i = le16(b, i, Math.round(s.speed * 100.0).toInt().coerceIn(0, 0xFFFF))
+        // Total distance, metres, three bytes.
+        i = le24(b, i, s.distance.toInt().coerceIn(0, 0xFFFFFF))
+        // Inclination, percent at 0.1, signed. The deck declines, so this goes
+        // negative and the field is sint16 for exactly that reason.
+        i = le16(b, i, Math.round(s.incline * 10.0).toInt().coerceIn(-32768, 32767))
+        // Ramp angle setting. The board reports grade, not an angle, and the
+        // spec pairs the two fields under one flag, so this is the "unknown"
+        // value rather than a number nobody measured.
+        i = le16(b, i, 0x7FFF)
+        // Expended energy: total kcal, then per hour and per minute, which are
+        // sent as "unknown" rather than invented from a session average.
+        i = le16(b, i, s.calories.toInt().coerceIn(0, 0xFFFF))
+        i = le16(b, i, 0xFFFF)
+        b[i++] = 0xFF.toByte()
+        // Heart rate, bpm, whatever the strap is saying.
+        b[i++] = (s.pulse.coerceIn(0, 255)).toByte()
+        // Elapsed time, seconds.
+        i = le16(b, i, s.elapsed.toInt().coerceIn(0, 0xFFFF))
+        return b
+    }
+
+    private fun le16(b: ByteArray, at: Int, v: Int): Int {
+        b[at] = (v and 0xFF).toByte()
+        b[at + 1] = ((v shr 8) and 0xFF).toByte()
+        return at + 2
+    }
+
+    private fun le24(b: ByteArray, at: Int, v: Int): Int {
+        b[at] = (v and 0xFF).toByte()
+        b[at + 1] = ((v shr 8) and 0xFF).toByte()
+        b[at + 2] = ((v shr 16) and 0xFF).toByte()
+        return at + 3
+    }
+
+    private fun le32(b: ByteArray, at: Int, v: Int) {
+        b[at] = (v and 0xFF).toByte()
+        b[at + 1] = ((v shr 8) and 0xFF).toByte()
+        b[at + 2] = ((v shr 16) and 0xFF).toByte()
+        b[at + 3] = ((v shr 24) and 0xFF).toByte()
+    }
+
+    fun stop() {
+        try { advertiser?.stopAdvertising(advertiseCallback) } catch (_: Exception) { }
+        advertising = false
+        synchronized(subscribers) { subscribers.clear() }
+        try { server?.close() } catch (_: Exception) { }
+        server = null
+        data = null
+    }
+}

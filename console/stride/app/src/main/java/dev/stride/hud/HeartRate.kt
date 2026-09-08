@@ -153,6 +153,24 @@ class HeartRate(private val context: Context) {
 
     val available: Boolean get() = adapter?.isEnabled == true
 
+    /**
+     * What this console's radio can actually do, logged once at startup.
+     *
+     * Asked because somebody wanted FTMS: broadcasting the treadmill to Zwift
+     * means being a BLE *peripheral*, and on cheap MediaTek parts that is
+     * routinely absent while the central role this class already uses works
+     * fine. Nothing here reads it yet. It is a fact worth having written down
+     * before anyone designs against it.
+     */
+    fun logRadioCapabilities() {
+        val a = adapter
+        if (a == null) { Log.i(FitProConnection.TAG, "radio: no bluetooth adapter"); return }
+        Log.i(FitProConnection.TAG, "radio: peripheral(multiAdvertisement)=${a.isMultipleAdvertisementSupported}" +
+                " offloadedFilter=${a.isOffloadedFilteringSupported}" +
+                " offloadedBatching=${a.isOffloadedScanBatchingSupported}" +
+                " advertiser=${if (a.bluetoothLeAdvertiser != null) "present" else "null"}")
+    }
+
     /** The current pulse, or 0 if there has not been one recently. */
     fun bpm(): Int =
         if (lastBpm > 0 && SystemClock.elapsedRealtime() - lastAt < STALE_MS) lastBpm else 0

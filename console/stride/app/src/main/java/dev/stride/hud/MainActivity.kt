@@ -420,6 +420,9 @@ class MainActivity : Activity() {
     private val mqtt = MqttPublisher()
     private val cfg by lazy { Settings(this) }
     private val strap by lazy { HeartRate(this) }
+    /** The treadmill as a standard Bluetooth fitness machine, for Zwift and
+     *  friends. Telemetry only, and silent on a radio that cannot advertise. */
+    private val ftms by lazy { Ftms(this) }
     private val voice by lazy { CoachVoice(this) }
     private val coach = Coach()
 
@@ -2617,6 +2620,7 @@ class MainActivity : Activity() {
             val snap = accumulate(v)
             lastSnap = snap
             watchSlip(snap)
+            ftms.update(snap)
             // Through repaint() rather than push(), so the session stamped on
             // the frame is the one that is true at the moment it is handed to
             // the page. A press lands on a WebView thread and can arrive
@@ -3436,10 +3440,13 @@ class MainActivity : Activity() {
         v[FitPro.Field.MAX_GRADE]?.let { if (it != 0.0) maxGrade = it }
         v[FitPro.Field.MIN_GRADE]?.let { minGrade = it }
         Log.i(TAG, "limits: $minKph..$maxKph km/h, $minGrade..$maxGrade %")
+        strap.logRadioCapabilities()
+        ftms.start()
     }
 
     override fun onDestroy() {
         running = false
+        ftms.stop()
         voice.close()
         mqtt.close()
         conn.close()
