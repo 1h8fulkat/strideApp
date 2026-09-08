@@ -13,6 +13,7 @@ import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.content.Context
 import android.os.ParcelUuid
+import android.os.SystemClock
 import android.util.Log
 import java.util.UUID
 
@@ -97,6 +98,9 @@ class Ftms(private val context: Context) {
          * then the machine type as uint16 (bit 0, treadmill).
          */
         private val SERVICE_DATA = byteArrayOf(0x01, 0x01, 0x00)
+
+        /** How often a subscribed client is sent a frame. See [update]. */
+        const val NOTIFY_EVERY_MS = 1_000L
     }
 
     private val manager =
@@ -123,6 +127,18 @@ class Ftms(private val context: Context) {
     /** The last frame's worth of numbers, so a new subscriber gets an answer
      *  straight away instead of waiting for the next poll. */
     @Volatile private var last: Snapshot? = null
+
+    /**
+     * Whether the first frame of this subscription has been logged.
+     *
+     * One line per subscriber, carrying the bytes that actually left, is
+     * enough to tell a working link from a silent one. Logging every frame
+     * fills a 256KB buffer that already struggles to hold two hours.
+     */
+    @Volatile private var loggedFirstFrame = false
+
+    /** When the last frame went out. See [NOTIFY_EVERY_MS]. */
+    @Volatile private var lastNotifyAt = 0L
 
     @Volatile var advertising = false
         private set
@@ -251,7 +267,18 @@ class Ftms(private val context: Context) {
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (newState == BluetoothGatt.STATE_DISCONNECTED) {
                 synchronized(ftmsSubs) { ftmsSubs.remove(device) }
-                Log.i(TAG, "ftms: ${device.address} disconnected")
+                // status is the whole story when a client keeps leaving: 19
+                // is the far end hanging up on purpose, 8 is the link dying
+                // under a weak signal, 22 is this side closing it. Guessing
+                // between those three sends you looking in the wrong place.
+                Log.i(TAG, "ftms: ${device.address} disconnected " +
+                        "(status $status${when (status) {
+                            8 -> ", link supervision timeout"
+                            19 -> ", peer hung up"
+                            22 -> ", local host closed it"
+                            62 -> ", connection failed to establish"
+                            else -> ""
+                        }})")
                 // Android stops a connectable advertisement the moment it is
                 // accepted, and never restarts it. So one phone connecting once
                 // takes the treadmill off the air for everything else until the
@@ -263,7 +290,7 @@ class Ftms(private val context: Context) {
                 // Same reason. A second client can only find us if we are still
                 // advertising while the first one is connected, and on this
                 // stack we are not.
-                Log.i(TAG, "ftms: ${device.address} connected")
+                Log.i(TAG, "ftms: ${device.address} connected (status $status)")
             }
         }
 
@@ -287,6 +314,7 @@ class Ftms(private val context: Context) {
                 synchronized(ftmsSubs) {
                     if (on) ftmsSubs.add(device) else ftmsSubs.remove(device)
                 }
+                loggedFirstFrame = false
                 Log.i(TAG, "ftms: ${device.address} " +
                         "${if (on) "subscribed to" else "unsubscribed from"} treadmill data")
                 // Answer immediately rather than at the next poll. A client
@@ -325,6 +353,17 @@ class Ftms(private val context: Context) {
     fun update(s: Snapshot) {
         last = s
         val srv = server ?: return
+        // One frame a second, not one per poll.
+        //
+        // The board is read five times a second and the first version notified
+        // on every one of them. At the signal levels this console manages, with
+        // the radio buried in the housing and around -90 dBm at the far end,
+        // that is five times the airtime on a link with no margin to spare, and
+        // Zwift was dropping out after anywhere between 7 and 30 seconds. FTMS
+        // clients expect about 1 Hz and nothing is gained by beating that.
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastNotifyAt < NOTIFY_EVERY_MS) return
+        lastNotifyAt = now
         push(srv, data, synchronized(ftmsSubs) { ftmsSubs.toList() }) { frame(s) }
     }
 
@@ -335,12 +374,24 @@ class Ftms(private val context: Context) {
         body: () -> ByteArray,
     ) {
         if (c == null || who.isEmpty()) return
-        c.value = body()
+        val bytes = body()
+        c.value = bytes
         for (d in who) {
-            try {
+            val ok = try {
                 srv.notifyCharacteristicChanged(d, c, false)
             } catch (e: Exception) {
-                Log.w(TAG, "ftms: notify to ${d.address} failed: ${e.message}")
+                Log.w(TAG, "ftms: notify to ${d.address} threw: ${e.message}")
+                false
+            }
+            // Throttled, because this runs at poll rate and the point is to
+            // see whether anything is leaving at all, not to fill the buffer.
+            // notifyCharacteristicChanged returns false when the stack drops
+            // the notification, which is silent otherwise and looks from the
+            // other end exactly like a treadmill that is switched off.
+            if (!ok || !loggedFirstFrame) {
+                loggedFirstFrame = ok
+                Log.i(TAG, "ftms: notify ${if (ok) "ok" else "REFUSED"} " +
+                        "to ${d.address}: ${FitPro.hex(bytes)}")
             }
         }
     }
@@ -365,7 +416,14 @@ class Ftms(private val context: Context) {
         var i = 0
         i = le16(b, i, FLAGS)
         // Instantaneous speed, km/h at 0.01 resolution.
-        i = le16(b, i, Math.round(s.speed * 100.0).toInt().coerceIn(0, 0xFFFF))
+        //
+        // Snapshot.speed is zero unless STRIDE considers a session to be
+        // running, because it was written for the console's own dial. A belt
+        // turning in manual mode is still a belt turning, and a client asking
+        // a treadmill how fast it is going does not have a concept of our
+        // sessions. So fall back to what the odometer says the belt is doing.
+        val kph = if (s.speed > 0.0) s.speed else s.beltKph
+        i = le16(b, i, Math.round(kph * 100.0).toInt().coerceIn(0, 0xFFFF))
         // Average speed, same units. Already tracked for the summary screen.
         i = le16(b, i, Math.round(s.avgSpeed * 100.0).toInt().coerceIn(0, 0xFFFF))
         // Total distance, metres, three bytes.

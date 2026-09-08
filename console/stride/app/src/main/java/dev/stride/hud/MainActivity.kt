@@ -2775,7 +2775,13 @@ class MainActivity : Activity() {
         val derived = beltSpeed(rawDistance)
         val beltKph = when {
             actual > 0.0 -> actual          // if the board ever starts answering
-            !Session.isMoving(session) -> 0.0
+            // Not "zero because no workout is running". This field answers
+            // "what is the belt doing", and a belt turning in manual mode is
+            // turning whether or not STRIDE calls it a session. idleBeltSpeed
+            // is derived from the odometer for exactly this case, and it is
+            // what an FTMS client is asking for when it asks a treadmill how
+            // fast it is going.
+            !Session.isMoving(session) -> idleBeltKph
             derived != null -> derived      // model, corrected by the odometer
             else -> targetKph
         }
