@@ -21,6 +21,7 @@ To undo everything: factory reset the console.
 |---|---|
 | A treadmill | NordicTrack or ProForm, FitPro motor board, Android console. Check [Step 0](#step-0-check-your-treadmill). |
 | A computer | macOS or Linux, with `adb` and Python 3.9+. |
+| JDK 17 + Android SDK | Only if you build it yourself. There is a [signed APK](https://github.com/keranm/strideApp/releases/latest) if you would rather not — see [1.7](#17-install-stride). |
 | Home Assistant | Optional. Needs an MQTT broker. |
 | An iPhone | Optional. Apple Health only. |
 
@@ -194,7 +195,47 @@ If it says the device is claimed, `com.ifit.eru` is running again. Re-run
 says,** working or not. A list of known-good boards is the most useful thing
 this project could have and it does not exist yet.
 
-### 1.7 Build and install
+### 1.7 Install STRIDE
+
+Two ways in. They end at the same screen, so take whichever suits — but read
+the last paragraph before picking, because moving between them later costs you
+your settings.
+
+#### Option A — install the released APK
+
+Nothing to build. You need `adb`, which you already have from step 1.4.
+
+Download `stride-v0.7.0.apk` from
+[the latest release](https://github.com/keranm/strideApp/releases/latest), then:
+
+```sh
+adb install -r stride-v0.7.0.apk
+adb shell am start -n dev.stride.hud/.MainActivity
+```
+
+If you would rather check what you downloaded first:
+
+```sh
+shasum -a 256 stride-v0.7.0.apk
+# 312baf046ffbb88cf02543214da414ebb8377bd24149aa547b4d65b8eb1dd446
+```
+
+That file hash is v0.7.0's and changes with every release. The *certificate*
+does not: every build published here is signed by
+`CN=STRIDE, O=The Idea Works, C=AU`, SHA-256
+`274a6f2e308df50e1e4219f5bd1f4aca5fda8ccd5feccc7c52579c0c8dd302e8`. One that
+is not did not come from here. To check a downloaded APK yourself:
+
+```sh
+apksigner verify --print-certs stride-v0.7.0.apk
+```
+
+It ships with no broker credentials of anyone's — they are compiled out, and
+the console is where you set your own in step 2.1.
+
+#### Option B — build it yourself
+
+You need JDK 17 and the Android SDK.
 
 ```sh
 cd console/stride
@@ -204,7 +245,24 @@ cd console/stride
 `run.sh` builds, installs, launches, and tails the log. It finds the Android
 SDK via `ANDROID_HOME` or `~/Library/Android/sdk`.
 
-✅ The console shows the STRIDE welcome screen, and the log prints
+**Read what it prints.** Without a signing key in `local.properties` it builds
+a *debug* APK and says so. A debug build is `debuggable`, which lets anything
+else on the console read this app's stored settings — broker password
+included — and it opens the WebView DevTools socket. That is fine on a bench
+and is not what you want on a machine that sits in a hallway for years. To
+build the same thing the release is, generate a key and use `./run.sh release`;
+the four properties are documented at the top of
+`console/stride/app/build.gradle.kts`.
+
+#### Pick one and stay on it
+
+Android identifies an app by its signing key, so a build of yours and the
+released APK are different apps as far as the console is concerned. Installing
+one over the other fails with a signature mismatch, and the only way across is
+`adb uninstall dev.stride.hud` first — which takes your settings, your people
+and your workout history with it.
+
+✅ Either way: the console shows the STRIDE welcome screen, and the log prints
 `limits: <min>..<max> km/h, <min>..<max> %`.
 
 ### 1.8 Set up STRIDE

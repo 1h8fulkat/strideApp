@@ -37,9 +37,10 @@ ordinary entities. I built it with Claude Code alongside me, and there's a
 [full write-up of how the jailbreak works](https://theidea.works/blog/jailbreak-nordictrack-treadmill/)
 if you'd rather read the story than the steps.
 
-**v0.6**, in daily use. Still to do for v1.0: HACS packaging, a better
-dashboard, the iOS app on the App Store, and an install guide somebody other
-than me has followed.
+**[v0.7](https://github.com/keranm/strideApp/releases/latest)**, in daily use,
+and now a signed APK you can install without building anything. Still to do for
+v1.0: HACS packaging, a better dashboard, the iOS app on the App Store, and an
+install guide somebody other than me has followed.
 
 ![STRIDE on a NordicTrack console](docs/screenshots/oval-original.png)
 
@@ -129,8 +130,11 @@ In outline:
    and installs the launcher.
 6. **Identify your board** with [`console/usbprobe`](console/usbprobe), which
    reads and changes nothing. Report what it says.
-7. **Build and install the console app** with `console/stride/run.sh`, then set
-   it up on its own screen.
+7. **Install the console app**, then set it up on its own screen. Either grab
+   the signed APK from [the latest release](https://github.com/keranm/strideApp/releases/latest)
+   and `adb install -r` it, or build your own with `console/stride/run.sh`.
+   Pick one and stay on it — they're signed with different keys, so swapping
+   later means uninstalling and losing your settings.
 8. **Optional:** enter broker details on the console to get the treadmill into
    Home Assistant, then add the coach.
 
