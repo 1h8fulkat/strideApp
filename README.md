@@ -38,9 +38,7 @@ ordinary entities. I built it with Claude Code alongside me, and there's a
 if you'd rather read the story than the steps.
 
 **[v0.8](https://github.com/keranm/strideApp/releases/latest)**, in daily use,
-and it now pairs with Zwift over Bluetooth FTMS. Still to do for
-v1.0: HACS packaging, a better dashboard, the iOS app on the App Store, and an
-install guide somebody other than me has followed.
+and it now pairs with Zwift over Bluetooth FTMS.
 
 ![STRIDE on a NordicTrack console](docs/screenshots/oval-original.png)
 
@@ -77,7 +75,7 @@ publishes its own MQTT discovery, so there's no integration, no YAML and no
 custom component.
 
 Build whatever dashboard you like from it. There's no STRIDE dashboard you have
-to accept, though I may ship one via HACS later.
+to accept.
 
 The `homeassistant/` scripts are for the extras: the coach, the reminders, and
 an opinionated health dashboard if you want a starting point.
