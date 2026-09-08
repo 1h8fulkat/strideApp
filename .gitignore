@@ -5,6 +5,14 @@ homeassistant/stride.conf
 # path, which is a home directory and differs per machine.
 console/*/local.properties
 
+# The release signing key. It belongs outside the repo entirely — see the
+# keytool line in console/stride/app/build.gradle.kts — but a key committed
+# once is a key that has to be replaced and every install re-done, so this is
+# here as a second lock rather than as the only one.
+*.jks
+*.keystore
+*.p12
+
 # --- build output -----------------------------------------------------------
 console/*/build/
 console/*/app/build/

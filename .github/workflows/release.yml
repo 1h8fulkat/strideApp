@@ -1,0 +1,106 @@
+## Build a signed APK and attach it to a GitHub release.
+##
+## Why this runs here and not on a laptop
+## --------------------------------------
+## `app/build.gradle.kts` reads the broker host, username and password out of
+## `local.properties` and bakes them into BuildConfig. That file is gitignored
+## and every development machine has one — so an APK built locally carries a
+## working set of somebody's broker credentials to whoever downloads it.
+##
+## A runner has no `local.properties`. The three `secret()` lookups fall back to
+## empty strings, which is exactly right for a public build: Settings.kt only
+## uses BuildConfig as the *seed* for its stored preferences, so whoever
+## installs this configures their own broker on the console and never sees ours.
+##
+## The `no local mqtt credentials` step below enforces that rather than trusting
+## it, because the failure is silent and unrecoverable once published.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  # So a release can be rebuilt without moving a tag.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and upload (e.g. v0.7.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The keystore is held as a base64 secret because a GitHub secret is text.
+      # It is written outside the workspace so no later step can sweep it into
+      # an artefact, and the runner is destroyed afterwards.
+      - name: Restore signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.STRIDE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.STRIDE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.STRIDE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.STRIDE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::STRIDE_KEYSTORE_BASE64 is not set. An unsigned APK cannot be installed, so this fails here rather than publishing one."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 --decode > "$HOME/stride-release.jks"
+          # Written fresh, and deliberately containing nothing but the four
+          # signing lines. No mqtt.* keys, which is what keeps the broker
+          # credentials out of the published build.
+          cat > console/stride/local.properties <<EOF
+          stride.keystore=$HOME/stride-release.jks
+          stride.keystore.password=$KEYSTORE_PASSWORD
+          stride.key.alias=$KEY_ALIAS
+          stride.key.password=$KEY_PASSWORD
+          EOF
+
+      - name: Refuse to build with local mqtt credentials
+        run: |
+          if grep -qE '^\s*mqtt\.' console/stride/local.properties; then
+            echo "::error::local.properties carries mqtt.* keys — those would be compiled into the APK and published. Refusing."
+            exit 1
+          fi
+          echo "ok: no broker credentials in this build"
+
+      - name: Build
+        working-directory: console/stride
+        run: ./gradlew --no-daemon --console=plain assembleRelease
+
+      # An unsigned APK is what the build produces when the signing config did
+      # not take, and adb refuses to install it. Catch that here, where it is a
+      # failed workflow, rather than in somebody's download.
+      - name: Verify the APK is signed
+        run: |
+          APK=console/stride/app/build/outputs/apk/release/app-release.apk
+          if [ ! -f "$APK" ]; then
+            echo "::error::No signed APK at $APK — the release variant built unsigned."
+            ls -la console/stride/app/build/outputs/apk/release/ || true
+            exit 1
+          fi
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose "$APK"
+          cp "$APK" "stride-${GITHUB_REF_NAME:-manual}.apk"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          gh release upload "$TAG" "stride-${TAG}.apk" --clobber \
+            || gh release create "$TAG" "stride-${TAG}.apk" \
+                 --title "$TAG" --notes-file docs/RELEASE_NOTES.md
