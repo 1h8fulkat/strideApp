@@ -58,44 +58,6 @@ class Ftms(private val context: Context) {
         /** Client Characteristic Configuration, the subscribe switch. */
         val CCCD: UUID = uuid16(0x2902)
 
-        /**
-         * Running Speed and Cadence, and why a treadmill publishes it too.
-         *
-         * FTMS is the protocol a *bike* trainer speaks to Zwift, and it is what
-         * every treadmill vendor's marketing points at. Zwift's running side
-         * grew up around footpods instead, which speak this: their own Runn
-         * sensor is an RSC device, and QZ exists in large part to re-broadcast
-         * other machines as RSC so that Zwift will look at them.
-         *
-         * So both are published off the one GATT server. FTMS carries incline,
-         * calories and elapsed time, which RSC has no fields for, and RSC is
-         * the one Zwift Run actually pairs with. A client takes whichever it
-         * understands.
-         */
-        val RSC_SERVICE: UUID = uuid16(0x1814)
-        /** RSC Measurement: speed, cadence, distance. Notify. */
-        val RSC_MEASUREMENT: UUID = uuid16(0x2A53)
-        /** RSC Feature: which of those are real. Read. */
-        val RSC_FEATURE: UUID = uuid16(0x2A54)
-
-        /**
-         * RSC Feature bits: total distance (1) and walking-or-running status
-         * (2). Stride length is not claimed, because nothing here measures a
-         * stride and inventing one from speed would be a number with a
-         * plausible shape and no source.
-         */
-        private const val RSC_FEATURES = (1 shl 1) or (1 shl 2)
-
-        /**
-         * Above this the walking-or-running status bit flips to running.
-         *
-         * Somebody has to pick, the spec does not, and the bit is a single
-         * boolean that Zwift uses to choose an animation. Eight km/h is the
-         * usual walk-to-jog crossover and it is wrong for anyone who
-         * race-walks, which costs them a running avatar and nothing else.
-         */
-        private const val RUNNING_KPH = 8.0
-
         private fun uuid16(id: Int): UUID =
             UUID.fromString(String.format("%08x-0000-1000-8000-00805f9b34fb", id))
 
@@ -143,15 +105,10 @@ class Ftms(private val context: Context) {
 
     private var server: BluetoothGattServer? = null
     private var data: BluetoothGattCharacteristic? = null
-    private var rsc: BluetoothGattCharacteristic? = null
     private var advertiser: android.bluetooth.le.BluetoothLeAdvertiser? = null
 
-    /**
-     * Who is subscribed to what. A notify to nobody is just radio, and a
-     * client that paired as a footpod has no interest in the FTMS frame.
-     */
+    /** Everyone currently subscribed. A notify to nobody is just radio. */
     private val ftmsSubs = LinkedHashSet<BluetoothDevice>()
-    private val rscSubs = LinkedHashSet<BluetoothDevice>()
 
     /**
      * Services still to be registered.
@@ -171,9 +128,7 @@ class Ftms(private val context: Context) {
         private set
 
     /** How many clients are listening, for the settings screen to show. */
-    val listeners: Int
-        get() = synchronized(ftmsSubs) { ftmsSubs.size } +
-                synchronized(rscSubs) { rscSubs.size }
+    val listeners: Int get() = synchronized(ftmsSubs) { ftmsSubs.size }
 
     fun start() {
         val a = adapter ?: run { Log.i(TAG, "ftms: no bluetooth adapter"); return }
@@ -216,34 +171,7 @@ class Ftms(private val context: Context) {
         service.addCharacteristic(feature)
         service.addCharacteristic(treadmill)
 
-        // Running Speed and Cadence, the one Zwift Run actually pairs with.
-        val rscFeature = BluetoothGattCharacteristic(
-            RSC_FEATURE,
-            BluetoothGattCharacteristic.PROPERTY_READ,
-            BluetoothGattCharacteristic.PERMISSION_READ,
-        ).apply { value = byteArrayOf((RSC_FEATURES and 0xFF).toByte(), 0) }
-
-        val rscData = BluetoothGattCharacteristic(
-            RSC_MEASUREMENT,
-            BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-            0,
-        ).apply {
-            addDescriptor(
-                BluetoothGattDescriptor(
-                    CCCD,
-                    BluetoothGattDescriptor.PERMISSION_READ or
-                        BluetoothGattDescriptor.PERMISSION_WRITE,
-                )
-            )
-        }
-        rsc = rscData
-
-        val running = BluetoothGattService(RSC_SERVICE, BluetoothGattService.SERVICE_TYPE_PRIMARY)
-        running.addCharacteristic(rscFeature)
-        running.addCharacteristic(rscData)
-
         pending.addLast(service)
-        pending.addLast(running)
         addNext()
 
         advertise(a)
@@ -274,7 +202,6 @@ class Ftms(private val context: Context) {
         val payload = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
             .addServiceUuid(ParcelUuid(SERVICE))
-            .addServiceUuid(ParcelUuid(RSC_SERVICE))
             .addServiceData(ParcelUuid(SERVICE), SERVICE_DATA)
             .build()
         val scanResponse = AdvertiseData.Builder()
@@ -315,8 +242,7 @@ class Ftms(private val context: Context) {
 
     private val callback = object : BluetoothGattServerCallback() {
         override fun onServiceAdded(status: Int, service: BluetoothGattService) {
-            val name = if (service.uuid == RSC_SERVICE) "running speed and cadence"
-                       else "fitness machine"
+            val name = "fitness machine"
             if (status == BluetoothGatt.GATT_SUCCESS) Log.i(TAG, "ftms: published $name")
             else Log.w(TAG, "ftms: $name refused (status $status)")
             addNext()
@@ -325,7 +251,6 @@ class Ftms(private val context: Context) {
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (newState == BluetoothGatt.STATE_DISCONNECTED) {
                 synchronized(ftmsSubs) { ftmsSubs.remove(device) }
-                synchronized(rscSubs) { rscSubs.remove(device) }
                 Log.i(TAG, "ftms: ${device.address} disconnected")
                 // Android stops a connectable advertisement the moment it is
                 // accepted, and never restarts it. So one phone connecting once
@@ -359,21 +284,18 @@ class Ftms(private val context: Context) {
         ) {
             if (descriptor.uuid == CCCD) {
                 val on = value.isNotEmpty() && value[0].toInt() != 0
-                val running = descriptor.characteristic?.uuid == RSC_MEASUREMENT
-                val set = if (running) rscSubs else ftmsSubs
-                synchronized(set) { if (on) set.add(device) else set.remove(device) }
+                synchronized(ftmsSubs) {
+                    if (on) ftmsSubs.add(device) else ftmsSubs.remove(device)
+                }
                 Log.i(TAG, "ftms: ${device.address} " +
-                        "${if (on) "subscribed to" else "unsubscribed from"} " +
-                        if (running) "running speed" else "treadmill data")
+                        "${if (on) "subscribed to" else "unsubscribed from"} treadmill data")
                 // Answer immediately rather than at the next poll. A client
                 // that subscribes and then sits in silence has no way to tell
                 // a working treadmill from a broken one, and some give up in
                 // well under a second.
                 if (on) last?.let { s ->
                     val srv = server ?: return@let
-                    push(srv, if (running) rsc else data, listOf(device)) {
-                        if (running) rscFrame(s) else frame(s)
-                    }
+                    push(srv, data, listOf(device)) { frame(s) }
                 }
             }
             if (responseNeeded) {
@@ -385,8 +307,7 @@ class Ftms(private val context: Context) {
             device: BluetoothDevice, requestId: Int, offset: Int,
             descriptor: BluetoothGattDescriptor,
         ) {
-            val set = if (descriptor.characteristic?.uuid == RSC_MEASUREMENT) rscSubs else ftmsSubs
-            val on = synchronized(set) { set.contains(device) }
+            val on = synchronized(ftmsSubs) { ftmsSubs.contains(device) }
             server?.sendResponse(
                 device, requestId, BluetoothGatt.GATT_SUCCESS, offset,
                 if (on) BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
@@ -405,7 +326,6 @@ class Ftms(private val context: Context) {
         last = s
         val srv = server ?: return
         push(srv, data, synchronized(ftmsSubs) { ftmsSubs.toList() }) { frame(s) }
-        push(srv, rsc, synchronized(rscSubs) { rscSubs.toList() }) { rscFrame(s) }
     }
 
     private inline fun push(
@@ -423,28 +343,6 @@ class Ftms(private val context: Context) {
                 Log.w(TAG, "ftms: notify to ${d.address} failed: ${e.message}")
             }
         }
-    }
-
-    /**
-     * One RSC Measurement: flags, speed, cadence, total distance.
-     *
-     * Cadence is sent as zero because nothing here counts steps. The board has
-     * no step sensor and deriving one from speed would be a number with a
-     * plausible shape and no source behind it, which is worse than a gap.
-     */
-    private fun rscFrame(s: Snapshot): ByteArray {
-        val b = ByteArray(8)
-        var i = 0
-        // Total distance present (bit 1); bit 2 is the walking/running status.
-        var flags = (1 shl 1)
-        if (s.speed >= RUNNING_KPH) flags = flags or (1 shl 2)
-        b[i++] = flags.toByte()
-        // Speed, metres per second at 1/256.
-        i = le16(b, i, Math.round(s.speed / 3.6 * 256.0).toInt().coerceIn(0, 0xFFFF))
-        b[i++] = 0                       // cadence, steps per minute
-        // Total distance, tenths of a metre.
-        le32(b, i, Math.round(s.distance * 10.0).toInt().coerceAtLeast(0))
-        return b
     }
 
     private fun featureBytes(): ByteArray {
@@ -510,7 +408,6 @@ class Ftms(private val context: Context) {
         try { advertiser?.stopAdvertising(advertiseCallback) } catch (_: Exception) { }
         advertising = false
         synchronized(ftmsSubs) { ftmsSubs.clear() }
-        synchronized(rscSubs) { rscSubs.clear() }
         try { server?.close() } catch (_: Exception) { }
         server = null
         data = null
