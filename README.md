@@ -216,14 +216,10 @@ rules I'd ask you to keep if you're changing anything that moves the belt.
 ## Thanks
 
 **[nordictrack-ftms-bridge](https://github.com/ciarancoffey/nordictrack-ftms-bridge)**
-by ciarancoffey. Somebody asked whether STRIDE could speak FTMS, which is the
+by @[ciarancoffey](https://github.com/ciarancoffey). A couple of folks on reddit asked whether STRIDE could speak FTMS, which is the
 standard Bluetooth service Zwift and friends use to talk to a treadmill, and
-that project is the reason the answer is yes. It showed the thing nobody here
-knew: an iFit Android console can be a Bluetooth LE *peripheral*, not just a
-central. That is the part cheap MediaTek parts often can't do, and it is what
-the whole idea hangs on. Checking this console for the same capability took ten
-minutes because someone else had already proved it was worth checking. It also
-credits its own prior art, which is a good habit worth passing on.
+I took a look at Ciaran's project. This showed that YES an iFit Android console can be a Bluetooth LE *peripheral*, not just a
+central. Using that as inspiration I coded up a working FTMS implementation
 
 That project is AGPL-3.0 and STRIDE is Apache-2.0, so no code moves between
 them. FTMS is a published Bluetooth SIG specification, and anything built here
