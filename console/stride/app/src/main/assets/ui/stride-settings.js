@@ -842,11 +842,6 @@
       'How the console drives the deck. The board\'s own limits always win — these ' +
       'are preferences within them, never overrides of them.');
 
-    var g = group('Units');
-    g.appendChild(row('Distance and speed', 'Everything on every screen, and everything published.',
-      segment('units', [['km', 'Kilometres'], ['mi', 'Miles']], S.units || 'km')));
-    sc.appendChild(g);
-
     var g2 = group('Starting and stopping');
     g2.appendChild(row('Warm-up', 'Skippable. Zero starts every walk at your chosen pace.',
       stepper('warmup_min', S.warmup_min || 0, 0, 10, 1, 'min')));
@@ -938,6 +933,19 @@
     var sc = head(pane, 'Display',
       'The console is a screen in a room, on all day. These are about living with it ' +
       'rather than walking on it.');
+
+    /* Units live here rather than under Treadmill, where they sat until
+       somebody asked on Reddit for an MPH setting that had existed for
+       months. It is a question about what the screen says, and this is the
+       screen page. The board is metric underneath either way: nothing about
+       this reaches the serial link. */
+    var gu = group('Units');
+    gu.appendChild(row('Distance and speed',
+      'Everything on every screen, and everything published. The board stays ' +
+      'metric underneath.',
+      segment('units', [['km', 'Kilometres'], ['mi', 'Miles']], S.units || 'km')));
+    sc.appendChild(gu);
+
     var g = group('');
     g.appendChild(row('Sleep after',
       'Shows a clock. Any tap wakes it, and the belt never sleeps mid-walk.',
