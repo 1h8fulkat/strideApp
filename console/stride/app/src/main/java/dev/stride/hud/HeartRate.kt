@@ -52,7 +52,14 @@ import java.util.UUID
  * So the first attempt is direct, and `autoConnect` takes over only once there
  * is a connection to re-establish.
  */
-class HeartRate(private val context: Context) {
+class HeartRate(
+    private val context: Context,
+    /**
+     * True while the radio is committed elsewhere and a strap hunt would cost
+     * more than it is worth. See [seek].
+     */
+    private val busy: () -> Boolean = { false },
+) {
 
     companion object {
         val SERVICE: UUID = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
@@ -277,6 +284,20 @@ class HeartRate(private val context: Context) {
     private fun seek() {
         val address = wanted
         if (address.isBlank() || seeking) return
+        // Not while something is listening to the treadmill over Bluetooth.
+        //
+        // This console's radio cannot do both. Hunting for a strap is an
+        // active scan followed by a background connect, and on 9 September
+        // 2026 every single Zwift disconnection followed one: three sessions,
+        // three `hr: looking` lines, three link supervision timeouts
+        // (HCI 0x08) on the FTMS link within two minutes of each. A strap that
+        // is already connected costs nothing to keep, so this only blocks the
+        // hunt, and only while a client is actually subscribed.
+        //
+        // Put the strap on before pairing and you get both. Otherwise the
+        // thing somebody is looking at wins over the thing that might be in a
+        // drawer.
+        if (gatt == null && busy()) return
         val scanner = adapter?.bluetoothLeScanner ?: return
 
         val filter = ScanFilter.Builder().setDeviceAddress(address).build()
@@ -300,7 +321,7 @@ class HeartRate(private val context: Context) {
         handler.postDelayed({
             if (!seeking) return@postDelayed
             stopSeek()
-            if (wanted.isNotBlank() && gatt == null) {
+            if (wanted.isNotBlank() && gatt == null && !busy()) {
                 Log.i(FitProConnection.TAG, "hr: not advertising, waiting in the background")
                 open(adapter?.getRemoteDevice(wanted), autoConnect = true)
             }

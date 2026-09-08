@@ -12,6 +12,9 @@ import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.content.Context
+import android.os.Handler
+import android.os.HandlerThread
+import android.os.Looper
 import android.os.ParcelUuid
 import android.os.SystemClock
 import android.util.Log
@@ -99,8 +102,27 @@ class Ftms(private val context: Context) {
          */
         private val SERVICE_DATA = byteArrayOf(0x01, 0x01, 0x00)
 
-        /** How often a subscribed client is sent a frame. See [update]. */
-        const val NOTIFY_EVERY_MS = 1_000L
+        /**
+         * How often a subscribed client is sent a frame.
+         *
+         * Their bridge uses 1 Hz and it is what FTMS clients expect, so that
+         * is what this was. On this console it made things worse: the longest
+         * connection of the morning was three minutes at 5 Hz, and every 1 Hz
+         * connection died inside ten seconds.
+         *
+         * The reasoning that led to 1 Hz was that five frames a second floods
+         * a link with no margin. That is backwards. A BLE supervision timer is
+         * fed by packets that arrive, and at around -90 dBm plenty of them do
+         * not. Sending more often is more chances to keep the link up, not
+         * fewer. Their radio is presumably not buried in this housing.
+         */
+        /**
+         * How this treadmill introduces itself. Short on purpose: the name
+         * rides in the 31-byte scan response alongside everything else.
+         */
+        const val DEVICE_NAME = "STRIDE Treadmill"
+
+        const val NOTIFY_EVERY_MS = 200L
     }
 
     private val manager =
@@ -136,9 +158,48 @@ class Ftms(private val context: Context) {
      * fills a 256KB buffer that already struggles to hold two hours.
      */
     @Volatile private var loggedFirstFrame = false
+    @Volatile private var lastLogAt = 0L
+    @Volatile private var lastFrameLine = ""
 
-    /** When the last frame went out. See [NOTIFY_EVERY_MS]. */
-    @Volatile private var lastNotifyAt = 0L
+    /**
+     * The clock that actually sends frames.
+     *
+     * Deliberately not the board poll loop. A poll that carries a write gets a
+     * reply with no telemetry in it, so the loop skips the rest of its body,
+     * and a board refusing a write is retried for seconds at a time. Driving
+     * notifications from there meant the treadmill went silent on Bluetooth
+     * every time somebody pressed the speed button, which is the one moment a
+     * client is most interested. Zwift read 0.0 and stopped the avatar.
+     *
+     * So this ticks on its own and sends whatever the last known numbers are.
+     * A frame that repeats is fine. A gap is not.
+     */
+    private val tickThread = HandlerThread("ftms").apply { start() }
+    private val ticker = Handler(tickThread.looper)
+    private val tick = object : Runnable {
+        override fun run() {
+            // The reschedule is in a finally, and it is the whole point.
+            //
+            // It used to be the last statement in the body, so anything
+            // throwing above it killed the clock permanently. Nothing else
+            // notices: the GATT connection stays up, the client stays
+            // subscribed, and the treadmill simply stops saying anything.
+            // Zwift then decays its own speed to zero over several seconds
+            // while the belt is still running, which reads as the treadmill
+            // slowing to a halt and is nothing of the sort.
+            //
+            // Off the main thread as well. That one runs the WebView and the
+            // coach's speech, and a frame that waits behind a repaint is a
+            // frame that did not go out on time.
+            try {
+                last?.let { send(it) }
+            } catch (e: Exception) {
+                Log.w(TAG, "ftms: frame failed: ${e.message}")
+            } finally {
+                ticker.postDelayed(this, NOTIFY_EVERY_MS)
+            }
+        }
+    }
 
     @Volatile var advertising = false
         private set
@@ -191,6 +252,8 @@ class Ftms(private val context: Context) {
         addNext()
 
         advertise(a)
+        ticker.removeCallbacks(tick)
+        ticker.postDelayed(tick, NOTIFY_EVERY_MS)
     }
 
     /** Register the next service, one at a time. See [pending]. */
@@ -201,6 +264,20 @@ class Ftms(private val context: Context) {
     }
 
     private fun advertise(a: android.bluetooth.BluetoothAdapter) {
+        // What the console calls itself over Bluetooth.
+        //
+        // The factory name is EwayMediatekArgon2, which is the tablet's model
+        // and means nothing to somebody looking at a list of treadmills in
+        // Zwift. This is the adapter's name, so it changes what the console is
+        // called for every Bluetooth purpose, not just this one. On a machine
+        // whose entire job is being this treadmill that is the right answer,
+        // and it is what a shop-bought FTMS treadmill would advertise anyway.
+        try {
+            if (a.name != DEVICE_NAME) a.name = DEVICE_NAME
+        } catch (e: Exception) {
+            Log.w(TAG, "ftms: could not rename the adapter: ${e.message}")
+        }
+
         advertiser = a.bluetoothLeAdvertiser
         val adv = advertiser ?: run { Log.w(TAG, "ftms: no advertiser"); return }
 
@@ -350,21 +427,45 @@ class Ftms(private val context: Context) {
      * Called from the poll loop, so it runs at whatever rate the board is being
      * read at and costs nothing when nobody has subscribed.
      */
-    fun update(s: Snapshot) {
-        last = s
+    /**
+     * Hand over the latest numbers. Does not transmit: [tick] does that, once a
+     * second, whether or not this has been called since.
+     */
+    fun update(s: Snapshot) { last = s }
+
+    private fun send(s: Snapshot) {
         val srv = server ?: return
-        // One frame a second, not one per poll.
-        //
-        // The board is read five times a second and the first version notified
-        // on every one of them. At the signal levels this console manages, with
-        // the radio buried in the housing and around -90 dBm at the far end,
-        // that is five times the airtime on a link with no margin to spare, and
-        // Zwift was dropping out after anywhere between 7 and 30 seconds. FTMS
-        // clients expect about 1 Hz and nothing is gained by beating that.
+        val who = synchronized(ftmsSubs) { ftmsSubs.toList() }
+        if (who.isEmpty()) return
+        val bytes = frame(s)
+        logFrame(s, bytes, who.size)
+        push(srv, data, who) { bytes }
+    }
+
+    /**
+     * What actually went out, in numbers rather than hex.
+     *
+     * Every change, plus a heartbeat every five seconds so a steady walk still
+     * proves the clock is running. Reading this against the console's own dial
+     * is the only way to tell "we sent the wrong number" from "the client did
+     * something else with the right one", and at 5 Hz an unfiltered log fills
+     * a 256KB buffer in minutes.
+     */
+    private fun logFrame(s: Snapshot, b: ByteArray, listeners: Int) {
+        val kph = ((b[3].toInt() and 0xFF) shl 8 or (b[2].toInt() and 0xFF)) / 100.0
+        val line = "ftms >> ${"%.2f".format(kph)} km/h" +
+                "  incline ${"%.1f".format(s.incline)}%" +
+                "  ${s.distance.toInt()} m" +
+                "  ${s.elapsed.toInt()} s" +
+                "  hr ${s.pulse}" +
+                "  (dial ${"%.1f".format(s.speed)}, belt ${"%.1f".format(s.beltKph)}," +
+                " $listeners listening)"
         val now = SystemClock.elapsedRealtime()
-        if (now - lastNotifyAt < NOTIFY_EVERY_MS) return
-        lastNotifyAt = now
-        push(srv, data, synchronized(ftmsSubs) { ftmsSubs.toList() }) { frame(s) }
+        if (line != lastFrameLine || now - lastLogAt > 5_000L) {
+            lastFrameLine = line
+            lastLogAt = now
+            Log.i(TAG, line)
+        }
     }
 
     private inline fun push(
@@ -388,7 +489,9 @@ class Ftms(private val context: Context) {
             // notifyCharacteristicChanged returns false when the stack drops
             // the notification, which is silent otherwise and looks from the
             // other end exactly like a treadmill that is switched off.
-            if (!ok || !loggedFirstFrame) {
+            val now = SystemClock.elapsedRealtime()
+            if (!ok || now - lastLogAt > 5_000L) {
+                lastLogAt = now
                 loggedFirstFrame = ok
                 Log.i(TAG, "ftms: notify ${if (ok) "ok" else "REFUSED"} " +
                         "to ${d.address}: ${FitPro.hex(bytes)}")
@@ -463,6 +566,8 @@ class Ftms(private val context: Context) {
     }
 
     fun stop() {
+        ticker.removeCallbacks(tick)
+        tickThread.quitSafely()
         try { advertiser?.stopAdvertising(advertiseCallback) } catch (_: Exception) { }
         advertising = false
         synchronized(ftmsSubs) { ftmsSubs.clear() }

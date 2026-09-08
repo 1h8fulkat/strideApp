@@ -419,7 +419,10 @@ class MainActivity : Activity() {
     private val conn by lazy { FitProConnection(this) }
     private val mqtt = MqttPublisher()
     private val cfg by lazy { Settings(this) }
-    private val strap by lazy { HeartRate(this) }
+    /* The strap hunt is held off while an FTMS client is subscribed: this
+       console's radio cannot scan as a central and hold a peripheral link at
+       the same time. See HeartRate.seek. */
+    private val strap by lazy { HeartRate(this) { ftms.listeners > 0 } }
     /** The treadmill as a standard Bluetooth fitness machine, for Zwift and
      *  friends. Telemetry only, and silent on a radio that cannot advertise. */
     private val ftms by lazy { Ftms(this) }
