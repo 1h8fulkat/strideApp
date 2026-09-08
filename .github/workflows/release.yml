@@ -32,6 +32,12 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-latest
+    # Resolved once. On a tag push these agree, but a workflow_dispatch run
+    # carries the *branch* in github.ref_name while the tag being built is the
+    # input — so deriving the name separately in two steps gets you an APK
+    # called stride-main.apk and an upload looking for stride-v0.7.0.apk.
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -94,13 +100,17 @@ jobs:
           fi
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
           "$APKSIGNER" verify --verbose "$APK"
-          cp "$APK" "stride-${GITHUB_REF_NAME:-manual}.apk"
+          cp "$APK" "stride-${TAG}.apk"
 
+      # Create-then-upload rather than the other way around: on a fresh tag
+      # there is no release yet, and `upload` failing first would put a
+      # misleading error in the log of a run that then succeeds.
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          gh release upload "$TAG" "stride-${TAG}.apk" --clobber \
-            || gh release create "$TAG" "stride-${TAG}.apk" \
-                 --title "$TAG" --notes-file docs/RELEASE_NOTES.md
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" \
+              --notes-file docs/RELEASE_NOTES.md
+          fi
+          gh release upload "$TAG" "stride-${TAG}.apk" --clobber
