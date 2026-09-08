@@ -52,6 +52,21 @@ class MainActivity : Activity() {
          *  immediate. */
         const val FOLLOW_SETTLE_MS = 1200L
 
+        /**
+         * How long the setpoint must have been still before a shortfall counts
+         * as the belt failing rather than the belt on its way somewhere.
+         *
+         * The board ramps to a new speed over several seconds, during which the
+         * odometer is honestly and correctly below the setpoint. Without this,
+         * every press of + would be filed as a slip.
+         */
+        const val SLIP_SETTLE_MS = 8_000L
+
+        /** Shortest shortfall worth a line in the incident record. Below this
+         *  it is the estimator's own noise, which is what the wide band on
+         *  Snapshot.slipping already allows for. */
+        const val SLIP_MIN_MS = 3_000L
+
         /** The grid the speed keys move on. An adopted value snaps to it, so a
          *  board reporting 6.499 cannot render as 6.4 and then take two presses
          *  to reach 6.5. Grade is deliberately not quantised — its step size is
@@ -369,6 +384,12 @@ class MainActivity : Activity() {
             FitPro.Field.CURRENT_TIME,
             FitPro.Field.PULSE,
             FitPro.Field.CALORIES,
+            // Read on the chance it is a different sensor from DISTANCE — see
+            // Snapshot.rpm. It has only ever been asked for by probeSpeed(),
+            // which runs once per app start and had already rolled out of the
+            // buffer every time anyone went looking. Reading it every poll is
+            // how we find out what it does over a whole walk.
+            FitPro.Field.RPM,
         )
         val LIMITS = listOf(
             FitPro.Field.MIN_KPH, FitPro.Field.MAX_KPH,
@@ -583,6 +604,16 @@ class MainActivity : Activity() {
     private var runawayAtUptime = 0L
     private var runawayPeakKph = 0.0
 
+    /** Uptime the current shortfall began at; 0 when the belt is keeping up. */
+    private var slipSince = 0L
+    /** Worst shortfall in the current episode, km/h, and the setpoint it was
+     *  measured against. */
+    private var slipWorst = 0.0
+    private var slipTarget = 0.0
+    /** Last setpoint seen and when it moved — see [SLIP_SETTLE_MS]. */
+    private var slipLastTarget = -1.0
+    private var slipTargetChangedAt = 0L
+
     /**
      * Write one line to the console's own incident record.
      *
@@ -610,6 +641,54 @@ class MainActivity : Activity() {
             Log.w(TAG, "could not write incident record: ${e.message}")
         }
     }
+    /**
+     * Watch for the belt running short of the pace it was told to hold, and
+     * write one line per episode to the incident record.
+     *
+     * Edge-triggered rather than per-poll: an episode is a start, a worst
+     * point and an end, and five polls a second of "still short" is not a
+     * record, it is a flood. Nothing here stops or corrects anything — a belt
+     * that cannot reach its pace is a maintenance question, not a safety one,
+     * and the walker can already feel it. This exists so that the next time it
+     * happens there is something to read afterwards, which on 8 September 2026
+     * there was not.
+     *
+     * Be clear about what this can and cannot see: it compares the setpoint
+     * against the odometer, and the odometer counts the drive roller. A belt
+     * slipping *over* that roller moves neither number. See Snapshot.slipping.
+     */
+    private fun watchSlip(s: Snapshot) {
+        val now = SystemClock.elapsedRealtime()
+
+        // A setpoint that has just moved is not a shortfall — the belt is on
+        // its way. Abandon any episode in progress rather than attributing it
+        // to a speed that is no longer the one being asked for.
+        if (s.targetSpeed != slipLastTarget) {
+            slipLastTarget = s.targetSpeed
+            slipTargetChangedAt = now
+            slipSince = 0L
+            return
+        }
+        if (now - slipTargetChangedAt < SLIP_SETTLE_MS) { slipSince = 0L; return }
+
+        if (s.slipping) {
+            if (slipSince == 0L) { slipSince = now; slipWorst = 0.0 }
+            val short = s.speed - s.beltKph
+            if (short > slipWorst) { slipWorst = short; slipTarget = s.speed }
+            return
+        }
+
+        if (slipSince == 0L) return
+        val ran = now - slipSince
+        slipSince = 0L
+        if (ran < SLIP_MIN_MS) return
+        recordIncident("BELT SHORT OF PACE for ${ran / 1000}s — worst " +
+                "${"%.1f".format(slipWorst)} km/h under a " +
+                "${"%.1f".format(slipTarget)} km/h setpoint (rpm ${"%.0f".format(s.rpm)})")
+        Log.w(TAG, "belt short of pace for ${ran / 1000}s, worst " +
+                "${"%.1f".format(slipWorst)} km/h under ${"%.1f".format(slipTarget)}")
+    }
+
     /** True while the deck is being walked back to level after a workout. */
     @Volatile private var levelling = false
     @Volatile private var levelNags = 0
@@ -2537,6 +2616,7 @@ class MainActivity : Activity() {
 
             val snap = accumulate(v)
             lastSnap = snap
+            watchSlip(snap)
             // Through repaint() rather than push(), so the session stamped on
             // the frame is the one that is true at the moment it is handed to
             // the page. A press lands on a WebView thread and can arrive
@@ -2746,6 +2826,7 @@ class MainActivity : Activity() {
         return Snapshot(
             speed = speed,
             beltKph = beltKph,
+            rpm = v[FitPro.Field.RPM] ?: 0.0,
             incline = incline,
             targetSpeed = targetKph,
             targetIncline = targetGrade,

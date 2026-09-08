@@ -58,8 +58,27 @@ data class Snapshot(
      * Diagnosis only: nothing draws this. It exists so a belt that cannot reach
      * the commanded pace is still detectable — see [slipping] — now that the
      * dial no longer shows it.
+     *
+     * Published to Home Assistant since 8 September 2026, so the recorder keeps
+     * a trace of it. Reconstructing that walk's belt speed afterwards meant
+     * differencing the whole-metre distance sensor, because this — the number
+     * the console had already worked out — was going nowhere.
      */
     val beltKph: Double = 0.0,
+    /**
+     * The board's own `RPM` field, raw and unscaled.
+     *
+     * Read on the chance that it is a *different* sensor from the one behind
+     * `DISTANCE`. If it is, the two disagreeing is the only signal this console
+     * could ever have for a belt slipping over the drive roller: the odometer
+     * counts the roller, so it and [beltKph] both sit upstream of that slip and
+     * neither can see it. See [slipping] for why that matters.
+     *
+     * May well read a flat zero, as `ACTUAL_KPH` does on this board. It is
+     * recorded rather than trusted, and nothing is built on it until a walk has
+     * shown what it does.
+     */
+    val rpm: Double = 0.0,
     val incline: Double,
     val targetSpeed: Double,
     val targetIncline: Double,
@@ -179,6 +198,21 @@ data class Snapshot(
      * how that case still gets noticed. Deliberately a wide band — the estimate
      * behind it is coarse, and a threshold tight enough to catch a small
      * shortfall would fire on the estimator's own noise.
+     *
+     * **What this cannot catch.** It compares the setpoint against [beltKph],
+     * and [beltKph] comes off the odometer, which counts the *drive roller*.
+     * Both numbers therefore sit on the same side of a belt that is slipping
+     * over that roller: the motor holds its speed, the odometer reports it
+     * faithfully, and the belt surface under the walker sags and then catches
+     * up without either number moving. On 8 September 2026 exactly that was
+     * felt at the top of the last climb, and a second-by-second reconstruction
+     * of the whole descent showed the roller never left 10.0 km/h. This flag
+     * would not have fired, and did not.
+     *
+     * So it is a motor-cannot-reach-pace detector, not a slip detector, and the
+     * name is a promise it only half keeps. [rpm] is the candidate for the
+     * other half. Until that proves out, the honest record of a slip is the
+     * walker saying so.
      */
     val slipping: Boolean
         get() = Session.isMoving(session) && speed > 0.5 && beltKph > 0.0 &&
@@ -209,6 +243,7 @@ data class Snapshot(
         append("{")
         append("\"speed\":${"%.1f".format(speed)},")
         append("\"beltKph\":${"%.1f".format(beltKph)},")
+        append("\"rpm\":${"%.0f".format(rpm)},")
         append("\"slipping\":$slipping,")
         append("\"incline\":${"%.1f".format(incline)},")
         append("\"targetSpeed\":${"%.1f".format(targetSpeed)},")

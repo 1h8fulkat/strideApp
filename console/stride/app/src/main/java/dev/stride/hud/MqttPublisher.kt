@@ -123,6 +123,15 @@ class MqttPublisher(
             // the per-person device; this one had been sitting next to it the
             // whole time.
             Sensor("speed", "Speed", "km/h", "speed", null),
+            // The setpoint above is what the belt was *told*; these two are what
+            // it did. Published since 8 September 2026: a slip reported that
+            // morning had to be reconstructed by differencing the whole-metre
+            // distance sensor, because the console was already computing this
+            // number every poll and then dropping it on the floor.
+            Sensor("beltKph", "Belt Speed", "km/h", "speed", null),
+            // Raw board RPM. May be a flat zero — see Snapshot.rpm. Recorded so
+            // that one walk answers the question either way.
+            Sensor("rpm", "Belt RPM", null, null, "mdi:rotate-right"),
             Sensor("incline", "Incline", "%", null, "mdi:angle-acute"),
             Sensor("distance", "Distance", "m", "distance", null),
             Sensor("elapsed", "Elapsed", "s", "duration", null),
@@ -311,7 +320,27 @@ class MqttPublisher(
                    "{\"state\":\"OFF\",\"kph\":0.0,\"started_at\":\"\",\"seconds\":0}",
                    retained = true)
 
-        Log.i(TAG, "mqtt discovery published for ${SENSORS.size} sensors + runaway alarm")
+        // The belt failing to hold its pace. Rides the ordinary state topic
+        // rather than a topic of its own — unlike a runaway there is nothing to
+        // survive the app dying, because a belt that is short of pace is only
+        // short of pace while somebody is walking on it. A binary_sensor rather
+        // than a number so the recorder keeps the episode's start and end
+        // rather than a line that has to be thresholded back into one.
+        val slip = ArrayList<String>()
+        slip += "\"name\":\"Belt Short Of Pace\""
+        slip += "\"unique_id\":\"${DEVICE_ID}_slipping\""
+        slip += "\"state_topic\":\"$stateTopic\""
+        slip += "\"availability_topic\":\"$availTopic\""
+        slip += "\"value_template\":\"{{ 'ON' if value_json.slipping else 'OFF' }}\""
+        slip += "\"payload_on\":\"ON\""
+        slip += "\"payload_off\":\"OFF\""
+        slip += "\"device_class\":\"problem\""
+        slip += device
+        publishRaw("homeassistant/binary_sensor/$DEVICE_ID/slipping/config",
+                   "{${slip.joinToString(",")}}", retained = true)
+
+        Log.i(TAG, "mqtt discovery published for ${SENSORS.size} sensors " +
+                   "+ runaway and slip alarms")
     }
 
     /**
