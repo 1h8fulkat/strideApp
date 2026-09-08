@@ -37,8 +37,8 @@ ordinary entities. I built it with Claude Code alongside me, and there's a
 [full write-up of how the jailbreak works](https://theidea.works/blog/jailbreak-nordictrack-treadmill/)
 if you'd rather read the story than the steps.
 
-**[v0.7](https://github.com/keranm/strideApp/releases/latest)**, in daily use,
-and now a signed APK you can install without building anything. Still to do for
+**[v0.8](https://github.com/keranm/strideApp/releases/latest)**, in daily use,
+and it now pairs with Zwift over Bluetooth FTMS. Still to do for
 v1.0: HACS packaging, a better dashboard, the iOS app on the App Store, and an
 install guide somebody other than me has followed.
 

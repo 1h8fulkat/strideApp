@@ -159,7 +159,7 @@ class Ftms(private val context: Context) {
      */
     @Volatile private var loggedFirstFrame = false
     @Volatile private var lastLogAt = 0L
-    @Volatile private var lastFrameLine = ""
+    @Volatile private var lastFrameKey = ""
 
     /**
      * The clock that actually sends frames.
@@ -445,14 +445,18 @@ class Ftms(private val context: Context) {
     /**
      * What actually went out, in numbers rather than hex.
      *
-     * Every change, plus a heartbeat every five seconds so a steady walk still
-     * proves the clock is running. Reading this against the console's own dial
-     * is the only way to tell "we sent the wrong number" from "the client did
-     * something else with the right one", and at 5 Hz an unfiltered log fills
-     * a 256KB buffer in minutes.
+     * Keyed on speed and incline only. Distance and elapsed change on nearly
+     * every frame, so keying on the whole line meant a log line five times a
+     * second, which fills this console's 256KB buffer in minutes and buries
+     * whatever you were looking for.
+     *
+     * Reading this against the console's own dial is the only way to separate
+     * "we sent the wrong number" from "the client did something else with the
+     * right one" — which was the question for most of 9 September 2026.
      */
     private fun logFrame(s: Snapshot, b: ByteArray, listeners: Int) {
         val kph = ((b[3].toInt() and 0xFF) shl 8 or (b[2].toInt() and 0xFF)) / 100.0
+        val key = "${"%.2f".format(kph)}/${"%.1f".format(s.incline)}"
         val line = "ftms >> ${"%.2f".format(kph)} km/h" +
                 "  incline ${"%.1f".format(s.incline)}%" +
                 "  ${s.distance.toInt()} m" +
@@ -461,8 +465,8 @@ class Ftms(private val context: Context) {
                 "  (dial ${"%.1f".format(s.speed)}, belt ${"%.1f".format(s.beltKph)}," +
                 " $listeners listening)"
         val now = SystemClock.elapsedRealtime()
-        if (line != lastFrameLine || now - lastLogAt > 5_000L) {
-            lastFrameLine = line
+        if (key != lastFrameKey || now - lastLogAt > 30_000L) {
+            lastFrameKey = key
             lastLogAt = now
             Log.i(TAG, line)
         }

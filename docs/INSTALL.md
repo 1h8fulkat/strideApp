@@ -205,30 +205,24 @@ your settings.
 
 Nothing to build. You need `adb`, which you already have from step 1.4.
 
-Download `stride-v0.7.0.apk` from
+Download the APK from
 [the latest release](https://github.com/keranm/strideApp/releases/latest), then:
 
 ```sh
-adb install -r stride-v0.7.0.apk
+adb install -r stride-*.apk
 adb shell am start -n dev.stride.hud/.MainActivity
 ```
 
-If you would rather check what you downloaded first:
+To check what you downloaded, use the certificate rather than a file hash. The
+hash changes every release; the certificate does not. Every build published
+here is signed by `CN=STRIDE, O=The Idea Works, C=AU`, SHA-256
+`274a6f2e308df50e1e4219f5bd1f4aca5fda8ccd5feccc7c52579c0c8dd302e8`:
 
 ```sh
-shasum -a 256 stride-v0.7.0.apk
-# 312baf046ffbb88cf02543214da414ebb8377bd24149aa547b4d65b8eb1dd446
+apksigner verify --print-certs stride-*.apk
 ```
 
-That file hash is v0.7.0's and changes with every release. The *certificate*
-does not: every build published here is signed by
-`CN=STRIDE, O=The Idea Works, C=AU`, SHA-256
-`274a6f2e308df50e1e4219f5bd1f4aca5fda8ccd5feccc7c52579c0c8dd302e8`. One that
-is not did not come from here. To check a downloaded APK yourself:
-
-```sh
-apksigner verify --print-certs stride-v0.7.0.apk
-```
+Anything else did not come from here.
 
 It ships with no broker credentials of anyone's — they are compiled out, and
 the console is where you set your own in step 2.1.
