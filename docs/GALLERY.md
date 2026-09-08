@@ -60,6 +60,13 @@ filters on service UUID, not brand, so most straps work.
 
 ![Heart rate](screenshots/settings-heart-rate.png)
 
+### Display
+Kilometres or miles, and everything that comes with living with a screen
+that's on all day. Units change every screen and everything published; the
+board stays metric underneath either way.
+
+![Display](screenshots/settings-display.png)
+
 ### About
 The board line is read over USB at startup.
 
