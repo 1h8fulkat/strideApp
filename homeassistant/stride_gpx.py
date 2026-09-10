@@ -19,10 +19,12 @@ API that enumerates it. Fetching is easy; *discovery* is the part with no
 obvious answer. So this looks for a listing in two places, in order, and says
 which one it used:
 
-  1. `gpx_folder_sensor:` — a `folder` sensor in Home Assistant pointed at the
-     directory. Its `file_list` attribute is a real listing that updates by
-     itself, so dropping a file in is genuinely all you do. One-time cost is
-     four lines of YAML and a restart. See stride.conf.example.
+  1. A `folder` sensor in Home Assistant pointed at the directory. Its
+     `file_list` attribute is a real listing that updates by itself, so
+     dropping a file in is genuinely all you do. One-time cost is four lines
+     of YAML and a restart; the entity does not need naming, because a folder
+     sensor is found by having a `file_list` at all. Name it as
+     `gpx_folder_sensor:` only to break a tie between several.
 
   2. `index.json` beside the GPX files — a plain list of names:
      `["friday-river-loop.gpx", "the-hill.gpx"]`. No Home Assistant changes,
@@ -272,6 +274,17 @@ def http(url, bearer=False):
     return urllib.request.urlopen(req, timeout=HTTP_TIMEOUT).read()
 
 
+def gpx_only(file_list):
+    """Basenames of the .gpx in a folder sensor's listing.
+
+    Only the basename matters: the paths in there are on the Home Assistant
+    box, and the file is fetched over `/local/` rather than read off that
+    disk.
+    """
+    return sorted(os.path.basename(f) for f in file_list
+                  if f.lower().endswith(".gpx"))
+
+
 def from_folder_sensor(entity):
     """Filenames from a Home Assistant `folder` sensor.
 
@@ -282,8 +295,8 @@ def from_folder_sensor(entity):
     body = json.loads(http(f"{HA}/api/states/{entity}", bearer=True))
     files = body.get("attributes", {}).get("file_list")
     if files is None:
-        raise ValueError(f"{entity} has no file_list attribute — is it a folder sensor?")
-    return sorted(os.path.basename(f) for f in files if f.lower().endswith(".gpx"))
+        raise SystemExit(f"{entity} has no file_list attribute - is it a folder sensor?")
+    return gpx_only(files)
 
 
 def from_index(base):
@@ -301,15 +314,55 @@ def from_index(base):
     return sorted(names)
 
 
+def find_folder_sensor():
+    """The folder sensor, without being told its name.
+
+    `folder` builds an entity id out of the path, so it is guessable — and
+    guessing wrong is a setup step that fails for a reason nobody can see.
+    A folder sensor is instead recognised by what makes it one: a `file_list`
+    attribute. Where there is more than one, the tie is broken by the path
+    the config already names.
+
+    Returns (entity_id, filenames) — the listing comes back with it, because
+    the scan has already read the very attribute a second call would go and
+    fetch. None means "keep looking" rather than "this is broken": there is
+    an index.json road behind this one.
+    """
+    if not conf("ha_api_token", ""):
+        return None
+    try:
+        states = json.loads(http(f"{HA}/api/states", bearer=True))
+    except Exception:
+        return None
+    found = [s for s in states
+             if isinstance(s.get("attributes", {}).get("file_list"), list)]
+    if not found:
+        return None
+    if len(found) > 1:
+        want = (conf("ha_gpx_path", "treadmill/routes") or "").strip("/")
+        exact = [s for s in found
+                 if str(s["attributes"].get("path", "")).rstrip("/").endswith(want)]
+        if len(exact) != 1:
+            names = ", ".join(s["entity_id"] for s in found)
+            raise SystemExit(
+                f"More than one folder sensor here and none matching {want!r}:\n"
+                f"  {names}\n"
+                f"  Name the one you mean as gpx_folder_sensor: in stride.conf.")
+        found = exact
+    picked = found[0]
+    return picked["entity_id"], gpx_only(picked["attributes"]["file_list"])
+
+
 def discover():
     """Where the files are and what they are called: (source, [(name, loader)]).
 
     Ordered by how little you have to maintain by hand.
     """
     base = local_base()
-    sensor = conf("gpx_folder_sensor", "")
+    named = conf("gpx_folder_sensor", "")
+    sensor, names = (named, from_folder_sensor(named)) if named \
+        else (find_folder_sensor() or (None, None))
     if sensor:
-        names = from_folder_sensor(sensor)
         return (f"{sensor} -> {base}",
                 [(n, (lambda n=n: http(f"{base}/{n}"))) for n in names])
 
