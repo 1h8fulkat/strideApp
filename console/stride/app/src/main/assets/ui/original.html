@@ -344,6 +344,7 @@ button.pulse{animation:pulse .9s ease-out 2}
   color:var(--ink);font-family:inherit;display:block;text-align:center;
 }
 .plan:active,.plan.down{transform:scale(.97);background:rgba(57,224,255,.2)}
+.plan.on{border-color:var(--accent);background:rgba(57,224,255,.14)}
 .plan .pn{font-size:22px;letter-spacing:.14em;text-transform:uppercase}
 .plan .pb{margin-top:7px;font-size:14px;color:var(--ink-faint);min-height:34px}
 .plan canvas{display:block;margin:6px auto 0}
@@ -470,7 +471,10 @@ button.pulse{animation:pulse .9s ease-out 2}
       <div class="plans" id="plans"></div>
     </div>
 
-    <div class="foot" id="wFoot">Clip the safety key on first — the belt eases up to 2 km/h as soon as you choose.</div>
+    <!-- No number here. It used to say "2 km/h", which was the old default
+       rather than the warm-up speed anybody had set, and metric on a console
+       that might be reading miles. -->
+    <div class="foot" id="wFoot">Clip the safety key on first — the belt eases up to your warm-up pace as soon as you choose.</div>
     <button id="btnBack" class="back" style="display:none">← BACK</button>
     <button id="btnBegin" class="back begin" style="display:none">BEGIN →</button>
     <button id="btnSettings" class="gear">SETTINGS</button>
@@ -498,7 +502,7 @@ button.pulse{animation:pulse .9s ease-out 2}
   <div class="side right">
     <div class="label">Speed</div>
     <div class="value" id="speed">0.0</div>
-    <div class="unit">km/h</div>
+    <div class="unit" id="speedUnit">km/h</div>
     <div class="target">target <b id="speedTarget">0.0</b></div>
     <div class="ticks" id="speedTicks"></div>
   </div>
@@ -509,7 +513,7 @@ button.pulse{animation:pulse .9s ease-out 2}
   <div class="phase" id="phase">
     <div class="pname" id="phaseName">Warm up</div>
     <div class="pclock" id="phaseClock">2:00</div>
-    <div class="pnote" id="phaseNote">easing in at 2 km/h</div>
+    <div class="pnote" id="phaseNote">easing in</div>
     <div class="pprev" id="phasePrev"></div>
     <div class="pbar"><i id="phaseBar"></i></div>
   </div>
@@ -557,13 +561,13 @@ button.pulse{animation:pulse .9s ease-out 2}
     </svg>
     <div class="lap">
       <div class="n" id="lap">0</div>
-      <div class="cap">laps &middot; 400 m</div>
+      <div class="cap" id="lapUnit">laps &middot; 400 m</div>
     </div>
   </div>
 
   <div class="strip">
     <div class="metric"><div class="k">Elapsed</div><div class="v" id="elapsed">0:00</div></div>
-    <div class="metric"><div class="k">Distance</div><div class="v"><span id="distance">0</span><small>m</small></div></div>
+    <div class="metric"><div class="k">Distance</div><div class="v"><span id="distance">0</span><small id="distanceUnit">m</small></div></div>
     <div class="metric"><div class="k">Calories</div><div class="v"><span id="calories">0</span><small>kcal</small></div></div>
     <div class="metric"><div class="k">Heart rate</div><div class="v"><span id="pulse">—</span><small>bpm</small></div></div>
   </div>
@@ -575,7 +579,7 @@ button.pulse{animation:pulse .9s ease-out 2}
     <button id="btnInclineDown">INCLINE −</button>
     <button id="btnInclineUp">INCLINE +</button>
     <button id="btnFan">FAN</button>
-    <button class="stop" id="btnStop">STOP</button>
+    <button class="stop" id="btnStop">COOL DOWN</button>
   </div>
 
   <div class="fanmenu" id="fanmenu">
@@ -598,10 +602,10 @@ button.pulse{animation:pulse .9s ease-out 2}
     <div class="sumcoach" id="sumCoach"></div>
     <div class="cards">
       <div class="card"><div class="k">Time</div><div class="v" id="sumTime">0:00</div></div>
-      <div class="card"><div class="k">Distance</div><div class="v"><span id="sumDist">0</span><small>m</small></div></div>
+      <div class="card"><div class="k">Distance</div><div class="v"><span id="sumDist">0</span><small id="sumDistanceUnit">m</small></div></div>
       <div class="card"><div class="k">Calories</div><div class="v"><span id="sumCal">0</span><small>kcal</small></div></div>
-      <div class="card"><div class="k">Avg speed</div><div class="v"><span id="sumAvg">0.0</span><small>km/h</small></div></div>
-      <div class="card"><div class="k">Max speed</div><div class="v"><span id="sumMax">0.0</span><small>km/h</small></div></div>
+      <div class="card"><div class="k">Avg speed</div><div class="v"><span id="sumAvg">0.0</span><small id="sumSpeedUnit">km/h</small></div></div>
+      <div class="card"><div class="k">Max speed</div><div class="v"><span id="sumMax">0.0</span><small id="sumMaxSpeedUnit">km/h</small></div></div>
       <div class="card"><div class="k">Avg incline</div><div class="v"><span id="sumInc">0.0</span><small>%</small></div></div>
     </div>
     <div class="done"><button class="primary" id="btnDone">DONE</button></div>
@@ -609,10 +613,15 @@ button.pulse{animation:pulse .9s ease-out 2}
 </div>
 
 <!-- ======================= OVERLAYS =================================== -->
+<!-- Two phases share this overlay, because they are the same screen with a
+     different reason for being up: a walk paused, and a walk cooling down. The
+     title and the line under it say which. -->
 <div class="overlay" id="confirm">
-  <h1>Workout paused</h1>
+  <h1 id="confirmTitle">Workout paused</h1>
   <!-- Says where you are, not just that you stopped. Someone coming back to a
-       paused console after answering the door wants the walk located again. -->
+       paused console after answering the door wants the walk located again.
+       During a cool-down it is the countdown instead — that is the one number
+       the screen exists to show. -->
   <p id="pausedWhere">The belt has stopped.</p>
   <div class="row">
     <button class="primary" id="btnResume">RESUME</button>
@@ -860,8 +869,9 @@ function buildGuidedStep(){
       const km = (r.distance_m || 0) / 1000 * (on ? 2 : 1);
       const up = on ? STRIDE.loopedClimb(r) : (r.climb_m || 0);
       b.innerHTML = '<div class="pn">' + STRIDE.esc(r.name || 'Route') + '</div>' +
-                    '<div class="pb">' + km.toFixed(2) + ' km · ' +
-                    Math.round(up) + ' m up' +
+                    '<div class="pb">' +
+                    displayDistance(km * 1000, IMPERIAL) + (IMPERIAL ? ' mi · ' : ' km · ') +
+                    displayClimb(up, IMPERIAL) + (IMPERIAL ? ' ft up' : ' m up') +
                     (on ? '<br>there and back' : '') + '</div>' +
                     STRIDE.loopMark(on);
       const cv = document.createElement('canvas');
@@ -952,12 +962,17 @@ tap($('btnStart'), () => {
   }
   ack($('btnStart'));
 });
+/* COOL DOWN, not STOP. The belt does not halt — it eases to the cool-down
+   pace and the configured cool-down counts down, ending the walk when it
+   reaches zero. The overlay that used to ask "resume or end?" is that
+   countdown now, and END on it finishes early.
+
+   A cool-down already running is not a thing to start again; the button is
+   muted there and this returns. */
 tap($('btnStop'),  () => {
-  // Cool-down is already the way out; STOP there would just be a second one.
-  if (shownMode !== 'warmup' && shownMode !== 'running' && shownMode !== 'paused') return;
+  if (shownMode !== 'warmup' && shownMode !== 'running') return;
   closeFan();
-  // Halt the belt first, ask second. Never the other way round.
-  Stride.pause();
+  Stride.end();
   $('confirm').classList.add('show');
 });
 tap($('btnResume'), () => { $('confirm').classList.remove('show'); Stride.resume(); });
@@ -1044,7 +1059,11 @@ function showScreen(mode){
     clearTimeout(coachTimer);
     $('coach').classList.remove('show');
   }
-  if (mode !== 'paused') $('confirm').classList.remove('show');
+  /* The cool-down *is* this overlay, so entering that phase raises it however
+     it was entered — not only from the button that usually does. Leaving both
+     phases takes it away. */
+  if (mode === 'cooldown') $('confirm').classList.add('show');
+  else if (mode !== 'paused') $('confirm').classList.remove('show');
   if (mode !== 'welcome') STRIDE_SETTINGS.close();
   // Back to the first question whenever we land on the welcome screen, so a
   // finished walk never leaves a half-made choice sitting there.
@@ -1514,7 +1533,53 @@ window.coach = function(c){
 };
 
 /* --- render -------------------------------------------------------------- */
+function displaySpeed(value, imperial){
+  return (imperial ? value * 0.621371 : value).toFixed(1);
+}
+
+function displayDistance(value, imperial){
+  return imperial ? (value / 1609.344).toFixed(2) : Math.round(value).toString();
+}
+
+/* The unit setting, kept where the whole document can see it. render() has it
+   from the state, but the route cards on the welcome screen are built from a
+   plan push rather than a frame and had nothing to consult — so they printed
+   kilometres and metres of climb on an imperial console. */
+let IMPERIAL = false;
+
+/** Metres of ascent → m or ft, whole units. */
+function displayClimb(value, imperial){
+  return Math.round(imperial ? value * 3.280840 : value).toString();
+}
+
+/**
+ * A distance still to go, in whichever unit reads as a number rather than a
+ * count: kilometres past a kilometre and metres below it, miles past a tenth
+ * of a mile and feet below that. "0.03 mi to go" is not something anyone says.
+ */
+function distanceLeft(metres, imperial){
+  if (imperial) {
+    return metres >= 160.934
+      ? (metres / 1609.344).toFixed(2) + ' mi'
+      : Math.round(metres * 3.280840) + ' ft';
+  }
+  return metres >= 1000 ? (metres / 1000).toFixed(2) + ' km'
+                        : Math.round(metres) + ' m';
+}
+
+function applyUnits(imperial){
+  IMPERIAL = imperial;
+  $('speedUnit').textContent = imperial ? 'mph' : 'km/h';
+  $('distanceUnit').textContent = imperial ? 'mi' : 'm';
+  $('sumDistanceUnit').textContent = imperial ? 'mi' : 'm';
+  $('sumSpeedUnit').textContent = imperial ? 'mph' : 'km/h';
+  $('sumMaxSpeedUnit').textContent = imperial ? 'mph' : 'km/h';
+  $('lapUnit').textContent = imperial ? 'laps · 0.25 mi' : 'laps · 400 m';
+}
+
 window.render = function(s){
+  const imperial = s.units === 'mi';
+  applyUnits(imperial);
   const mode = (s.mode || 'welcome').toLowerCase();
   showScreen(mode);
   $('dmk').classList.toggle('show', !!s.dmk);
@@ -1522,19 +1587,19 @@ window.render = function(s){
   if (mode === 'summary'){ renderSummary(s); return; }
   if (mode === 'welcome') return;
 
-  $('speed').textContent   = (s.speed ?? 0).toFixed(1);
-  $('incline').textContent = (s.incline ?? 0).toFixed(1);
-  $('speedTarget').textContent   = (s.targetSpeed ?? 0).toFixed(1);
-  $('inclineTarget').textContent = (s.targetIncline ?? 0).toFixed(1);
+  $('speed').textContent   = displaySpeed(s.speed == null ? 0 : s.speed, imperial);
+  $('incline').textContent = (s.incline == null ? 0 : s.incline).toFixed(1);
+  $('speedTarget').textContent   = displaySpeed(s.targetSpeed == null ? 0 : s.targetSpeed, imperial);
+  $('inclineTarget').textContent = (s.targetIncline == null ? 0 : s.targetIncline).toFixed(1);
 
-  $('elapsed').textContent  = mmss(s.elapsed ?? 0);
-  $('distance').textContent = nf(s.distance ?? 0);
-  $('calories').textContent = nf(s.calories ?? 0);
+  $('elapsed').textContent  = mmss(s.elapsed == null ? 0 : s.elapsed);
+  $('distance').textContent = displayDistance(s.distance == null ? 0 : s.distance, imperial);
+  $('calories').textContent = nf(s.calories == null ? 0 : s.calories);
   $('pulse').textContent    = s.pulse ? s.pulse : '—';
 
   // 0..19 km/h and -3..+12 % mapped onto 10 ticks each
-  ticks($('speedTicks'),   10, Math.round((s.speed ?? 0) / 19 * 10));
-  ticks($('inclineTicks'), 10, Math.round((((s.incline ?? 0) + 3) / 15) * 10));
+  ticks($('speedTicks'),   10, Math.round((s.speed == null ? 0 : s.speed) / 19 * 10));
+  ticks($('inclineTicks'), 10, Math.round((((s.incline == null ? 0 : s.incline) + 3) / 15) * 10));
 
   // The chip says what you're *doing*. "running" is the internal name of the
   // active session state, which read as wrong on every walk. Colour still keys
@@ -1547,15 +1612,24 @@ window.render = function(s){
     : mode;
   modeEl.dataset.mode = mode;
 
-  const fan = s.fan ?? 0;
+  const fan = s.fan == null ? 0 : s.fan;
   $('btnFan').textContent = fan ? 'FAN ' + ['','I','II','III','A'][fan] : 'FAN';
   [...$('fanmenu').querySelectorAll('button')]
     .forEach(b => b.classList.toggle('on', parseInt(b.dataset.fan, 10) === fan));
 
-  if (mode === 'paused'){
-    const where = [mmss(s.elapsed ?? 0) + ' in'];
+  if (mode === 'cooldown'){
+    $('confirmTitle').textContent = 'Cool down';
+    $('pausedWhere').textContent = [
+      mmss(s.phaseLeft == null ? 0 : s.phaseLeft) + ' left',
+      displaySpeed(s.speed == null ? 0 : s.speed, imperial) + (imperial ? ' mph' : ' km/h'),
+      displayDistance(s.distance == null ? 0 : s.distance, imperial) + (imperial ? ' mi' : ' m'),
+    ].join(' · ');
+  } else if (mode === 'paused'){
+    $('confirmTitle').textContent = 'Workout paused';
+    const where = [mmss(s.elapsed == null ? 0 : s.elapsed) + ' in'];
     if (s.segments) where.push(`${s.segmentLabel || 'segment ' + s.segment} · ${s.segment} of ${s.segments}`);
-    else where.push(nf(s.distance ?? 0) + ' m');
+    else where.push(displayDistance(s.distance == null ? 0 : s.distance, imperial) +
+                    (imperial ? ' mi' : ' m'));
     where.push('the belt has stopped');
     $('pausedWhere').textContent = where.join(' · ');
   }
@@ -1589,7 +1663,7 @@ window.render = function(s){
   if (!timed && !guided) {
     // Dot travels the current lap; the arc behind it is the lap just finished,
     // shrinking as the new one grows, so the line is never absent.
-    const dist = s.distance ?? 0;
+    const dist = s.distance == null ? 0 : s.distance;
     const laps = TRACK.laps(dist);
     const frac = TRACK.lapFraction(dist);
     $('lap').textContent = laps;
@@ -1629,8 +1703,7 @@ window.render = function(s){
     $('segName').textContent = s.segmentLabel || '';
     $('segSub').textContent =
       `${s.plan} · ${s.segment} of ${s.segments} · ${s.segmentLeftIsDistance
-        ? (s.segmentLeft >= 1000 ? (s.segmentLeft/1000).toFixed(2) + ' km'
-                                 : Math.round(s.segmentLeft || 0) + ' m')
+        ? distanceLeft(s.segmentLeft || 0, imperial)
         : mmss(s.segmentLeft || 0)} left`;
 
     // Suggested pace, and whether the hill is still the plan's to move.
@@ -1640,8 +1713,8 @@ window.render = function(s){
       const delta = (s.suggestPace - (s.targetSpeed || 0));
       const verb = delta > 0.15 ? 'lift to' : delta < -0.15 ? 'ease to' : 'hold';
       el.innerHTML = verb === 'hold'
-        ? `hold <b>${s.suggestPace.toFixed(1)}</b> km/h`
-        : `${verb} <b>${s.suggestPace.toFixed(1)}</b> km/h`;
+        ? `hold <b>${displaySpeed(s.suggestPace, imperial)}</b> ${imperial ? 'mph' : 'km/h'}`
+        : `${verb} <b>${displaySpeed(s.suggestPace, imperial)}</b> ${imperial ? 'mph' : 'km/h'}`;
       el.classList.toggle('hand', !s.inclineAuto);
       if (!s.inclineAuto) el.innerHTML += ' · incline yours until the next stretch';
     } else {
@@ -1650,8 +1723,11 @@ window.render = function(s){
     }
   }
   if (timed){
-    const total = 120;                       // WARMUP_MS / COOLDOWN_MS
-    const left = s.phaseLeft ?? 0;
+    /* The phase's own length, which it now sends. This was a hardcoded 120,
+       so anything but a two-minute phase drew a bar that meant nothing — a
+       five-minute cool-down sat at empty for three minutes and then raced. */
+    const total = s.phaseTotal > 0 ? s.phaseTotal : 120;
+    const left = s.phaseLeft == null ? 0 : s.phaseLeft;
     $('phase').dataset.kind = mode;
     $('phaseName').textContent  = mode === 'warmup' ? 'Warm up' : 'Cool down';
     $('phaseClock').textContent = mmss(left);
@@ -1678,12 +1754,12 @@ function renderSummary(s){
   $('sumHead').textContent = walker ? ('Nice work, ' + walker) : 'Nice work';
   $('sumCoach').textContent = s.summaryLine || '';
   $('sumSub').textContent  = kind + ' complete';
-  $('sumTime').textContent = mmss(s.elapsed ?? 0);
-  $('sumDist').textContent = nf(s.distance ?? 0);
-  $('sumCal').textContent  = nf(s.calories ?? 0);
-  $('sumAvg').textContent  = (s.avgSpeed ?? 0).toFixed(1);
-  $('sumMax').textContent  = (s.maxSpeed ?? 0).toFixed(1);
-  $('sumInc').textContent  = (s.avgIncline ?? 0).toFixed(1);
+  $('sumTime').textContent = mmss(s.elapsed == null ? 0 : s.elapsed);
+  $('sumDist').textContent = displayDistance(s.distance == null ? 0 : s.distance, imperial);
+  $('sumCal').textContent  = nf(s.calories == null ? 0 : s.calories);
+  $('sumAvg').textContent  = displaySpeed(s.avgSpeed == null ? 0 : s.avgSpeed, imperial);
+  $('sumMax').textContent  = displaySpeed(s.maxSpeed == null ? 0 : s.maxSpeed, imperial);
+  $('sumInc').textContent  = (s.avgIncline == null ? 0 : s.avgIncline).toFixed(1);
 }
 
 /* --- clock --------------------------------------------------------------- */

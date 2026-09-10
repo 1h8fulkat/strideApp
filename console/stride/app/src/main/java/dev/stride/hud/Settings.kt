@@ -65,6 +65,7 @@ class Settings(context: Context) {
         const val WARMUP_MIN = "warmup_min"
         const val COOLDOWN_MIN = "cooldown_min"
         const val WARMUP_KPH = "warmup_kph"
+        const val COOLDOWN_KPH = "cooldown_kph"
         const val INCLINE_RATE = "incline_rate"   // "gentle" | "normal" | "quick"
         const val OPEN_LAP_MIN = "open_lap_min"
 
@@ -338,6 +339,20 @@ class Settings(context: Context) {
     fun warmupMs(): Long = prefs.getInt(WARMUP_MIN, 2) * 60_000L
     fun cooldownMs(): Long = prefs.getInt(COOLDOWN_MIN, 2) * 60_000L
     fun warmupKph(): Double = prefs.getFloat(WARMUP_KPH, 2.0f).toDouble()
+
+    /**
+     * The pace a cool-down eases back to.
+     *
+     * Its own setting rather than [warmupKph], which is what the cool-down used
+     * to borrow. The two are not the same decision: a warm-up speed is where you
+     * want to *start* walking, and a cool-down speed is a deliberate amble that
+     * wants to be slower than that. Sharing one number meant a console set up to
+     * start at 3.1 mph also finished at 3.1 mph, which is not cooling down.
+     *
+     * The default is 3.2 km/h — 2.0 mph, near enough that the imperial stepper
+     * lands on a round number.
+     */
+    fun cooldownKph(): Double = prefs.getFloat(COOLDOWN_KPH, 3.2f).toDouble()
     fun openLapMin(): Int = prefs.getInt(OPEN_LAP_MIN, 20)
 
     fun inclineStep(): Double =
@@ -418,6 +433,7 @@ class Settings(context: Context) {
         .put(WARMUP_MIN, prefs.getInt(WARMUP_MIN, 2))
         .put(COOLDOWN_MIN, prefs.getInt(COOLDOWN_MIN, 2))
         .put(WARMUP_KPH, prefs.getFloat(WARMUP_KPH, 2.0f).toDouble())
+        .put(COOLDOWN_KPH, prefs.getFloat(COOLDOWN_KPH, 3.2f).toDouble())
         .put(INCLINE_RATE, prefs.getString(INCLINE_RATE, "normal"))
         .put(OPEN_LAP_MIN, openLapMin())
         .put(COACH_ON, coachOn())
@@ -451,6 +467,9 @@ class Settings(context: Context) {
 
             WARMUP_KPH ->
                 e.putFloat(key, value.toFloatOrNull() ?: 2.0f)
+
+            COOLDOWN_KPH ->
+                e.putFloat(key, value.toFloatOrNull() ?: 3.2f)
 
             else -> e.putString(key, value)
         }

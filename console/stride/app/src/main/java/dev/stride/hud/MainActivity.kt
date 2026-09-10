@@ -514,6 +514,16 @@ class MainActivity : Activity() {
     /** Deadline for a timed phase (warm-up / cool-down), on the elapsedRealtime clock. */
     @Volatile private var phaseEndsAt = 0L
 
+    /**
+     * How long the running timed phase was set to last, ms, or 0.
+     *
+     * The countdown alone cannot say how far through a phase you are, and the
+     * HUD's progress bar was filling against a hardcoded two minutes — so a
+     * five-minute cool-down sat at empty for three minutes and then raced. The
+     * phase knows its own length; it just never told anyone.
+     */
+    @Volatile private var phaseTotalMs = 0L
+
     // --- session (ours, not the board's) ------------------------------------
     @Volatile private var session = Session.WELCOME
     @Volatile private var workout = "none"
@@ -835,6 +845,7 @@ class MainActivity : Activity() {
             session = Session.WARMUP
             activeSince = SystemClock.elapsedRealtime()
             phaseEndsAt = activeSince + cfg.warmupMs()
+            phaseTotalMs = cfg.warmupMs()
             targetKph = 0.0
             rampTo = cfg.warmupKph()
             rampReason = "warmup"
@@ -881,6 +892,7 @@ class MainActivity : Activity() {
             session = Session.ACTIVE
             activeSince = SystemClock.elapsedRealtime()
             phaseEndsAt = 0L
+            phaseTotalMs = 0L
             targetKph = 0.0
             targetGrade = 0.0
             rampTo = cfg.warmupKph()
@@ -952,6 +964,7 @@ class MainActivity : Activity() {
             session = Session.ACTIVE
             activeSince = SystemClock.elapsedRealtime()
             phaseEndsAt = 0L
+            phaseTotalMs = 0L
             targetKph = 0.0
             targetGrade = 0.0
             rampTo = cfg.warmupKph()
@@ -972,6 +985,7 @@ class MainActivity : Activity() {
             if (session != Session.WARMUP) return
             session = Session.ACTIVE
             phaseEndsAt = 0L
+            phaseTotalMs = 0L
             Log.i(TAG, "warm-up skipped")
             repaint()
         }
@@ -1004,6 +1018,7 @@ class MainActivity : Activity() {
                 accumulatedMs += SystemClock.elapsedRealtime() - activeSince
                 session = Session.PAUSED
                 phaseEndsAt = 0L
+                phaseTotalMs = 0L
             }
             // Remember the pace so RESUME can climb back to it. Taken before the
             // wind-down starts eating it.
@@ -1035,17 +1050,30 @@ class MainActivity : Activity() {
          */
         @JavascriptInterface fun resume() {
             if (dmk) return
-            if (session != Session.PAUSED) return
+            // A cool-down is now a phase you can change your mind out of, not
+            // just a countdown to the summary — COOL DOWN is the button that
+            // starts it, and the screen it puts up offers the way back. From a
+            // cool-down the belt is still turning, so this is a ramp back up to
+            // the pace rather than a start from a standstill; the branch below
+            // already handles both.
+            if (session != Session.PAUSED && session != Session.COOLDOWN) return
+            val fromCooldown = session == Session.COOLDOWN
             session = Session.ACTIVE
             activeSince = SystemClock.elapsedRealtime()
+            phaseEndsAt = 0L
+            phaseTotalMs = 0L
             // RESUME during a STOP's wind-down catches the belt where it is and
             // climbs from there. Zeroing the target would drop it to a
             // standstill first, which is a lurch in each direction for someone
             // who has changed their mind a second after pressing STOP.
+            //
+            // A cool-down is the same situation without the wind-down: the belt
+            // is already walking, so it climbs from where it is too. Only a
+            // genuine pause starts from zero.
             if (stopping) {
                 stopping = false
                 Log.i(TAG, "resumed mid wind-down at ${"%.1f".format(targetKph)} km/h")
-            } else {
+            } else if (!fromCooldown) {
                 targetKph = 0.0
             }
             rampTo = if (pausedKph > 0.0) pausedKph else cfg.warmupKph()
@@ -1056,12 +1084,29 @@ class MainActivity : Activity() {
         }
 
         /**
-         * "End workout" doesn't stop dead — it eases down. The belt ramps back
-         * to walking pace, the deck flattens, and the clock keeps running for
-         * [COOLDOWN_MS]. SKIP goes straight to the summary.
+         * COOL DOWN, and then END on the screen it puts up.
+         *
+         * One button, two jobs, decided by where the walk already is. From a
+         * walk in progress this *starts* the cool-down: the belt eases to
+         * [Settings.cooldownKph] and the configured cool-down runs down to
+         * zero, at which point [advancePhase] finishes through [requestFinish].
+         * Pressed again from inside that cool-down it means "I have had enough
+         * of this bit" and finishes immediately.
+         *
+         * That second case used to fall through to the code below and set
+         * `session = COOLDOWN` all over again — so END on the cool-down screen
+         * restarted the very countdown it was trying to skip, and the only way
+         * out was to wait it out or press SKIP on a HUD hidden behind the
+         * overlay.
          */
         @JavascriptInterface fun end() {
             if (session == Session.SUMMARY) return
+            if (session == Session.COOLDOWN) {
+                Log.i(TAG, "cool-down ended early")
+                requestFinish()
+                repaint()
+                return
+            }
             // Ending from a pause means the belt is already stopped. Running a
             // cool-down from there spins it back up to 2 km/h only to walk it
             // down again, which is disconcerting and faintly alarming — the
@@ -1082,8 +1127,12 @@ class MainActivity : Activity() {
             if (!Session.isMoving(session)) activeSince = now
             session = Session.COOLDOWN
             phaseEndsAt = now + cfg.cooldownMs()
-            pausedKph = 0.0
-            rampTo = cfg.warmupKph()
+            phaseTotalMs = cfg.cooldownMs()
+            // Remembered so RESUME has a pace to climb back to. It used to be
+            // zeroed here, which was right when a cool-down was a one-way trip
+            // to the summary and nothing could come back out of it.
+            if (targetKph > 0.0) pausedKph = targetKph
+            rampTo = cfg.cooldownKph()
             rampReason = "cooldown"
             // Put the machine back how you'd want to find it. Incline is the one
             // setting that persists otherwise, and starting the next walk on
@@ -1093,7 +1142,8 @@ class MainActivity : Activity() {
                 FitPro.Field.GRADE to 0.0,
                 FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble(),
             )
-            Log.i(TAG, "cooling down for ${cfg.cooldownMs() / 1000}s")
+            Log.i(TAG, "cooling down for ${cfg.cooldownMs() / 1000}s " +
+                    "at ${"%.1f".format(cfg.cooldownKph())} km/h")
             repaint()
         }
 
@@ -1744,10 +1794,28 @@ class MainActivity : Activity() {
             // its tidy-up to us — see finishWorkout. It goes out behind the
             // stop, never in front of it.
             if (session == Session.SUMMARY) parkDeckAndFan()
-            return mapOf(
-                FitPro.Field.KPH to 0.0,
-                FitPro.Field.WORKOUT_MODE to FitPro.Mode.PAUSE.toDouble(),
-            )
+            // The stop leaves here as `KPH 0` and nothing else.
+            //
+            // It used to carry WORKOUT_MODE = Pause alongside, and this write
+            // is a one-shot: `stopping` is already false, so decelStep returns
+            // null on every later poll and nothing ever sends it again. The
+            // board rejects a *whole* frame over one field it will not take —
+            // see the poll loop — so on a machine that refuses Pause from
+            // wherever it happens to be, the belt stop was refused with it and
+            // then silently dropped. The belt eased down to the hand-over
+            // speed and kept running there. Reported on an older board on
+            // 2026-09-08: every stop from above STOP_EASE_ABOVE_KPH left the
+            // belt turning at about 6 km/h, and every stop from below it — the
+            // path that goes through pendingWrite, and is therefore retried —
+            // worked.
+            //
+            // The mode change is queued behind the stop instead, where the
+            // ordinary retry-and-give-up machinery covers it and a refusal
+            // costs only the board's own bookkeeping. It joins whatever
+            // parkDeckAndFan queued rather than replacing it.
+            pendingWrite = (pendingWrite ?: emptyMap<FitPro.Field, Double>()) +
+                    mapOf(FitPro.Field.WORKOUT_MODE to FitPro.Mode.PAUSE.toDouble())
+            return mapOf(FitPro.Field.KPH to 0.0)
         }
         return mapOf(FitPro.Field.KPH to targetKph)
     }
@@ -1823,10 +1891,13 @@ class MainActivity : Activity() {
             Log.w(TAG, "belt still moving at ${"%.1f".format(actualKph)} km/h " +
                     "outside a workout — commanding stop again (attempt $stopNags)")
         }
-        return mapOf(
-            FitPro.Field.KPH to 0.0,
-            FitPro.Field.WORKOUT_MODE to FitPro.Mode.PAUSE.toDouble(),
-        )
+        // `KPH 0` and nothing else — see decelStep. The net carried
+        // WORKOUT_MODE = Pause too, which meant the one thing standing between
+        // a refused stop and a belt running unattended was a frame the board
+        // could refuse for a reason that has nothing to do with the belt. It
+        // then re-sent that same frame every poll, for ever, and never stopped
+        // anything. A safety check must ask for exactly the one thing it needs.
+        return mapOf(FitPro.Field.KPH to 0.0)
     }
 
     /**
@@ -1910,6 +1981,7 @@ class MainActivity : Activity() {
         }
         session = Session.SUMMARY
         phaseEndsAt = 0L
+        phaseTotalMs = 0L
         rampTo = 0.0
         pausedKph = 0.0
         Log.i(TAG, "workout ended: ${"%.0f".format(sessionDistance)} m in " +
@@ -2108,7 +2180,7 @@ class MainActivity : Activity() {
      * dead where it is.
      */
     private fun driveIncline(target: Double) {
-        if (!inclineAuto || dmk || session != Session.ACTIVE) return
+        if (!inclineAuto || dmk || !Session.isMoving(session) || planSteps.isEmpty()) return
         if (pendingWrite != null) return          // don't stamp on a queued write
 
         val goal = target.coerceIn(minGrade, maxGrade)
@@ -2135,6 +2207,7 @@ class MainActivity : Activity() {
             Session.WARMUP -> {
                 session = Session.ACTIVE
                 phaseEndsAt = 0L
+                phaseTotalMs = 0L
                 Log.i(TAG, "warm-up complete")
             }
             Session.COOLDOWN -> requestFinish()
@@ -2458,7 +2531,8 @@ class MainActivity : Activity() {
         while (running) {
             // enforceStopped comes first and outranks everything, including a
             // queued write: nothing is more important than a belt that should
-            // not be moving.
+            // not be moving. A wind-down comes next for the same reason: deck
+            // and fan cleanup must not consume the poll that takes speed off.
             /* A mode change travels alone.
              *
              * The board rejects the *whole* frame if any one field in it is
@@ -2473,10 +2547,25 @@ class MainActivity : Activity() {
              * matters on this hardware: FitPro.Mode notes that the belt will
              * not act on a speed write while the console is IDLE. Mode first,
              * then the speed it enables — and if the mode is refused, the
-             * speed is still queued rather than lost with it. */
+             * speed is still queued rather than lost with it.
+             *
+             * **A stop is the other way round.** Starting the belt needs the
+             * mode first because the transition is what enables the speed
+             * write. Stopping needs nothing enabled: KPH = 0 is honoured from
+             * any state the belt can be moving in, so the mode has no business
+             * in front of it. Sent together — which is how every stop used to
+             * go out — one refused Pause takes the belt stop down with it, and
+             * on a board that will not accept Pause the belt simply keeps
+             * running. So `KPH 0` goes on its own, ahead of everything, and the
+             * mode change and the deck follow behind it where a refusal costs a
+             * tidy-up rather than a treadmill. */
             var queued = pendingWrite
             var rest: Map<FitPro.Field, Double>? = null
             if (queued != null && queued.size > 1 &&
+                queued[FitPro.Field.KPH] == 0.0) {
+                rest = queued.filterKeys { it != FitPro.Field.KPH }
+                queued = mapOf(FitPro.Field.KPH to 0.0)
+            } else if (queued != null && queued.size > 1 &&
                 queued.containsKey(FitPro.Field.WORKOUT_MODE)) {
                 rest = queued.filterKeys { it != FitPro.Field.WORKOUT_MODE }
                 queued = mapOf(FitPro.Field.WORKOUT_MODE to
@@ -2484,9 +2573,10 @@ class MainActivity : Activity() {
             }
 
             val writes = enforceStopped(beltStillKph())
+                ?: decelStep()
                 ?: enforceLevel(lastActualGrade)
                 ?: enforceFanOff()
-                ?: queued ?: decelStep() ?: rampStep()
+                ?: queued ?: rampStep()
 
             if (writes != null) lastWriteMs = SystemClock.elapsedRealtime()
             val reply = conn.exchange(FitPro.readWrite(deviceId, READS, writes ?: emptyMap()))
@@ -2707,6 +2797,7 @@ class MainActivity : Activity() {
             accumulatedMs += SystemClock.elapsedRealtime() - activeSince
             session = Session.PAUSED
             phaseEndsAt = 0L
+            phaseTotalMs = 0L
             targetKph = 0.0
             // Nothing gradual survives the safety key. The belt is already
             // stopped by the machine itself; a wind-down still counting down
@@ -2853,6 +2944,7 @@ class MainActivity : Activity() {
             dmk = dmk,
             ramping = if (rampTo > 0.0) rampReason else "",
             phaseLeft = phaseLeftSec(),
+            phaseTotal = phaseTotalMs / 1000.0,
             boardMode = boardMode ?: -1,
             // Ground covered over time on the belt, not the average of a
             // sampled estimate. This is the one speed figure that can be
@@ -2864,6 +2956,7 @@ class MainActivity : Activity() {
             maxIncline = maxIncline,
             avgPulse = if (pulseSamples > 0) (pulseSum / pulseSamples).toInt() else 0,
             maxPulse = maxPulse,
+            units = cfg.units(),
             hrMax = walkerHrMax,
             zoneSecs = if (walkerHrMax > 0) zoneSecs.map { Math.round(it).toInt() }
                        else emptyList(),
@@ -3177,6 +3270,7 @@ class MainActivity : Activity() {
             targetIncline = targetGrade,
             elapsed = elapsedSec(),
             phaseLeft = phaseLeftSec(),
+            phaseTotal = phaseTotalMs / 1000.0,
             ramping = if (rampTo > 0.0) rampReason else "",
         ))
     }

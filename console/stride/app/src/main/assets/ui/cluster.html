@@ -489,7 +489,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
       <circle id="spdTick" cx="150" cy="150" r="120" fill="none" stroke="#e5b567" stroke-width="12"
               pathLength="1000" stroke-dasharray="0 1000" transform="rotate(-90 150 150)"/>
     </svg>
-    <div class="k">SPEED KM/H</div>
+    <div class="k" data-unit-km="SPEED KM/H" data-unit-mi="SPEED MPH">SPEED KM/H</div>
     <div class="v mono" id="speed">0.0</div>
     <div class="n mono" id="suggest"></div>
   </div>
@@ -505,7 +505,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
         <line id="lapTick" stroke="#c3cdd1" stroke-width="2"/>
       </svg>
       <div class="n mono" id="laps">0</div>
-      <div class="c">LAPS &middot; 400 M EACH</div>
+      <div class="c" data-unit-km="LAPS · 400 M EACH" data-unit-mi="LAPS · 0.25 MI EACH">LAPS &middot; 400 M EACH</div>
     </div>
 
     <div class="hero" id="heroPath">
@@ -533,9 +533,9 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 
   <div class="tele">
     <div class="cell"><div class="k">ELAPSED</div><div class="v mono" id="elapsed">0:00</div></div>
-    <div class="cell"><div class="k">DISTANCE</div><div class="v mono"><span id="dist">0.00</span><span class="u"> KM</span></div></div>
+    <div class="cell"><div class="k">DISTANCE</div><div class="v mono"><span id="dist">0.00</span><span class="u" data-unit-km=" KM" data-unit-mi=" MI"> KM</span></div></div>
     <div class="cell"><div class="k">CALORIES</div><div class="v mono" id="cals">0</div></div>
-    <div class="cell"><div class="k">CLIMBED</div><div class="v mono"><span id="climb">0</span><span class="u"> M</span></div></div>
+    <div class="cell"><div class="k">CLIMBED</div><div class="v mono"><span id="climb">0</span><span class="u" data-unit-km=" M" data-unit-mi=" FT"> M</span></div></div>
     <div class="cell hr"><div class="k">HEART RATE</div><div class="v mono" id="pulse">&mdash;&mdash;</div></div>
   </div>
 
@@ -552,12 +552,12 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
     <button class="key" id="btnInclineDown"><span class="sym">&minus;</span><span class="sub">INCLINE</span></button>
     <button class="key" id="btnInclineUp"><span class="sym">+</span><span class="sub">INCLINE</span></button>
     <button class="key fan" id="btnFan"><span class="lab">FAN</span><span class="sub mono" id="fanLab">0/4</span></button>
-    <button class="stop" id="btnStop"><span class="lab">STOP</span></button>
+    <button class="stop" id="btnStop"><span class="lab">COOL DOWN</span></button>
   </div>
 
   <div class="paused" id="paused">
     <div class="scrim"></div>
-    <div class="k">BELT STOPPED &middot; SESSION HELD</div>
+    <div class="k" id="pausedKicker">BELT STOPPED &middot; SESSION HELD</div>
     <div class="h mono" id="pausedAt">0:00</div>
     <div class="s mono" id="pausedWhere">&mdash;</div>
     <div class="row">
@@ -574,11 +574,11 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
   <div class="sumcoach" id="sumCoach"></div>
   <div class="grid">
     <div class="cell"><div class="kk">TIME</div><div class="vv mono" id="sumTime">0:00</div></div>
-    <div class="cell last"><div class="kk">DISTANCE</div><div class="vv mono"><span id="sumDist">0.00</span><span class="u"> KM</span></div></div>
+    <div class="cell last"><div class="kk">DISTANCE</div><div class="vv mono"><span id="sumDist">0.00</span><span class="u" data-unit-km=" KM" data-unit-mi=" MI"> KM</span></div></div>
     <div class="cell"><div class="kk">CALORIES</div><div class="vv mono" id="sumCals">0</div></div>
-    <div class="cell last"><div class="kk">CLIMBED</div><div class="vv mono"><span id="sumClimb">0</span><span class="u"> M</span></div></div>
-    <div class="cell"><div class="kk">AVG SPEED</div><div class="vv mono"><span id="sumAvg">0.0</span><span class="u"> KM/H</span></div></div>
-    <div class="cell last"><div class="kk">MAX SPEED</div><div class="vv mono"><span id="sumMax">0.0</span><span class="u"> KM/H</span></div></div>
+    <div class="cell last"><div class="kk">CLIMBED</div><div class="vv mono"><span id="sumClimb">0</span><span class="u" data-unit-km=" M" data-unit-mi=" FT"> M</span></div></div>
+    <div class="cell"><div class="kk">AVG SPEED</div><div class="vv mono"><span id="sumAvg">0.0</span><span class="u" data-unit-km=" KM/H" data-unit-mi=" MPH"> KM/H</span></div></div>
+    <div class="cell last"><div class="kk">MAX SPEED</div><div class="vv mono"><span id="sumMax">0.0</span><span class="u" data-unit-km=" KM/H" data-unit-mi=" MPH"> KM/H</span></div></div>
   </div>
 
   <div class="heart" id="sumHeart">
@@ -753,7 +753,8 @@ function renderPlan() {
       const km = (r.distance_m || 0) / 1000 * (on ? 2 : 1);
       const up = on ? STRIDE.loopedClimb(r) : (r.climb_m || 0);
       bay((r.name || 'Route').toUpperCase(),
-          km.toFixed(2) + ' KM · CLIMB ' + Math.round(up) + ' M' +
+          STRIDE.dist(km * 1000) + ' ' + STRIDE.distUnit(true) +
+          ' · CLIMB ' + STRIDE.elev(up) + ' ' + STRIDE.elevUnit(true) +
             (on ? ' · BOTH WAYS' : ''),
           pts, r.id === flow.route, () => flow.setRoute(r.id), r.id);
     });
@@ -766,7 +767,7 @@ function renderPlan() {
     const mean = s.points.reduce((a, v) => a + v, 0) / s.points.length;
     const gain = Math.round(2500 * mean / 100);
     bay(s.name.toUpperCase(),
-        'PEAK ' + hi.toFixed(1) + '% · GAIN ' + gain + ' M',
+        'PEAK ' + hi.toFixed(1) + '% · GAIN ' + STRIDE.elev(gain) + ' ' + STRIDE.elevUnit(true),
         s.points, s.id === flow.shape, () => flow.setShape(s.id));
   });
 }
@@ -824,9 +825,13 @@ tap($('btnLead'), () => {
     case 'active':   Stride.pause();        break;
   }
 });
+/* COOL DOWN, not STOP. The belt does not halt — it eases to the cool-down
+   pace and the configured cool-down counts down, ending the walk when it
+   reaches zero. This overlay is that countdown now, and END on it finishes
+   early. A cool-down already running is not a thing to start again. */
 tap($('btnStop'), () => {
-  if (shownPhase !== 'active' && shownPhase !== 'warmup' && shownPhase !== 'paused') return;
-  Stride.pause();
+  if (shownPhase !== 'active' && shownPhase !== 'warmup') return;
+  Stride.end();
   $('paused').classList.add('on');
 });
 tap($('btnResume'), () => { $('paused').classList.remove('on'); Stride.resume(); });
@@ -951,7 +956,7 @@ window.render = function(raw){
 
   /* Both needles come off the belt controller, never off the setpoint. */
   $('incline').textContent = s.belt.incline.toFixed(1);
-  $('speed').textContent   = s.belt.speed.toFixed(1);
+  $('speed').textContent   = STRIDE.spd(s.belt.speed);
   $('incArc').setAttribute('stroke-dasharray',
     dash(s.belt.incline / INCLINE_FULL));
   $('spdArc').setAttribute('stroke-dasharray',
@@ -964,14 +969,14 @@ window.render = function(raw){
      console may act on it — the pace belongs to whoever is on the belt. */
   const suggesting = guided && s.targets.suggest > 0 && !timed;
   suggestKph = suggesting ? s.targets.suggest : 0;
-  $('suggest').textContent = suggesting ? 'TGT ' + s.targets.suggest.toFixed(1) : '';
+  $('suggest').textContent = suggesting ? 'TGT ' + STRIDE.spd(s.targets.suggest) : '';
   $('spdTick').setAttribute('stroke-dasharray',
     suggesting ? tick(s.targets.suggest / SPEED_FULL) : '0 1000');
 
   $('elapsed').textContent = mmss(s.session.elapsed);
-  $('dist').textContent    = STRIDE.km(s.session.distance);
+  $('dist').textContent    = STRIDE.dist(s.session.distance);
   $('cals').textContent    = nf(s.session.calories);
-  $('climb').textContent   = Math.round(s.session.climb);
+  $('climb').textContent   = STRIDE.elev(s.session.climb);
   $('pulse').textContent   = s.session.pulse ? s.session.pulse : '——';
 
   $('fanLab').textContent  = s.fan + '/4';
@@ -991,14 +996,20 @@ window.render = function(raw){
   if (hero === 'heroPath') renderPath(s);
   if (hero === 'heroWarm') renderWarm(s);
 
-  if (s.phase !== 'paused') $('paused').classList.remove('on');
-  if (s.phase === 'paused'){
+  if (s.phase !== 'paused' && s.phase !== 'cooldown') $('paused').classList.remove('on');
+  if (s.phase === 'cooldown'){
     $('paused').classList.add('on');
+    $('pausedKicker').textContent = 'COOL DOWN \u00b7 EASING DOWN';
+    $('pausedAt').textContent = mmss(s.phaseLeft);
+    $('pausedWhere').textContent = 'ENDS AT ZERO';
+  } else if (s.phase === 'paused'){
+    $('paused').classList.add('on');
+    $('pausedKicker').textContent = 'BELT STOPPED \u00b7 SESSION HELD';
     $('pausedAt').textContent = mmss(s.session.elapsed);
     $('pausedWhere').textContent = guided && s.segment.count
       ? 'SEG ' + s.segment.index + '/' + s.segment.count + ' · ' +
-        STRIDE.km(s.session.distance) + ' KM'
-      : STRIDE.km(s.session.distance) + ' KM';
+        STRIDE.dist(s.session.distance) + ' ' + STRIDE.distUnit(true)
+      : STRIDE.dist(s.session.distance) + ' ' + STRIDE.distUnit(true);
   }
 };
 
@@ -1089,11 +1100,11 @@ function renderSummary(s){
   $('sumHead').textContent  = 'Nice work, ' + (s.profile || 'you');
   $('sumCoach').textContent = s.summaryLine || '';
   $('sumTime').textContent  = mmss(s.session.elapsed);
-  $('sumDist').textContent  = STRIDE.km(s.session.distance);
+  $('sumDist').textContent  = STRIDE.dist(s.session.distance);
   $('sumCals').textContent  = nf(s.session.calories);
-  $('sumAvg').textContent   = s.session.avgSpeed.toFixed(1);
-  $('sumMax').textContent   = s.session.maxSpeed.toFixed(1);
-  $('sumClimb').textContent = Math.round(s.session.climb);
+  $('sumAvg').textContent   = STRIDE.spd(s.session.avgSpeed);
+  $('sumMax').textContent   = STRIDE.spd(s.session.maxSpeed);
+  $('sumClimb').textContent = STRIDE.elev(s.session.climb);
   renderHeartPanel(s);
   renderBadges(s);
 }

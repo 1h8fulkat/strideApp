@@ -471,7 +471,15 @@ function adapt(raw) {
   }
   lastDistance = distance;
 
+  // Before the state is handed on, so every formatter below and every render
+  // that follows agrees with the setting.
+  setUnits(raw.units);
+
   var segments = raw.segments || 0;
+  /* Still 400 m in both systems, and the imperial label says 0.25 mi because
+     that is what 400 m is to two decimals — 0.2485. Deriving a real quarter-mile
+     lap would mean 402.336 here *and* in every track() the interfaces build for
+     the oval, or the ring and the counter would disagree about the same walk. */
   var laps = Math.floor(distance / 400);
 
   return {
@@ -482,6 +490,11 @@ function adapt(raw) {
        'active' rather than Kotlin's 'running' because the handoff says active
        and a run is a mode, not a phase — 'running' meant both. */
     phase:    mode === 'running' ? 'active' : mode,
+
+    /* The console's unit setting, carried so an interface can pick a word as
+       well as a number — "2.25 MI IN" needs both. */
+    units:    IMPERIAL ? 'mi' : 'km',
+    imperial: IMPERIAL,
 
     /* `speed` is the pace the console is holding — the setpoint. It is not the
        odometer estimate, and that is deliberate: see Snapshot.speed in
@@ -521,9 +534,7 @@ function adapt(raw) {
                    The first route walked rendered a 275 m opening stretch as
                    "4:35 left" — the number was the distance, read as a clock. */
                 leftLabel: raw.segmentLeftIsDistance
-                  ? (raw.segmentLeft >= 1000
-                       ? (raw.segmentLeft / 1000).toFixed(2) + ' km'
-                       : Math.round(raw.segmentLeft || 0) + ' m')
+                  ? distanceLeft(raw.segmentLeft || 0)
                   : mmss(raw.segmentLeft || 0),
                 nextName: raw.nextLabel || '',
                 nextIncline: raw.nextIncline || 0 },
@@ -577,6 +588,9 @@ function adapt(raw) {
     /* Seconds left in a timed phase, and which ramp is in flight ("warmup",
        "resuming", "cooldown", "stopping" or ""). */
     phaseLeft: raw.phaseLeft || 0,
+    /* How long that phase runs in total, so a progress bar has a denominator.
+       Every interface used to assume 120 s. */
+    phaseTotal: raw.phaseTotal || 0,
     ramping:   raw.ramping || '',
 
     raw: raw
@@ -1134,6 +1148,81 @@ function nf(n) {
  *  still for two minutes at a time, which reads as a frozen display. */
 function km(m, dp) { return ((m || 0) / 1000).toFixed(dp == null ? 2 : dp); }
 
+/* ---- units ---------------------------------------------------------------
+   One console-wide setting, `units`, and every number a walker reads has to
+   honour it. It used to be honoured in exactly one interface: the other four
+   printed KM and km/h whatever the setting said, and a walk that reported 2.25
+   was reporting kilometres to somebody who had asked for miles.
+
+   The current setting is held here rather than threaded through every call,
+   because these are formatters called from render at 5 Hz and the alternative
+   is passing a flag to all forty of them. `adapt` sets it from the state it is
+   already unpacking, so it is right before anything is drawn. */
+var IMPERIAL = false;
+
+/** Metres → km or miles. Two decimals: at walking pace one decimal sits still
+ *  for two minutes at a time, which reads as a frozen display. */
+function dist(m, dp) {
+  var v = IMPERIAL ? (m || 0) / 1609.344 : (m || 0) / 1000;
+  return v.toFixed(dp == null ? 2 : dp);
+}
+/** km/h → km/h or mph. */
+function spd(kph, dp) {
+  var v = IMPERIAL ? (kph || 0) * 0.621371 : (kph || 0);
+  return v.toFixed(dp == null ? 1 : dp);
+}
+/** Metres of ascent → metres or feet. Whole units either way; nobody climbs a
+ *  fraction of a foot. */
+function elev(m, dp) {
+  var v = IMPERIAL ? (m || 0) * 3.280840 : (m || 0);
+  return v.toFixed(dp == null ? 0 : dp);
+}
+/**
+ * A distance still to go, in whichever unit reads as a number rather than a
+ * count: kilometres past a kilometre and metres below it, miles past a tenth
+ * of a mile and feet below that. Nobody says "0.03 mi to go".
+ */
+function distanceLeft(metres) {
+  if (IMPERIAL) {
+    return metres >= 160.934
+      ? (metres / 1609.344).toFixed(2) + ' mi'
+      : Math.round(metres * 3.280840) + ' ft';
+  }
+  return metres >= 1000 ? (metres / 1000).toFixed(2) + ' km'
+                        : Math.round(metres) + ' m';
+}
+
+function distUnit(caps) { var u = IMPERIAL ? 'mi' : 'km'; return caps ? u.toUpperCase() : u; }
+function spdUnit(caps)  { var u = IMPERIAL ? 'mph' : 'km/h'; return caps ? u.toUpperCase() : u; }
+function elevUnit(caps) { var u = IMPERIAL ? 'ft' : 'm'; return caps ? u.toUpperCase() : u; }
+
+/**
+ * Rewrite the static unit labels in the document.
+ *
+ * The labels are markup, not values — `<span class="u"> KM</span>` sitting
+ * beside the number it belongs to — so there is nothing for a formatter to
+ * return. Each one carries both spellings instead, and this picks one:
+ *
+ *     <span class="u" data-unit-km=" KM" data-unit-mi=" MI"> KM</span>
+ *
+ * Both are written out rather than derived, because the five interfaces
+ * disagree about capitalisation and leading spaces and every one of them is
+ * right about its own typography.
+ */
+function applyUnitLabels() {
+  var els = document.querySelectorAll('[data-unit-km]');
+  for (var i = 0; i < els.length; i++) {
+    els[i].textContent = els[i].getAttribute(IMPERIAL ? 'data-unit-mi' : 'data-unit-km');
+  }
+}
+
+var labelledFor = null;
+function setUnits(units) {
+  IMPERIAL = units === 'mi';
+  // Only when it changes: this runs from adapt, five times a second.
+  if (labelledFor !== IMPERIAL) { labelledFor = IMPERIAL; applyUnitLabels(); }
+}
+
 var FAN_NAMES = ['OFF', 'LOW', 'MEDIUM', 'HIGH', 'AUTO'];
 function fanName(n) { return FAN_NAMES[n] || 'OFF'; }
 /** The control row's own label: "OFF" or "2 OF 4". */
@@ -1570,6 +1659,14 @@ global.STRIDE = {
   mmss: mmss,
   nf: nf,
   km: km,
+  dist: dist,
+  distanceLeft: distanceLeft,
+  spd: spd,
+  elev: elev,
+  distUnit: distUnit,
+  spdUnit: spdUnit,
+  elevUnit: elevUnit,
+  applyUnitLabels: applyUnitLabels,
   durationLabel: durationLabel,
   fanName: fanName,
   fanLabel: fanLabel,

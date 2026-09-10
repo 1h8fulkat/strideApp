@@ -195,9 +195,18 @@ class Coach {
         /** How long to wait for HA before showing the canned line instead. */
         const val FALLBACK_MS = 8_000L
 
-        /** First mark at 500 m — a short walk deserves one — then every km. */
+        /**
+         * First mark at 500 m — a short walk deserves one — then every km.
+         *
+         * On an imperial console the same idea in the walker's own round
+         * numbers: half a mile, then every mile. Scaling the metric marks
+         * instead would have the coach announcing 0.62 and 1.24 miles, which
+         * are not milestones, they are conversions.
+         */
         const val FIRST_MARK_M = 500.0
         const val MARK_STEP_M = 1000.0
+        const val FIRST_MARK_MI = 804.672      // half a mile
+        const val MARK_STEP_MI = 1609.344      // a mile
     }
 
     /** A moment worth a sentence. [kind] picks the prompt, [detail] describes it. */
@@ -413,8 +422,8 @@ class Coach {
             val shape = StringBuilder("this workout is \"${s.plan}\"")
             if (s.planClimbM > 0) {
                 // A route: real distance and real ascent, measured outdoors.
-                shape.append(", ${"%.1f".format(s.planTotalSec / 1000)} km with " +
-                             "${"%.0f".format(s.planClimbM)} metres of climbing in it")
+                shape.append(", ${s.far(s.planTotalSec)} with " +
+                             "${s.up(s.planClimbM)} of climbing in it")
             } else if (s.planTotalSec > 0) {
                 shape.append(", ${(s.planTotalSec / 60).toInt()} minutes")
             }
@@ -487,7 +496,7 @@ class Coach {
             // A route's "label" is its own name repeated once per segment, so
             // naming it thirty-five times says nothing. The ground is the news.
             val where = if (s.segmentLeftIsDistance)
-                "in about ${s.segmentLeft.toInt()} metres"
+                "in about ${s.ahead(s.segmentLeft)}"
             else
                 "in about ${s.segmentLeft.toInt()} seconds"
             val what = if (s.segmentLeftIsDistance) "the workout reaches a point where"
@@ -499,10 +508,19 @@ class Coach {
         }
 
         // --- distance: the backbone -----------------------------------------
+        val firstMark = if (s.mi()) FIRST_MARK_MI else FIRST_MARK_M
+        val markStep  = if (s.mi()) MARK_STEP_MI else MARK_STEP_M
+        /* `nextMark` is armed at the metric first mark before any state has
+           arrived, and the unit setting is only knowable from a frame — so the
+           ladder is pulled onto the right rungs here, before it is compared
+           against. Without this an imperial walk announced "half a mile" at
+           500 m, which is 0.31. */
+        if (nextMark < firstMark) nextMark = firstMark
+
         if (s.distance >= nextMark) {
             val reached = nextMark
-            nextMark = if (reached < MARK_STEP_M) MARK_STEP_M else reached + MARK_STEP_M
-            val label = if (reached >= 1000) "${(reached / 1000).toInt()} km" else "${reached.toInt()} m"
+            nextMark = if (reached < markStep) markStep else reached + markStep
+            val label = s.mark(reached)
             return Moment("milestone", "he has just passed $label")
         }
 
@@ -563,8 +581,8 @@ class Coach {
                         "his heart rate has been sitting at ${s.pulse} bpm for the last " +
                         "minute, which is ${ZONE_WORDS[zone]} for him and below the easy " +
                         "aerobic range this workout wants. He is at " +
-                        "${"%.1f".format(s.speed)} km/h; a little more pace would bring it " +
-                        "up. Invite him to try ${"%.1f".format(suggest)} km/h if he has it " +
+                        "${s.pace(s.speed)}; a little more pace would bring it " +
+                        "up. Invite him to try ${s.pace(suggest)} if he has it " +
                         "in him, and make clear it is an offer, not an instruction")
                 }
             } else if (share > ZONE_CEIL) {
@@ -578,8 +596,8 @@ class Coach {
                         "which is ${ZONE_WORDS[zone]} for him and above where this workout is " +
                         "meant to sit. Tell him to lengthen his stride and breathe longer " +
                         "first, and to ease back to about " +
-                        "${"%.1f".format(suggest)} km/h from " +
-                        "${"%.1f".format(s.speed)} if it does not settle. Calm, not alarmed " +
+                        "${s.pace(suggest)} from " +
+                        "${s.paceNum(s.speed)} if it does not settle. Calm, not alarmed " +
                         "— a high heart rate on a hill is the body working, not a fault")
                 }
             } else {
@@ -714,6 +732,62 @@ class Coach {
      * [n] rotates the wording for the kinds that can fire repeatedly, so a walk
      * with a poor connection does not become a loop.
      */
+    /* ---- units --------------------------------------------------------
+     *
+     * The coach talks in numbers, and every one of them used to be metric
+     * whatever the console was set to — spoken aloud as well as written to the
+     * ribbon, so an imperial walker was told "5.0 km/h" by a display reading
+     * 3.1 mph. These are also what goes into the prompt Home Assistant writes
+     * from, so the language model is given the walker's own units and does not
+     * have to be told twice.
+     *
+     * `Snapshot.units` is the setting; "mi" is the only imperial value. */
+    private fun Snapshot.mi() = units == "mi"
+
+    /** A pace, with its unit. */
+    private fun Snapshot.pace(kph: Double): String =
+        if (mi()) "%.1f mph".format(kph * 0.621371) else "%.1f km/h".format(kph)
+
+    /** A pace with no unit, for a sentence that supplies its own. */
+    private fun Snapshot.paceNum(kph: Double): String =
+        if (mi()) "%.1f".format(kph * 0.621371) else "%.1f".format(kph)
+
+    /** A distance covered: the big unit once there is enough of it. */
+    private fun Snapshot.far(metres: Double): String = when {
+        mi() -> {
+            val miles = metres / 1609.344
+            if (miles >= 0.1) "%.2f miles".format(miles)
+            else "${Math.round(metres * 3.280840)} feet"
+        }
+        metres >= 1000 -> "%.1f km".format(metres / 1000)
+        else -> "${metres.toInt()} metres"
+    }
+
+    /** A distance still ahead — short, so the small unit does the work. */
+    private fun Snapshot.ahead(metres: Double): String =
+        if (mi()) "${Math.round(metres * 3.280840)} feet" else "${metres.toInt()} metres"
+
+    /** Ascent. */
+    private fun Snapshot.up(metres: Double): String =
+        if (mi()) "${Math.round(metres * 3.280840)} feet" else "${metres.toInt()} metres"
+
+    /**
+     * A round distance marker the walk has just passed.
+     *
+     * Said as a phrase rather than a measurement — "half a mile", "3 miles" —
+     * because these are the marks [FIRST_MARK_M] and [markStep] put there on
+     * purpose, and a coach reading "0.5 miles" aloud sounds like a readout.
+     */
+    private fun Snapshot.mark(metres: Double): String {
+        if (!mi()) {
+            return if (metres >= 1000) "${(metres / 1000).toInt()} km" else "${metres.toInt()} m"
+        }
+        val miles = metres / 1609.344
+        if (miles < 0.9) return "half a mile"
+        val n = "%.1f".format(miles).removeSuffix(".0")
+        return if (n == "1") "1 mile" else "$n miles"
+    }
+
     private fun canned(kind: String, s: Snapshot): String {
         val n = kindCount[kind] ?: 1
         // 6.0 reads as "6", 6.5 stays "6.5". A hill is not a measurement.
@@ -721,7 +795,7 @@ class Coach {
         return when (kind) {
             "segment" -> {
                 val where = if (s.segmentLeftIsDistance)
-                    "In about ${s.segmentLeft.toInt()} metres"
+                    "In about ${s.ahead(s.segmentLeft)}"
                 else
                     "In about ${s.segmentLeft.toInt()} seconds"
                 when {
@@ -737,15 +811,14 @@ class Coach {
                 }
             }
             "milestone" -> {
-                val far = if (s.distance >= 1000) "%.1f km".format(s.distance / 1000)
-                          else "${s.distance.toInt()} m"
+                val far = s.far(s.distance)
                 if (n % 2 == 1) "$far, ${Math.round(s.elapsed / 60)} minutes. Keep it steady."
                 else "$far down. That pace is doing the work."
             }
-            "steady" -> "${"%.1f".format(s.speed)} km/h, held for minutes. " +
+            "steady" -> "${s.pace(s.speed)}, held for minutes. " +
                         "That is the rhythm — stay in it."
             "pace_drop" -> "Sitting a little under your average of " +
-                           "${"%.1f".format(s.avgSpeed)}. No need to chase it."
+                           "${s.paceNum(s.avgSpeed)}. No need to chase it."
             "hr_climb" -> if (n % 2 == 1)
                 "${s.pulse} bpm, up from ${s.avgPulse} today. Breathe steady — " +
                 "you are doing the work now."
@@ -756,21 +829,21 @@ class Coach {
             // spoken when Home Assistant is unreachable, and a nudge without a
             // number is the half of the advice that is no use.
             "zone_low" -> "${s.pulse} bpm — easy going. Try " +
-                "${"%.1f".format(s.speed + ZONE_NUDGE_KPH)} if you have it in you."
+                "${s.paceNum(s.speed + ZONE_NUDGE_KPH)} if you have it in you."
             "zone_high" -> "${s.pulse} bpm. Lengthen the stride, breathe long — " +
-                "and ease to ${"%.1f".format((s.speed - ZONE_NUDGE_KPH).coerceAtLeast(0.0))} " +
+                "and ease to ${s.paceNum((s.speed - ZONE_NUDGE_KPH).coerceAtLeast(0.0))} " +
                 "if it stays up."
             "checkin" -> {
                 val mins = Math.round(s.elapsed / 60)
-                if (n % 2 == 1) "$mins minutes in, ${s.distance.toInt()} metres done."
+                if (n % 2 == 1) "$mins minutes in, ${s.far(s.distance)} done."
                 else "Still going at $mins minutes. That is the whole job."
             }
             "warmup_done" ->
                 if (s.segments > 0) "Warm-up done — ${s.segments} stretches ahead. " +
                                     "Settle into a pace that feels easy."
                 else fallback(kind)
-            "cooldown" -> "Easing down from ${"%.1f".format(s.avgSpeed)} average. Good work."
-            "summary" -> "${"%.2f".format(s.distance / 1000)} km, " +
+            "cooldown" -> "Easing down from ${s.paceNum(s.avgSpeed)} average. Good work."
+            "summary" -> "${s.far(s.distance)}, " +
                          "${Math.round(s.elapsed / 60)} minutes. That is another one done."
             else -> fallback(kind)
         }

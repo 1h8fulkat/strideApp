@@ -263,7 +263,15 @@
     return s;
   }
 
-  function stepper(key, value, min, max, inc, unit, dp) {
+  function stepper(key, value, min, max, inc, unit, dp, saveScale) {
+    saveScale = saveScale || 1;
+    /* Land the stored value on the ladder before it is ever shown. A metric
+       store converted into imperial almost never sits on a rung — 4.988968
+       km/h is 3.1004 mph — and stepping from there carries the remainder
+       forward for ever, so a display reading 3.1 would save something that is
+       not 3.1. Rounded to the step, the number on screen is the number kept. */
+    value = Math.min(max, Math.max(min, Math.round(value / inc) * inc));
+    value = Math.round(value * 100) / 100;
     var s = el('div', 'sx-step');
     var v = el('div', 'sx-v');
     var draw = function () {
@@ -274,7 +282,7 @@
       // Floating point: 0.1 + 0.2 has no business reaching a settings store.
       value = Math.round(value * 100) / 100;
       draw();
-      save(key, value);
+      save(key, value / saveScale);
     };
     s.appendChild(press(el('button', '', '&minus;'), function () { bump(-1); }));
     s.appendChild(v);
@@ -842,13 +850,34 @@
       'How the console drives the deck. The board\'s own limits always win — these ' +
       'are preferences within them, never overrides of them.');
 
+    var imperial = S.units === 'mi';
+    var speedScale = imperial ? 0.621371 : 1;
+    var speedUnit = imperial ? 'mph' : 'km/h';
+    /* The speed ladder is defined in the unit you are reading, not converted
+       from the other one.
+
+       Scaling a metric ladder is what these used to do, and it put every rung
+       off a round number: 1..6 km/h in steps of 0.5 became 0.62..3.73 mph in
+       steps of 0.31, so the reachable speeds were 0.62, 0.93, 1.24, 1.55 …
+       and 3.0 mph — the number somebody would actually want — was not among
+       them. The store stays metric; only the rungs are native. */
+    var spdMin  = imperial ? 0.5 : 1;
+    var spdMax  = imperial ? 4.0 : 6.5;
+    var spdStep = imperial ? 0.1 : 0.5;
     var g2 = group('Starting and stopping');
     g2.appendChild(row('Warm-up', 'Skippable. Zero starts every walk at your chosen pace.',
       stepper('warmup_min', S.warmup_min || 0, 0, 10, 1, 'min')));
     g2.appendChild(row('Cool-down', '',
       stepper('cooldown_min', S.cooldown_min || 0, 0, 10, 1, 'min')));
-    g2.appendChild(row('Warm-up speed', 'Also the speed a cool-down eases back to.',
-      stepper('warmup_kph', S.warmup_kph || 2, 1, 6, 0.5, 'km/h', 1)));
+    g2.appendChild(row('Warm-up speed', 'Where a walk starts before the pace is yours.',
+      stepper('warmup_kph', (S.warmup_kph || 2) * speedScale,
+        spdMin, spdMax, spdStep, speedUnit, 1, speedScale)));
+    // Its own number rather than the warm-up's, which it used to borrow. A
+    // console set up to start at 3.1 mph then finished at 3.1 mph, which is
+    // not a cool-down.
+    g2.appendChild(row('Cool-down speed', 'The amble the belt eases back to before the walk ends.',
+      stepper('cooldown_kph', (S.cooldown_kph || 3.2) * speedScale,
+        spdMin, spdMax, spdStep, speedUnit, 1, speedScale)));
     sc.appendChild(g2);
 
     var g3 = group('Guided walks');
@@ -869,8 +898,8 @@
       el('div', 'sx-ro', '<b>' + lim.minGrade.toFixed(1) + '</b> to <b>+' +
         lim.maxGrade.toFixed(1) + '</b> %')));
     g4.appendChild(row('Speed range', '',
-      el('div', 'sx-ro', '<b>' + lim.minKph.toFixed(1) + '</b> to <b>' +
-        lim.maxKph.toFixed(1) + '</b> km/h')));
+      el('div', 'sx-ro', '<b>' + (lim.minKph * speedScale).toFixed(1) + '</b> to <b>' +
+        (lim.maxKph * speedScale).toFixed(1) + '</b> ' + speedUnit)));
     sc.appendChild(g4);
   }
 
@@ -1014,10 +1043,15 @@
 
     var g = group(routes.length + (routes.length === 1 ? ' route' : ' routes'));
     routes.forEach(function (r) {
-      var km = ((r.distance_m || 0) / 1000).toFixed(2);
-      var climb = Math.round(r.climb_m || 0);
+      /* This list is drawn from the settings store, not from a state frame,
+         so it reads the setting directly rather than through STRIDE's. */
+      var mi = S.units === 'mi';
+      var far = mi ? ((r.distance_m || 0) / 1609.344).toFixed(2) + ' mi'
+                   : ((r.distance_m || 0) / 1000).toFixed(2) + ' km';
+      var climb = mi ? Math.round((r.climb_m || 0) * 3.280840) + ' ft'
+                     : Math.round(r.climb_m || 0) + ' m';
       var changes = (r.segments || []).length;
-      var desc = km + ' km · ' + climb + ' m of climb · ' + changes +
+      var desc = far + ' · ' + climb + ' of climb · ' + changes +
                  ' incline changes';
       if (r.difficulty && r.difficulty !== 1) {
         desc += ' · at ' + Math.round(r.difficulty * 100) + '%';

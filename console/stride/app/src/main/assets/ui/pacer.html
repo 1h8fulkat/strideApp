@@ -432,7 +432,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
   <div class="fig l">
     <div class="k">SPEED</div>
     <div class="v" id="speed">0.0</div>
-    <div class="u">km/h</div>
+    <div class="u" data-unit-km="km/h" data-unit-mi="mph">km/h</div>
   </div>
   <div class="fig r">
     <div class="k">INCLINE</div>
@@ -505,9 +505,9 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
 
   <div class="tele">
     <div class="cell"><div class="k">TIME</div><div class="v" id="elapsed">0:00</div></div>
-    <div class="cell"><div class="k">DISTANCE</div><div class="v"><span id="dist">0.00</span><span class="u"> km</span></div></div>
+    <div class="cell"><div class="k">DISTANCE</div><div class="v"><span id="dist">0.00</span><span class="u" data-unit-km=" km" data-unit-mi=" mi"> km</span></div></div>
     <div class="cell"><div class="k">BURNED</div><div class="v"><span id="cals">0</span><span class="u"> kcal</span></div></div>
-    <div class="cell"><div class="k">CLIMBED</div><div class="v"><span id="climb">0</span><span class="u"> m</span></div></div>
+    <div class="cell"><div class="k">CLIMBED</div><div class="v"><span id="climb">0</span><span class="u" data-unit-km=" m" data-unit-mi=" ft"> m</span></div></div>
   </div>
 
   <div class="controls">
@@ -517,12 +517,12 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
     <button class="key" id="btnInclineDown"><span class="sym">&minus;</span><span class="sub">INCLINE</span></button>
     <button class="key" id="btnInclineUp"><span class="sym">+</span><span class="sub">INCLINE</span></button>
     <button class="key fan" id="btnFan"><span class="lab">FAN</span><span class="sub" id="fanLab">OFF</span></button>
-    <button class="stop" id="btnStop"><span class="lab">STOP</span></button>
+    <button class="stop" id="btnStop"><span class="lab">COOL DOWN</span></button>
   </div>
 
   <div class="paused" id="paused">
     <div class="scrim"></div>
-    <div class="k">TAKING A BREATHER</div>
+    <div class="k" id="pausedKicker">TAKING A BREATHER</div>
     <div class="h" id="pausedAt">0:00 in</div>
     <div class="s" id="pausedWhere">No rush.</div>
     <div class="row">
@@ -755,7 +755,8 @@ function renderPlan() {
       const km = (r.distance_m || 0) / 1000 * (on ? 2 : 1);
       const up = on ? STRIDE.loopedClimb(r) : (r.climb_m || 0);
       lane(r.name || 'Route',
-           km.toFixed(2) + ' km · ' + Math.round(up) + ' m of climb' +
+           STRIDE.dist(km * 1000) + ' ' + STRIDE.distUnit() + ' · ' +
+             STRIDE.elev(up) + ' ' + STRIDE.elevUnit() + ' of climb' +
              (on ? ' · there and back' : ''),
            STRIDE.routePoints(r), r.id === flow.route,
            () => flow.setRoute(r.id), r.id);
@@ -826,9 +827,13 @@ tap($('btnLead'), () => {
     case 'active':   Stride.pause();        break;
   }
 });
+/* COOL DOWN, not STOP. The belt does not halt — it eases to the cool-down
+   pace and the configured cool-down counts down, ending the walk when it
+   reaches zero. This overlay is that countdown now, and END on it finishes
+   early. A cool-down already running is not a thing to start again. */
 tap($('btnStop'), () => {
-  if (shownPhase !== 'active' && shownPhase !== 'warmup' && shownPhase !== 'paused') return;
-  Stride.pause();
+  if (shownPhase !== 'active' && shownPhase !== 'warmup') return;
+  Stride.end();
   $('paused').classList.add('on');
 });
 tap($('btnResume'), () => { $('paused').classList.remove('on'); Stride.resume(); });
@@ -949,15 +954,15 @@ window.render = function(raw){
     : s.ramping === 'resuming' ? 'RESUMING'
     : 'WORKING OUT';
 
-  $('speed').textContent   = s.belt.speed.toFixed(1);
+  $('speed').textContent   = STRIDE.spd(s.belt.speed);
   $('incline').textContent = s.belt.incline.toFixed(1);
   $('inclineNote').textContent = !guided ? 'yours'
                                : s.targets.inclineAuto ? 'auto' : 'yours for now';
 
   $('elapsed').textContent = mmss(s.session.elapsed);
-  $('dist').textContent    = STRIDE.km(s.session.distance);
+  $('dist').textContent    = STRIDE.dist(s.session.distance);
   $('cals').textContent    = nf(s.session.calories);
-  $('climb').textContent   = Math.round(s.session.climb);
+  $('climb').textContent   = STRIDE.elev(s.session.climb);
 
   $('fanLab').textContent  = STRIDE.fanLabel(s.fan);
   $('leadLab').textContent = timed ? 'SKIP' : s.phase === 'paused' ? 'RESUME' : 'PAUSE';
@@ -978,7 +983,7 @@ window.render = function(raw){
     $('suggest').classList.toggle('off', !suggesting);
     suggestKph = suggesting ? s.targets.suggest : 0;
     if (suggesting) $('suggest').textContent =
-      'try ' + s.targets.suggest.toFixed(1) + ' km/h';
+      'try ' + STRIDE.spd(s.targets.suggest) + ' ' + STRIDE.spdUnit();
   }
   if (guided && timed){
     /* A preview. Not "2 of 9, 1:36 left" — the plan has not started, so it has
@@ -995,14 +1000,20 @@ window.render = function(raw){
   if (hero === 'heroLaps') renderOval(s);
   if (hero === 'heroWarm') renderWarm(s);
 
-  if (s.phase !== 'paused') $('paused').classList.remove('on');
-  if (s.phase === 'paused'){
+  if (s.phase !== 'paused' && s.phase !== 'cooldown') $('paused').classList.remove('on');
+  if (s.phase === 'cooldown'){
     $('paused').classList.add('on');
+    $('pausedKicker').textContent = 'COOLING DOWN';
+    $('pausedAt').textContent = mmss(s.phaseLeft) + ' left';
+    $('pausedWhere').textContent = 'Easing down. That is the walk done at zero.';
+  } else if (s.phase === 'paused'){
+    $('paused').classList.add('on');
+    $('pausedKicker').textContent = 'TAKING A BREATHER';
     $('pausedAt').textContent = mmss(s.session.elapsed) + ' in';
     const left = guided ? s.segment.count - s.segment.index : 0;
     $('pausedWhere').textContent = guided && s.segment.count
       ? (s.segment.index - 1) + ' down, ' + (left + 1) + ' waiting. No rush.'
-      : STRIDE.km(s.session.distance) + ' km banked. No rush.';
+      : STRIDE.dist(s.session.distance) + ' ' + STRIDE.distUnit() + ' banked. No rush.';
   }
 };
 
@@ -1069,9 +1080,9 @@ function renderSummary(s){
       : 'That’s ' + hills + ' hills, ' + (s.profile || 'you');
   $('sumCoach').textContent = s.summaryLine || '';
   $('sumTime').textContent  = mmss(s.session.elapsed);
-  $('sumDist').textContent  = STRIDE.km(s.session.distance);
+  $('sumDist').textContent  = STRIDE.dist(s.session.distance);
   $('sumCals').textContent  = nf(s.session.calories);
-  $('sumClimb').textContent = Math.round(s.session.climb) + ' m';
+  $('sumClimb').textContent = STRIDE.elev(s.session.climb) + ' ' + STRIDE.elevUnit();
   $('sumNote').textContent  = s.session.climb > 60 ? 'A proper hill’s worth of climbing.' : '';
 }
 

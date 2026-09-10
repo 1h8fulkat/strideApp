@@ -26,7 +26,7 @@ android {
 
     defaultConfig {
         applicationId = "dev.stride.hud"
-        minSdk = 28
+        minSdk = 24
         targetSdk = 28
         // Bumped per release, because the About screen is the only place
         // anyone can see which build is on a console, and "0.1-spike · build 1"

@@ -94,6 +94,14 @@ data class Snapshot(
     val ramping: String,
     /** Seconds left in a timed phase (warm-up / cool-down); 0 otherwise. */
     val phaseLeft: Double,
+    /**
+     * How long that phase is in total, seconds; 0 when none is running.
+     *
+     * Only a progress bar needs this, and every interface was drawing one
+     * against a hardcoded 120 s — right for the default two-minute phases and
+     * wrong for every other setting. Sent rather than assumed.
+     */
+    val phaseTotal: Double = 0.0,
     /** The board's own WorkoutMode, carried purely for diagnosis. 8 = safety key out. */
     val boardMode: Int,
     val avgSpeed: Double,
@@ -187,6 +195,8 @@ data class Snapshot(
      *  one is "the board is not answering", the other is "the board wants us to
      *  authenticate and we are doing it". */
     val boardLocked: Boolean = false,
+    /** User-facing distance and speed units; treadmill protocol stays metric. */
+    val units: String = "km",
 ) {
     val mode: String get() = Session.name(session)
 
@@ -242,6 +252,7 @@ data class Snapshot(
     fun toJson(): String = buildString {
         append("{")
         append("\"speed\":${"%.1f".format(speed)},")
+        append("\"units\":\"${if (units == "mi") "mi" else "km"}\",")
         append("\"beltKph\":${"%.1f".format(beltKph)},")
         append("\"rpm\":${"%.0f".format(rpm)},")
         append("\"slipping\":$slipping,")
@@ -257,6 +268,7 @@ data class Snapshot(
         append("\"dmk\":$dmk,")
         append("\"ramping\":\"${esc(ramping)}\",")
         append("\"phaseLeft\":${"%.0f".format(phaseLeft)},")
+        append("\"phaseTotal\":${"%.0f".format(phaseTotal)},")
         append("\"boardMode\":$boardMode,")
         append("\"boardOk\":$boardOk,")
         append("\"boardLocked\":$boardLocked,")
