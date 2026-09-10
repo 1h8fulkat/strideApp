@@ -14,10 +14,14 @@ The `../../env.txt` fallback is the layout this project grew up in. It is kept
 so an existing install keeps working after the move, and it is the only reason
 this looks in two places.
 """
+import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -121,9 +125,55 @@ def broker() -> str:
 
 
 def mqtt(topic: str, payload: str, retain: bool = True):
-    cmd = ["mosquitto_pub", "-h", broker(),
-           "-u", conf("mqtt_user"), "-P", conf("mqtt_pass"),
-           "-t", topic, "-m", payload]
-    if retain:
-        cmd.insert(1, "-r")
-    subprocess.run(cmd, check=True)
+    """Publish, retained by default. Two ways out, tried in that order.
+
+    `mosquitto_pub` stays first: where it is installed and a broker is
+    configured this behaves exactly as it always did, and a broker that
+    refuses a publish says so rather than having the message quietly
+    rerouted somewhere it might succeed.
+
+    Where it is *not* — no package, no root to install one, or simply no
+    `mqtt_broker:` in the config — the message goes through Home Assistant's
+    own `mqtt.publish` service instead. Home Assistant is already connected
+    to the broker; asking it to pass a message on is less machinery than
+    installing a second MQTT client beside it, and it means the broker
+    password need not be copied into stride.conf at all. `ha_api_token` is a
+    credential these scripts already keep.
+
+    Only an *absent* client falls through to that. A publish that was
+    attempted and rejected is a real answer and is raised.
+    """
+    if shutil.which("mosquitto_pub") and conf("mqtt_broker", ""):
+        cmd = ["mosquitto_pub", "-h", broker(),
+               "-u", conf("mqtt_user"), "-P", conf("mqtt_pass"),
+               "-t", topic, "-m", payload]
+        if retain:
+            cmd.insert(1, "-r")
+        subprocess.run(cmd, check=True)
+        return
+    _mqtt_via_ha(topic, payload, retain)
+
+
+def _mqtt_via_ha(topic: str, payload: str, retain: bool):
+    """Publish through Home Assistant's MQTT integration.
+
+    The payload is passed as a literal. Service data is not templated when a
+    call arrives over the REST API — that happens in the automation engine,
+    which is not in this path — so JSON braces travel through unharmed.
+    """
+    body = json.dumps({"topic": topic, "payload": payload,
+                       "retain": retain, "qos": 0}).encode()
+    req = urllib.request.Request(
+        f"{HA}/api/services/mqtt/publish", data=body,
+        headers={"Authorization": f"Bearer {token()}",
+                 "Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=20).read()
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode(errors="replace")[:200]
+        sys.exit(f"Home Assistant refused the publish ({e.code}): {detail}\n"
+                 f"  Is the MQTT integration set up there, and is "
+                 f"ha_api_token still valid?")
+    except urllib.error.URLError as e:
+        sys.exit(f"cannot reach Home Assistant at {HA} ({e.reason}).\n"
+                 f"  Install mosquitto-clients to publish directly instead.")

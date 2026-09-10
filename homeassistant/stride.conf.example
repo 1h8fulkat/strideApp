@@ -22,9 +22,17 @@ ha_api_token: paste-yours-here
 
 # The MQTT broker Home Assistant uses. Host, or tcp://host:port.
 # The same details you put into the console's Settings -> Home Assistant.
-mqtt_broker: tcp://homeassistant.local:1883
-mqtt_user: stride
-mqtt_pass: change-me
+#
+# OPTIONAL. Filled in, these scripts publish straight to the broker with
+# mosquitto_pub, which has to be installed (apt install mosquitto-clients).
+# Left blank, they ask Home Assistant to publish for them over its API
+# instead — it is already connected to the broker, so there is nothing to
+# install and no second copy of the broker password to keep. The direct
+# route is used when it is available because a broker that refuses a publish
+# should say so itself.
+mqtt_broker:
+mqtt_user:
+mqtt_pass:
 
 
 # === The coach =============================================================
