@@ -199,7 +199,15 @@ class MainActivity : Activity() {
         const val PREFS = "stride"
         const val PREF_UI = "ui"
 
-        /** How briskly a ramp winds the belt up. */
+        /**
+         * How briskly a ramp winds the belt up.
+         *
+         * RESUME only, now. Starting a walk is handed its pace in one go —
+         * see [startKph] — because a setpoint climbing towards a target while
+         * the board's own motor ramp chases it is two ramps for one start.
+         * Coming back from a pause is a different case: the belt is at a
+         * standstill under someone already on it.
+         */
         const val RAMP_KPH_PER_SEC = 1.0
 
         /**
@@ -469,6 +477,33 @@ class MainActivity : Activity() {
 
     /** Snap to a step grid, killing float drift like 6.500000000000001. */
     private fun quantise(v: Double, step: Double) = Math.round(v / step) * step
+
+    /**
+     * The pace a walk opens at, inside what the machine will accept.
+     *
+     * Choosing a workout used to set a *ramp* to this speed and let
+     * [rampStep] walk the setpoint up at [RAMP_KPH_PER_SEC], so a 4.8 km/h
+     * warm-up took nearly five seconds of standing on a belt that was barely
+     * moving before it reached a pace anyone would call walking. The ramp was
+     * protecting against a lurch that is not ours to cause: the setpoint is
+     * not the belt, and the board runs its own motor ramp underneath whatever
+     * it is told. Handing it the number at once lets it do that once, briskly,
+     * instead of chasing a setpoint that is itself still climbing.
+     *
+     * Clamped rather than trusted. [Settings.warmupKph] is a stored preference
+     * and the board's real limits are only known once [readLimits] has run —
+     * below [minKph] there is no "slow", only stopped, which would open a walk
+     * by not moving at all.
+     *
+     * Deliberately not `coerceIn(minKph, maxKph)`, which throws when the range
+     * is empty. Both limits come off the board, this runs on the WebView
+     * thread inside a `@JavascriptInterface` call, and a machine that reported
+     * them the wrong way round would take the console down at the moment
+     * somebody tapped to start a walk. Applied in this order the floor wins,
+     * which is the right way for it to fail: a walk that moves.
+     */
+    private fun startKph(): Double =
+        cfg.warmupKph().coerceAtMost(maxKph).coerceAtLeast(minKph)
 
     /**
      * Average pace for the session, km/h, from distance over time.
@@ -826,8 +861,8 @@ class MainActivity : Activity() {
 
         /**
          * Welcome screen → straight into a warm-up, the way iFit did it:
-         * choosing a workout *is* starting it, and the belt eases up to
-         * [WARMUP_KPH] rather than waiting for a separate START press.
+         * choosing a workout *is* starting it, and the belt goes to the
+         * warm-up pace rather than waiting for a separate START press.
          *
          * The belt moves as a direct result of this tap, so the welcome screen
          * says so.
@@ -846,11 +881,18 @@ class MainActivity : Activity() {
             activeSince = SystemClock.elapsedRealtime()
             phaseEndsAt = activeSince + cfg.warmupMs()
             phaseTotalMs = cfg.warmupMs()
-            targetKph = 0.0
-            rampTo = cfg.warmupKph()
-            rampReason = "warmup"
-            pendingWrite = mapOf(FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble())
-            Log.i(TAG, "workout chosen — warming up to ${cfg.warmupKph()} km/h")
+            // Straight to the warm-up pace, not a ramp towards it — see
+            // [startKph]. The mode still travels on its own and ahead of the
+            // speed: the board ignores a KPH write while the console is IDLE,
+            // and the poll loop's split is what guarantees that order.
+            targetKph = startKph()
+            rampTo = 0.0
+            rampReason = ""
+            pendingWrite = mapOf(
+                FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble(),
+                FitPro.Field.KPH to targetKph,
+            )
+            Log.i(TAG, "workout chosen — starting at ${"%.1f".format(targetKph)} km/h")
             repaint()
         }
 
@@ -893,13 +935,14 @@ class MainActivity : Activity() {
             activeSince = SystemClock.elapsedRealtime()
             phaseEndsAt = 0L
             phaseTotalMs = 0L
-            targetKph = 0.0
+            targetKph = startKph()
             targetGrade = 0.0
-            rampTo = cfg.warmupKph()
-            rampReason = "warmup"
+            rampTo = 0.0
+            rampReason = ""
             pendingWrite = mapOf(
                 FitPro.Field.GRADE to 0.0,
                 FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble(),
+                FitPro.Field.KPH to targetKph,
             )
             Log.i(TAG, "guided walk: ${template.name}, " +
                     (if (planLoops) "open (${cfg.openLapMin()} min circuit)" else "$minutes min") +
@@ -965,13 +1008,14 @@ class MainActivity : Activity() {
             activeSince = SystemClock.elapsedRealtime()
             phaseEndsAt = 0L
             phaseTotalMs = 0L
-            targetKph = 0.0
+            targetKph = startKph()
             targetGrade = 0.0
-            rampTo = cfg.warmupKph()
-            rampReason = "warmup"
+            rampTo = 0.0
+            rampReason = ""
             pendingWrite = mapOf(
                 FitPro.Field.GRADE to 0.0,
                 FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble(),
+                FitPro.Field.KPH to targetKph,
             )
             Log.i(TAG, "route: ${r.name}, ${"%.2f".format(r.distanceM / 1000)} km, " +
                     "${"%.0f".format(r.climbM)} m climb, ${r.segments.size} segments" +
@@ -2743,11 +2787,16 @@ class MainActivity : Activity() {
     }
 
     /**
-     * One tick of the resume ramp, or null if there's nothing to wind up.
+     * One tick of a ramp, or null if there's nothing to wind.
      *
-     * The first step goes straight to the machine's minimum — below 1.6 km/h
-     * this treadmill has no "slow", only stopped — and from there it climbs at
-     * a walking-pace-per-second until it reaches where you left off.
+     * Two callers left, and neither is the start of a walk: RESUME, climbing
+     * back to the pace a pause interrupted, and the cool-down easing *down* to
+     * its own slower pace. Starting a workout used to come through here too
+     * and no longer does — see [startKph].
+     *
+     * Climbing, the first step goes straight to the machine's minimum, because
+     * below it this treadmill has no "slow", only stopped; from there it moves
+     * at a walking-pace-per-second until it arrives.
      */
     private fun rampStep(): Map<FitPro.Field, Double>? {
         val goal = rampTo

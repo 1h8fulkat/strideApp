@@ -431,7 +431,7 @@ class Coach {
                 shape.append(", steepest around ${"%.0f".format(s.planPeakIncline)}%")
             }
             return Moment("opening",
-                "$shape. He is at the very start and the belt is still easing up. " +
+                "$shape. He is at the very start, just up to the warm-up pace. " +
                 "Set him up for what is coming, and tell him to settle in and let " +
                 "the muscles warm — do not read the numbers back as a list")
         }
