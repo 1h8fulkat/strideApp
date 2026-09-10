@@ -18,10 +18,26 @@
 
    The vertical budget is fixed and every band is load-bearing:
 
-       62 – 466   hero        oval track, path ahead, or phase countdown
-      478 – 558   coach       docked ribbon; empty space when nothing is said
-      566 – 658   telemetry
-      678 – 766   controls
+        0 –  56   topbar      clock · what you're doing · date
+       58 – 142   header      pause and cool down in the corners, the four
+                              numbers between them
+      172 – 576   hero        oval track, path ahead, or phase countdown
+      588 – 668   coach       docked ribbon; empty space when nothing is said
+      684 – 760   controls    incline pair · fan · speed pair
+
+   Two rules hold this shape together, and both were paid for:
+
+   The hero owns the middle of the screen. Elapsed, distance, calories and
+   pulse are read between glances rather than watched, so they sit up in the
+   header band beside the two buttons that end a walk, and the countdown or the
+   track gets the whole centre. They used to live along the bottom, which put
+   the one thing you actually stare at — a 150px clock — off-centre and above
+   a stack of numbers competing with it.
+
+   Each control sits under the number it moves: incline left, under the incline
+   gauge; speed right, under the speed gauge. The old row ran pause, speed,
+   incline, fan, stop left to right, so the pair you reach for at 6 km/h was in
+   the middle and on the wrong side of the screen from its own reading.
 
    The coach used to float over the top of the hero, where it covered the
    segment header and the warm-up countdown — the two things most worth
@@ -55,7 +71,8 @@ button{-webkit-tap-highlight-color:rgba(0,0,0,0);outline:none}
 /* Depth: a soft radial lift behind the track, like the reference. */
 body::before{
   content:"";position:absolute;top:0;right:0;bottom:0;left:0;
-  background:radial-gradient(ellipse 900px 520px at 50% 44%,
+  /* Centred on the hero, which now sits at y=374 rather than y=264. */
+  background:radial-gradient(ellipse 900px 520px at 50% 47%,
     rgba(28,58,140,.55) 0%, rgba(10,21,51,.25) 45%, transparent 72%);
   pointer-events:none;
 }
@@ -81,8 +98,11 @@ body::before{
 .topbar .state[data-mode="ready"]{color:var(--ink-faint)}
 .topbar .state[data-mode="paused"]{color:var(--accent-warm)}
 
-/* ---- side gauges -------------------------------------------------------- */
-.side{position:absolute;top:142px;width:250px;text-align:center}
+/* ---- side gauges --------------------------------------------------------
+   Top chosen so the whole column — label through ticks, 307px of it — shares
+   a centre line with the hero at y=374. Nudging only the big number into line
+   instead leaves the ticks hanging past the bottom of the oval. */
+.side{position:absolute;top:220px;width:250px;text-align:center}
 .side.left{left:24px}
 .side.right{right:24px}
 .side .label{
@@ -100,8 +120,9 @@ body::before{
 }
 .side .target b{color:var(--accent);font-weight:600}
 
-/* Simple tick column, stands in for the reference's arc gauge. Ends clear of
-   the coach band at 478 — a column running under the ribbon looked severed. */
+/* Simple tick column, stands in for the reference's arc gauge. Ends at 527,
+   clear of the coach band at 588 — a column running under the ribbon looked
+   severed. */
 .ticks{margin-top:16px;height:112px;display:flex;flex-direction:column-reverse;align-items:center}
 .ticks i{display:block;width:44px;height:3px;margin-top:5px;background:var(--track-line);border-radius:2px;transition:background .25s}
 .ticks i.on{background:var(--accent)}
@@ -111,14 +132,18 @@ body::before{
    The rail, the lanes and the head dot are all generated from STRIDE.track
    rather than written out by hand, so the dot sits on real arc-length along
    the stadium instead of somewhere an ellipse approximation put it. */
-.stage{position:absolute;left:274px;top:62px;width:732px;height:404px}
+/* One box, three tenants: the oval, the path ahead and the phase countdown
+   are alternatives for the same 732x404 hole in the middle of the screen.
+   The track maths and the path's perspective constants are both written
+   against that size, so move this box — never resize it — and they follow. */
+.stage,.phase,.path{position:absolute;left:274px;top:172px;width:732px;height:404px}
 .stage svg{width:732px;height:404px}
 .lap{
   position:absolute;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;pointer-events:none;
 }
 .lap .n{
-  font-size:144px;font-weight:200;line-height:.9;
+  font-size:156px;font-weight:200;line-height:.9;
   font-variant-numeric:tabular-nums;
   text-shadow:0 0 44px rgba(57,224,255,.45);
 }
@@ -129,7 +154,6 @@ body::before{
 
 /* ---- warm-up / cool-down centre panel ----------------------------------- */
 .phase{
-  position:absolute;left:274px;top:62px;width:732px;height:404px;
   display:none;flex-direction:column;align-items:center;justify-content:center;
 }
 .phase.on{display:flex}
@@ -137,31 +161,39 @@ body::before{
   font-size:26px;letter-spacing:.34em;text-transform:uppercase;color:var(--accent);
 }
 .phase .pclock{
-  margin-top:22px;font-size:150px;font-weight:200;line-height:.9;
+  margin-top:24px;font-size:164px;font-weight:200;line-height:.9;
   font-variant-numeric:tabular-nums;
   text-shadow:0 0 44px rgba(57,224,255,.35);
 }
-.phase .pnote{margin-top:18px;font-size:17px;color:var(--ink-dim)}
+.phase .pnote{margin-top:20px;font-size:17px;color:var(--ink-dim)}
 /* What is coming, stated as a preview. Never live plan state: a warm-up that
    says "2 of 9 · 1:36 left" is claiming to be a walk that has not started. */
 .phase .pprev{
   margin-top:14px;font-size:15px;letter-spacing:.16em;text-transform:uppercase;
   color:var(--ink-faint);
 }
+/* As wide as the countdown above it is tall is far enough: a hairline the full
+   width of the hero reads as a divider between two screens rather than as the
+   phase running out. */
 .phase .pbar{
-  margin-top:32px;width:420px;height:4px;border-radius:2px;
+  margin-top:34px;width:500px;height:5px;border-radius:3px;
   background:var(--track-line);overflow:hidden;
 }
-.phase .pbar i{display:block;height:4px;width:0;background:var(--accent);border-radius:2px}
+.phase .pbar i{display:block;height:5px;width:0;background:var(--accent);border-radius:3px}
 .phase[data-kind="cooldown"] .pname{color:var(--accent-warm)}
 .phase[data-kind="cooldown"] .pbar i{background:var(--accent-warm)}
 
-/* ---- bottom metric strip ------------------------------------------------ */
+/* ---- header: the numbers, and the two buttons that end a walk -----------
+   The strip is centred on the full width rather than on the space left over
+   between the buttons, so the four numbers sit symmetrically under the mode
+   chip. At 202px of pitch the row is 808px wide, which leaves 42px between
+   the outermost column and the button beside it — enough that a four-figure
+   distance never reaches COOL DOWN. */
 .strip{
-  position:absolute;left:0;right:0;top:566px;height:92px;
+  position:absolute;left:0;right:0;top:58px;height:84px;
   display:flex;align-items:center;justify-content:center;
 }
-.metric{display:flex;flex-direction:column;align-items:center;min-width:150px;margin:0 37px}
+.metric{display:flex;flex-direction:column;align-items:center;min-width:150px;margin:0 26px}
 .metric .k{
   font-size:13px;letter-spacing:.2em;text-transform:uppercase;
   color:var(--ink-faint);margin-bottom:6px;
@@ -169,14 +201,36 @@ body::before{
 .metric .v{font-size:42px;font-weight:300;font-variant-numeric:tabular-nums}
 .metric .v small{font-size:17px;color:var(--ink-dim);margin-left:4px}
 
-/* ---- controls ----------------------------------------------------------- */
-/* Held clear of the panel edge: touches within ~15px of the bezel register
+/* ---- controls -----------------------------------------------------------
+   Three groups, not one row: the incline pair under the incline gauge, the
+   speed pair under the speed gauge, the fan on its own in the middle. The
+   two pairs are the same width, so `space-between` centres the fan exactly
+   without anything having to be told where the middle is.
+
+   Held clear of the panel edge: touches within ~15px of the bezel register
    unreliably on this digitizer, which made the old flush row feel broken. */
 .controls{
   position:absolute;left:0;right:0;top:678px;height:88px;
-  display:flex;align-items:center;justify-content:center;
+  display:flex;align-items:center;justify-content:space-between;
   padding:0 34px;
 }
+.pair{display:flex;align-items:center}
+/* Fixed rather than flexed: a stretched button in a three-group row is how
+   the fan ends up wider than the four things either side of it. */
+.controls button{flex:none;width:164px;margin:0}
+/* Chromium 83: no flexbox `gap`. */
+.pair button + button{margin-left:16px}
+
+/* Pause and cool down, in the top corners, edge-aligned with the pairs below
+   them. Out of the control row on purpose: they end or suspend the walk, and
+   as two of seven identical pills in one row they were a hand's width from
+   SPEED − — indistinguishable, at a glance, from a nudge of 0.1 km/h. */
+.act{
+  position:absolute;top:62px;width:160px;height:76px;margin:0;max-width:none;
+}
+.act.left{left:34px}
+.act.right{right:34px}
+
 button{
   flex:1;max-width:160px;height:76px;margin:0 8px;
   /* Without this the WebView waits ~300ms disambiguating a double-tap. */
@@ -203,16 +257,26 @@ button.pulse{animation:pulse .9s ease-out 2}
   100%{box-shadow:0 0 0 22px rgba(57,224,255,0)}
 }
 
-/* ---- fan menu ----------------------------------------------------------- */
+/* ---- fan menu -----------------------------------------------------------
+   A row, not a stack. FAN sits in the middle of the control row now, and a
+   column of five levels rising out of it landed squarely on the lap counter —
+   the fan is the one control you press *without* looking away from the
+   number in the middle of the screen. Laid out sideways it fits the coach's
+   band exactly, so it covers nothing that is not already reserved.
+
+   Above the coach rather than under it: this is up for five seconds because
+   you just asked for it, and a ribbon arriving in that window must not hide
+   the answer. Still below the overlays — a safety key coming out beats
+   choosing a fan speed. */
 .fanmenu{
-  position:absolute;right:216px;bottom:118px;width:170px;
+  position:absolute;left:350px;bottom:134px;width:580px;
   background:rgba(10,21,51,.97);border:2px solid var(--track-line);
-  border-radius:22px;padding:10px;display:none;z-index:30;
+  border-radius:22px;padding:10px;display:none;z-index:45;
   box-shadow:0 18px 50px rgba(0,0,0,.55);
 }
-.fanmenu.show{display:block}
+.fanmenu.show{display:flex}
 .fanmenu button{
-  display:block;width:100%;max-width:none;height:52px;margin:4px 0;
+  flex:none;width:104px;max-width:none;height:52px;margin:0 4px;
   border-radius:16px;font-size:15px;
 }
 .fanmenu button.on{border-color:var(--accent);color:var(--accent)}
@@ -278,7 +342,7 @@ button.pulse{animation:pulse .9s ease-out 2}
 .summary .done button{width:280px;max-width:none;height:88px;font-size:19px}
 
 /* ---- coach ribbon -------------------------------------------------------
-   Docked in its own band between the hero and the telemetry row. It used to
+   Docked in its own band between the hero and the control row. It used to
    float over the top of the hero, where it covered the segment header and the
    warm-up countdown — the two things you most want to read at the exact moment
    the coach speaks. This placement is load-bearing; do not float it back.
@@ -289,7 +353,7 @@ button.pulse{animation:pulse .9s ease-out 2}
 
    Chromium 83: no `inset`, no flexbox `gap` — explicit edges and margins only. */
 .coach{
-  position:absolute;left:34px;right:34px;top:478px;height:80px;
+  position:absolute;left:34px;right:34px;top:588px;height:80px;
   background:rgba(10,21,51,.96);
   border:2px solid rgba(57,224,255,.34);
   border-left:3px solid var(--accent);
@@ -408,7 +472,6 @@ button.pulse{animation:pulse .9s ease-out 2}
    receding into the distance can, so the climb is visible before it arrives.
    Canvas rather than SVG: this repaints at 5 Hz on a 2016 MediaTek, and
    rebuilding a few dozen path nodes per frame as DOM would not hold up. */
-.path{position:absolute;left:274px;top:62px;width:732px;height:404px}
 .path canvas{display:block;width:732px;height:404px}
 .pathinfo{
   position:absolute;left:0;right:0;top:16px;text-align:center;pointer-events:none;
@@ -489,6 +552,19 @@ button.pulse{animation:pulse .9s ease-out 2}
     <div id="date">—</div>
   </div>
 
+  <!-- header: skip / pause / resume, the four numbers, and the way out.
+       The two buttons are in the corners and everything that changes the belt
+       by a tenth is at the bottom of the screen, as far from them as the
+       panel allows. -->
+  <button class="act left primary" id="btnStart">START</button>
+  <div class="strip">
+    <div class="metric"><div class="k">Elapsed</div><div class="v" id="elapsed">0:00</div></div>
+    <div class="metric"><div class="k">Distance</div><div class="v"><span id="distance">0</span><small id="distanceUnit">m</small></div></div>
+    <div class="metric"><div class="k">Calories</div><div class="v"><span id="calories">0</span><small>kcal</small></div></div>
+    <div class="metric"><div class="k">Heart rate</div><div class="v"><span id="pulse">—</span><small>bpm</small></div></div>
+  </div>
+  <button class="act right stop" id="btnStop">COOL DOWN</button>
+
   <!-- incline -->
   <div class="side left">
     <div class="label">Incline</div>
@@ -565,21 +641,17 @@ button.pulse{animation:pulse .9s ease-out 2}
     </div>
   </div>
 
-  <div class="strip">
-    <div class="metric"><div class="k">Elapsed</div><div class="v" id="elapsed">0:00</div></div>
-    <div class="metric"><div class="k">Distance</div><div class="v"><span id="distance">0</span><small id="distanceUnit">m</small></div></div>
-    <div class="metric"><div class="k">Calories</div><div class="v"><span id="calories">0</span><small>kcal</small></div></div>
-    <div class="metric"><div class="k">Heart rate</div><div class="v"><span id="pulse">—</span><small>bpm</small></div></div>
-  </div>
-
+  <!-- Each pair under the gauge it moves. -->
   <div class="controls">
-    <button class="primary" id="btnStart">START</button>
-    <button id="btnSpeedDown">SPEED −</button>
-    <button id="btnSpeedUp">SPEED +</button>
-    <button id="btnInclineDown">INCLINE −</button>
-    <button id="btnInclineUp">INCLINE +</button>
+    <div class="pair">
+      <button id="btnInclineDown">INCLINE −</button>
+      <button id="btnInclineUp">INCLINE +</button>
+    </div>
     <button id="btnFan">FAN</button>
-    <button class="stop" id="btnStop">COOL DOWN</button>
+    <div class="pair">
+      <button id="btnSpeedDown">SPEED −</button>
+      <button id="btnSpeedUp">SPEED +</button>
+    </div>
   </div>
 
   <div class="fanmenu" id="fanmenu">
@@ -987,7 +1059,8 @@ stepper($('btnSpeedDown'),  d => Stride.speed(-d),  0.1, 0.5);
 stepper($('btnInclineUp'),  d => Stride.incline(d), 0.5, 0.5);
 stepper($('btnInclineDown'),d => Stride.incline(-d),0.5, 0.5);
 
-/* Fan: a slide-out with the actual levels, rather than cycling blind. */
+/* Fan: the actual levels, laid out above the button, rather than cycling
+   blind through them. */
 let fanTimer = null;
 function closeFan(){ $('fanmenu').classList.remove('show'); clearTimeout(fanTimer); }
 tap($('btnFan'), () => {
@@ -1011,13 +1084,20 @@ function ticks(el, n, active){
 }
 
 /* --- the 400 m track -----------------------------------------------------
-   The canonical stadium: two 248px straights closed by r=158 semicircles,
-   centred in the 732x404 hero. Face-on here — the oblique squash exists for
-   the UIs that are short of vertical space, and this one is not.
+   Two 264px straights closed by r=176 semicircles, centred in the 732x404
+   hero. Face-on here — the oblique squash exists for the UIs that are short
+   of vertical space, and this one is not.
+
+   Bigger than the canonical 248/158 the handoff specifies, because this hero
+   is now the middle of the screen rather than the top third of it: at the old
+   size the ring left 44px of dead navy inside its own box, top and bottom, and
+   read as a diagram of a track rather than the thing being run. 176 is as far
+   as it goes — the rail's glow spreads about 14px past a 7px stroke, and the
+   SVG viewport clips at 404.
 
    Everything the ring needs comes out of this one object, so the rail the dot
    runs on and the rail that is drawn cannot drift apart. */
-const TRACK = STRIDE.track({straight:248, radius:158, cx:366, cy:202, squash:1});
+const TRACK = STRIDE.track({straight:264, radius:176, cx:366, cy:202, squash:1});
 
 const progress = $('progress'), tail = $('tail'), dot = $('dot');
 progress.setAttribute('d', TRACK.pathD(0));
@@ -1025,7 +1105,7 @@ tail.setAttribute('d', TRACK.pathD(0));
 
 /* Four lanes inside the rail. A stadium offset inwards keeps its straights and
    loses radius, which is exactly what keeps lanes parallel round the bends. */
-[20, 36, 52, 68].forEach(inset => {
+[22, 40, 58, 76].forEach(inset => {
   const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   p.setAttribute('d', TRACK.pathD(inset));
   $('lanes').appendChild(p);
@@ -1053,7 +1133,7 @@ function showScreen(mode){
   /* The ribbon lives in the HUD's own band and belongs to the walk. It is
      outside the screens so a line can land on any of them, which meant a line
      still up when the belt stopped stayed up — over the summary's cards, at
-     y=478, where nothing had made room for it. The other four interfaces
+     y=588, where nothing had made room for it. The other four interfaces
      already dropped it on the way out of the live screen; this one did not. */
   if (target !== 'screenHud'){
     clearTimeout(coachTimer);

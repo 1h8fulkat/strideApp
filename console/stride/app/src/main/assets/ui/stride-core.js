@@ -912,16 +912,22 @@ var UI_META = [
   { id: 'original', name: 'Original', blurb: 'Oval track, big flanking numbers. The one it has been walked on.',
     sketch:
       '<rect width="160" height="100" fill="#0a1533"/>' +
-      '<rect x="54" y="24" width="52" height="34" rx="17" fill="none" stroke="#16255a" stroke-width="1.5"/>' +
-      '<path d="M71 24 H89 A17 17 0 0 1 89 58" fill="none" stroke="#39e0ff" stroke-width="2.5" stroke-linecap="round"/>' +
-      '<circle cx="89" cy="58" r="2.5" fill="#eaf0ff"/>' +
-      '<rect x="12" y="30" width="26" height="12" rx="2" fill="#eaf0ff" opacity=".85"/>' +
-      '<rect x="122" y="30" width="26" height="12" rx="2" fill="#eaf0ff" opacity=".85"/>' +
-      '<rect x="12" y="66" width="136" height="1" fill="#16255a"/>' +
-      '<g fill="#16255a"><rect x="12" y="82" width="20" height="10" rx="5"/><rect x="36" y="82" width="20" height="10" rx="5"/>' +
-      '<rect x="60" y="82" width="20" height="10" rx="5"/><rect x="84" y="82" width="20" height="10" rx="5"/>' +
-      '<rect x="108" y="82" width="20" height="10" rx="5"/></g>' +
-      '<rect x="132" y="82" width="16" height="10" rx="5" fill="#ff5c7a" opacity=".6"/>' },
+      /* Header: pause in one corner, cool down in the other, the four numbers
+         between them. */
+      '<rect x="4" y="8" width="20" height="9" rx="4.5" fill="none" stroke="#5dff9b" stroke-width="1.2" opacity=".75"/>' +
+      '<rect x="136" y="8" width="20" height="9" rx="4.5" fill="none" stroke="#ff5c7a" stroke-width="1.2" opacity=".75"/>' +
+      '<g fill="#eaf0ff" opacity=".65"><rect x="35" y="10" width="14" height="6" rx="1"/>' +
+      '<rect x="60" y="10" width="14" height="6" rx="1"/><rect x="86" y="10" width="14" height="6" rx="1"/>' +
+      '<rect x="111" y="10" width="14" height="6" rx="1"/></g>' +
+      '<rect x="48" y="28" width="64" height="36" rx="18" fill="none" stroke="#16255a" stroke-width="1.5"/>' +
+      '<path d="M66 28 H94 A18 18 0 0 1 94 64" fill="none" stroke="#39e0ff" stroke-width="2.5" stroke-linecap="round"/>' +
+      '<circle cx="94" cy="64" r="2.5" fill="#eaf0ff"/>' +
+      '<rect x="8" y="40" width="22" height="11" rx="2" fill="#eaf0ff" opacity=".85"/>' +
+      '<rect x="130" y="40" width="22" height="11" rx="2" fill="#eaf0ff" opacity=".85"/>' +
+      /* Incline pair · fan · speed pair, each under the number it moves. */
+      '<g fill="#16255a"><rect x="4" y="85" width="20" height="9" rx="4.5"/><rect x="26" y="85" width="20" height="9" rx="4.5"/>' +
+      '<rect x="70" y="85" width="20" height="9" rx="4.5"/>' +
+      '<rect x="113" y="85" width="20" height="9" rx="4.5"/><rect x="135" y="85" width="20" height="9" rx="4.5"/></g>' },
 
   { id: 'ember', name: 'Ember', blurb: 'Warm near-black, hairlines, one amber light. Built for 6am.',
     sketch:
