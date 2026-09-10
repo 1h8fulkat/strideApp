@@ -201,6 +201,13 @@ function map(el, opts) {
   var line = null, trail = null, startPin = null, endPin = null;
   var halo = null, dot = null;
   var geom = null, following = false, followZoom = opts.followZoom || 16;
+  /* Whether the map has ever been given a view.
+     Leaflet queues layers added before one — `whenReady` — so a map that never
+     gets a centre and zoom draws nothing at all, silently, however many
+     polylines have been added to it. And it cannot be given one until its
+     container has a size. So this is retried on every frame until it takes,
+     which is what makes the view survive being built a moment too early. */
+  var framed = false;
   /* The last position drawn, so a frame that has not moved a metre can be
      skipped. -1 rather than 0: zero is a real position and the first frame of
      a walk has to draw. */
@@ -219,10 +226,25 @@ function map(el, opts) {
   function frame() {
     if (!geom) return false;
     var size = m.getSize();
-    if (!size.x || !size.y) return false;
+    if (!size.x || !size.y) {
+      /* Leaflet caches the container size and only re-measures when
+         `_sizeChanged` is set. The public way to set it is `invalidateSize()`,
+         which returns early on a map that has no view yet — precisely the case
+         here — so a box that has since been laid out stays remembered as 0x0
+         and the map never draws. Setting the flag is what invalidateSize does
+         once it gets past that guard.
+
+         A private field, knowingly: Leaflet is vendored in this repo at a
+         version we control, `getSize` has read this flag since 1.0, and the
+         alternative is a map that silently never appears. */
+      m._sizeChanged = true;
+      size = m.getSize();
+      if (!size.x || !size.y) return false;
+    }
     /* Capped: a 400 m loop fitted to a 732px box would otherwise go to street
        level, where a treadmill's worth of ground is off the edge. */
     m.fitBounds(geom.bounds, { padding: [24, 24], maxZoom: 17, animate: false });
+    framed = true;
     return true;
   }
 
@@ -233,6 +255,7 @@ function map(el, opts) {
     });
     line = trail = startPin = endPin = halo = dot = null;
     lastM = -1;
+    framed = false;
     if (!geom) return;
 
     var latlngs = geom.track.map(function (p) { return [p[0], p[1]]; });
@@ -268,6 +291,10 @@ function map(el, opts) {
 
   function setPosition(metres) {
     if (!geom || !dot) return;
+    /* Still no view — the container had no size when the route arrived. Try
+       again now: this runs five times a second, and the frame after the box is
+       laid out is the one that succeeds. */
+    if (!framed && !frame()) return;
     // Five frames a second against a belt reporting whole metres: below a
     // metre of movement there is nothing to redraw, and redrawing a polyline
     // is not free.
@@ -314,6 +341,8 @@ function map(el, opts) {
      *  its screen was hidden therefore thinks it is 0x0, and this is the call
      *  that fixes it — see the note where the HUD shows the route view. */
     resize: function () { m.invalidateSize(false); if (!following) frame(); },
+    /** Whether the map has a view and is therefore drawing anything. */
+    framed: function () { return framed; },
     tiles: tiles,
     leaflet: m,
     destroy: function () { try { m.remove(); } catch (e) { } }

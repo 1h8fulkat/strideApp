@@ -16,8 +16,29 @@
    assets/. That is local, not remote — the "no external resources" rule is
    about the network, and this ships inside the APK.
 
-   Chromium 83 (2020). No optional catch binding beyond what shipped then, no
-   `String.replaceAll`, no `Array.prototype.at`, no `:has()`, no `inset`.
+   CHROMIUM 51 (2016), NOT 83.
+
+   That number came over from upstream, whose console runs Android 9. This one
+   is Android 7.0 and its WebView is `com.android.webview` 51.0.2704.91 — the
+   AOSP build that shipped with the machine, with no Play Store to update it.
+   Measured on the console with:
+
+       adb shell dumpsys package com.android.webview | grep versionName
+
+   So the ceiling is **ES2015 and nothing above it**. Everything ES2015 is
+   there — arrow functions, classes, `const`/`let`, template literals,
+   destructuring, `for...of`, `Map`, `Set`, `Promise`, `Object.assign`. What is
+   not, and has bitten nobody yet only because nobody has typed it:
+
+     * `?.` and `??` (Chrome 80)          * object spread `{...o}` (60)
+     * `async`/`await` (55)               * `Object.entries`/`values` (54)
+     * `**` (52)                          * `String.padStart` (57)
+     * `Array.prototype.flat` (69)        * `.at()` (92)
+     * `String.replaceAll` (85)           * optional catch binding (66)
+     * CSS `:has()`, `inset`, flexbox `gap`
+
+   Array spread of an iterable — `[...el.querySelectorAll(x)]` — is fine and is
+   used throughout; it is object spread that is too new.
    =========================================================================== */
 (function (global) {
 'use strict';

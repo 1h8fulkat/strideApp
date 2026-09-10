@@ -50,3 +50,7 @@ docs/journal/
 archive/
 
 .DS_Store
+
+# Python leaves these beside the Home Assistant scripts when they are imported.
+__pycache__/
+*.pyc

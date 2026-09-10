@@ -260,7 +260,7 @@ class Tiles(context: Context, private val cfg: Settings) {
         null
     }
 
-    /** Every system CA, plus the root this console is too old to have. */
+    /** Every system CA, plus the roots this console is too old to have. */
     private fun anchors(): Set<TrustAnchor> {
         val out = HashSet<TrustAnchor>()
         try {
@@ -271,13 +271,15 @@ class Tiles(context: Context, private val cfg: Settings) {
         } catch (e: Exception) {
             Log.w(TAG, "cannot read the system CA store (${e.message})")
         }
-        try {
-            res.openRawResource(R.raw.isrg_root_x1).use {
-                val c = CertificateFactory.getInstance("X.509").generateCertificate(it)
-                (c as? X509Certificate)?.let { cert -> out.add(TrustAnchor(cert, null)) }
+        for (id in BUNDLED_ROOTS) {
+            try {
+                res.openRawResource(id).use {
+                    val c = CertificateFactory.getInstance("X.509").generateCertificate(it)
+                    (c as? X509Certificate)?.let { cert -> out.add(TrustAnchor(cert, null)) }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "cannot read a bundled root (${e.message})")
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "cannot read the bundled root (${e.message})")
         }
         return out
     }
@@ -359,6 +361,24 @@ class Tiles(context: Context, private val cfg: Settings) {
 
         /** The host the page asks for. Never resolved: this answers first. */
         const val HOST = "tiles.stride"
+
+        /**
+         * The roots this console does not have and the web now needs.
+         *
+         * Measured against the trust store pulled off this machine — 148
+         * certificates, none of them ISRG — by validating each provider's real
+         * chain against it:
+         *
+         *     tile.openstreetmap.org        GlobalSign     trusted as shipped
+         *     tile.opentopomap.org          Let's Encrypt  needs X1
+         *     tile-cyclosm.openstreetmap.fr Let's Encrypt  needs X1
+         *
+         * X1 is what both Let's Encrypt chains happen to terminate at today,
+         * because the servers send the cross-signed path. X2 is here for the
+         * day they stop: it is the newer root, it is what a fresh chain
+         * anchors at, and finding out the hard way means a blank map.
+         */
+        private val BUNDLED_ROOTS = intArrayOf(R.raw.isrg_root_x1, R.raw.isrg_root_x2)
 
         private val KEY = Regex("^/(\\d{1,2})/(\\d{1,7})/(\\d{1,7})\\.png$")
         private const val TIMEOUT_MS = 6000

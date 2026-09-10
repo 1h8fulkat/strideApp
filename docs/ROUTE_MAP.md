@@ -41,43 +41,78 @@ can never disagree with each other.
 2. **The console can reach the internet.** Only for tiles. Everything else —
    the route, its elevation, the incline the deck drives — is already on the
    console and works with the network down.
-3. **Its clock and trust store can agree with a tile server.** See below; this
-   is the part that actually bites.
+3. **Its clock and trust store can agree with a tile server.** Both were
+   measured on this machine — see below.
 
 Nothing here can stop a walk. If the tiles do not arrive the route still draws
 on blank ground, the dot still moves, and the strip is unaffected.
 
 ---
 
-## The two things that go wrong on an old console
+## What this console actually is
 
-Both are the machine's, not the tile server's, and they look identical from the
-outside: no tiles. `adb logcat -s StrideTiles` says which.
+Measured, not assumed. Worth re-checking on any other machine, because two of
+these differ from the console upstream was written on.
 
-**The clock reads 2022.** Certificates are then "not yet valid" and every HTTPS
-fetch fails. The console's clock is also why the coach's audio has to be plain
-HTTP. Fix it properly if you can:
+| | |
+|---|---|
+| Android | 7.0, API 24 (`argon_20180915`) |
+| WebView | `com.android.webview` **51.0.2704.91** — AOSP, no Play Store to update it |
+| Clock | correct, and `auto_time` is already `1` |
+| Trust store | 148 system CAs, **no ISRG root** |
 
 ```
-adb shell settings put global auto_time 1
+adb shell getprop ro.build.version.release
+adb shell dumpsys package com.android.webview | grep versionName
+adb shell date ; adb shell settings get global auto_time
 ```
 
-**The trust store predates Let's Encrypt's root.** Android shipped ISRG Root X1
-from 7.1.1; a console on 7.0 has no anchor for most of the web,
-OpenStreetMap included.
+**Chromium 51 is the real ceiling, not the 83 the comments used to claim.** So
+the interface may use ES2015 and nothing above it: no `?.`, no `??`, no object
+spread, no `async`/`await`, no `Object.entries`, no `**`, no `String.padStart`,
+no CSS `:has()` / `inset` / flexbox `gap`. Array spread of an iterable is fine.
+Leaflet 1.9.4 is clean at that level — its UMD wrapper reaches for `globalThis`
+but only behind a `typeof` guard, so on 51 it falls back to `this`. Verified by
+loading the whole interface with `globalThis` deleted.
 
-[`Tiles.kt`](../console/stride/app/src/main/java/dev/stride/hud/Tiles.kt)
-handles both. It tries the platform's own trust manager first and uses it
-whenever it is happy — the ordinary, fully-checked path. Only if that refuses
-does it re-validate the chain itself, against the system anchors plus a bundled
-copy of ISRG Root X1, at a date taken from the certificate instead of from the
-console's idea of now.
+---
+
+## Certificates: what is actually needed here
+
+The clock on this console is **right**, so the "not yet valid" failure the rest
+of this app works around does not arise for tiles. What does is the trust
+store: it has no ISRG root, and Let's Encrypt is most of the web.
+
+Each provider's real chain, validated against the 148 certificates pulled off
+this machine — `adb pull /system/etc/security/cacerts` — with the host's own
+store explicitly disabled (`openssl verify -no-CApath -no-CAstore`):
+
+| provider | CA | as shipped | + bundled X1 |
+|---|---|---|---|
+| `tile.openstreetmap.org` | GlobalSign | **OK** | OK |
+| `tile.opentopomap.org` | Let's Encrypt | fails | **OK** |
+| `a.tile-cyclosm.openstreetmap.fr` | Let's Encrypt | fails | **OK** |
+
+So the default basemap needs no help at all, and the two alternatives need the
+bundled root. X1 is what both Let's Encrypt chains terminate at today, because
+the servers send the cross-signed path; **X2 alone is not enough** for CyclOSM.
+Both are bundled, X2 against the day the cross-sign goes away.
+
+[`Tiles.kt`](../console/stride/app/src/main/java/dev/stride/hud/Tiles.kt) tries
+the platform's own trust manager first and uses it whenever it is happy — the
+ordinary, fully-checked path, and the one the default basemap takes. Only if
+that refuses does it re-validate the chain itself, against the system anchors
+plus the bundled roots, at a date taken from the certificate rather than from
+the console's idea of now.
 
 What that gives up, stated plainly: **a genuinely expired certificate is also
 accepted**, because nothing on this machine can tell that case apart from a
-clock that is wrong. Signatures, the chain, and the hostname are all still
-checked. It applies to map tiles and to nothing else in the app, and the worst
-a forged tile server can do is draw the wrong hill behind the route.
+clock that is wrong. Signatures, the chain to a real anchor, and the hostname
+are all still checked. It applies to map tiles and to nothing else in the app,
+and the worst a forged tile server can do is draw the wrong hill behind the
+route.
+
+`adb logcat -s StrideTiles` reports every refusal and which stage refused.
 
 ---
 
@@ -141,6 +176,13 @@ MQTT broker, sit in a retained topic, and are cached in `routes.json` on the
 console.
 
 If Home Assistant serves your GPX files from `config/www/`, note that `/local/`
-is **not** authenticated: anyone who can reach Home Assistant can read them.
-That was true before this feature and is worth knowing either way, because the
-shape of a route usually starts at your front door.
+is **not** authenticated. Checked on this install: a plain
+`curl http://<ha>:8123/local/treadmill/routes/<name>.gpx` with no token returns
+**200 and the file**. A directory request returns 403, so a filename has to be
+known or guessed, which is not the same as being protected.
+
+That was already true before any of this — it is how the converter reads them —
+and the route cached on the console is app-private (`-rw-------`, owned by the
+app's uid, readable only via `run-as` on a debug build). But the shape of a
+route usually starts at your front door, so it is worth deciding about rather
+than discovering.
