@@ -878,6 +878,13 @@
     g2.appendChild(row('Cool-down speed', 'The amble the belt eases back to before the walk ends.',
       stepper('cooldown_kph', (S.cooldown_kph || 3.2) * speedScale,
         spdMin, spdMax, spdStep, speedUnit, 1, speedScale)));
+    /* Off by default. On, the clock and the odometer never stop, which is how
+       this console behaved before the switch existed. */
+    g2.appendChild(row('Carry warm-up into the workout',
+      'Off, the workout starts again from 0:00 and zero distance the moment the warm-up ' +
+      'ends, and a guided plan gets its full length from there. On, the numbers run ' +
+      'straight through from the first step you took.',
+      toggle('carry_warmup', !!S.carry_warmup)));
     sc.appendChild(g2);
 
     var g3 = group('Guided walks');

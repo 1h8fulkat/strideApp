@@ -68,6 +68,7 @@ class Settings(context: Context) {
         const val COOLDOWN_KPH = "cooldown_kph"
         const val INCLINE_RATE = "incline_rate"   // "gentle" | "normal" | "quick"
         const val OPEN_LAP_MIN = "open_lap_min"
+        const val CARRY_WARMUP = "carry_warmup"
 
         // --- coach ---
         const val COACH_ON = "coach_on"
@@ -341,6 +342,22 @@ class Settings(context: Context) {
     fun warmupKph(): Double = prefs.getFloat(WARMUP_KPH, 2.0f).toDouble()
 
     /**
+     * Whether the warm-up's time and distance count towards the workout.
+     *
+     * Off, which is what most people mean by "I walked for half an hour": the
+     * warm-up is how you get on the belt, not part of what you came to do, and
+     * a workout that opens at 2:00 and 180 m has already spent some of itself
+     * before the first stride that counted.
+     *
+     * On is what this console did for its whole life before the setting
+     * existed — one continuous clock from the moment the belt first moved.
+     * Worth having, because it is the honest number if you are broadcasting
+     * to something that expects distance only ever to go up. See beginWorkout
+     * in MainActivity for what the two answers actually do.
+     */
+    fun carryWarmup(): Boolean = prefs.getBoolean(CARRY_WARMUP, false)
+
+    /**
      * The pace a cool-down eases back to.
      *
      * Its own setting rather than [warmupKph], which is what the cool-down used
@@ -436,6 +453,7 @@ class Settings(context: Context) {
         .put(COOLDOWN_KPH, prefs.getFloat(COOLDOWN_KPH, 3.2f).toDouble())
         .put(INCLINE_RATE, prefs.getString(INCLINE_RATE, "normal"))
         .put(OPEN_LAP_MIN, openLapMin())
+        .put(CARRY_WARMUP, carryWarmup())
         .put(COACH_ON, coachOn())
         .put(COACH_TALK, prefs.getString(COACH_TALK, "normal"))
         .put(COACH_VOICE, coachVoice())
@@ -459,7 +477,7 @@ class Settings(context: Context) {
         val e = prefs.edit()
         when (key) {
             ALLOW_GUEST, HA_ENABLED, MQTT_TLS, COACH_ON, COACH_REMOTE,
-            COACH_MILESTONES, CLOCK_24, KEEP_AWAKE ->
+            COACH_MILESTONES, CLOCK_24, KEEP_AWAKE, CARRY_WARMUP ->
                 e.putBoolean(key, value == "true" || value == "1")
 
             MQTT_PORT, WARMUP_MIN, COOLDOWN_MIN, OPEN_LAP_MIN, SLEEP_MIN ->

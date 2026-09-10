@@ -956,10 +956,7 @@ class MainActivity : Activity() {
         /** Straight to the workout proper, keeping whatever pace is set. */
         @JavascriptInterface fun skipWarmup() {
             if (session != Session.WARMUP) return
-            session = Session.ACTIVE
-            phaseEndsAt = 0L
-            phaseTotalMs = 0L
-            Log.i(TAG, "warm-up skipped")
+            beginWorkout("warm-up skipped")
             repaint()
         }
 
@@ -2071,16 +2068,42 @@ class MainActivity : Activity() {
         Log.i(TAG, "guided: incline -> ${"%.1f".format(targetGrade)}% (goal ${"%.1f".format(goal)}%)")
     }
 
+    /**
+     * The warm-up is over and the workout proper begins here — whether the
+     * clock ran out or somebody pressed SKIP. Both used to do this inline,
+     * which is how one of them could learn something the other did not.
+     *
+     * Unless the walker has asked to carry it, everything measured so far
+     * belonged to the warm-up and goes back to zero. That is [resetSession]
+     * in full and deliberately so: it is exactly "start measuring from now".
+     * Zeroing only the two numbers on the HUD would leave an average speed
+     * drawn from ground the distance no longer admits to, a climb total from
+     * hills that are no longer on the card, and a summary that does not add
+     * up against itself.
+     *
+     * Note what this also does to a guided walk. The plan advances on elapsed
+     * time and the warm-up is moving time, so a two-minute warm-up used to
+     * eat the first two minutes of a thirty-minute plan. Restart the clock
+     * and the plan gets all thirty. That is the same fix, not a second one.
+     */
+    private fun beginWorkout(how: String) {
+        session = Session.ACTIVE
+        phaseEndsAt = 0L
+        phaseTotalMs = 0L
+        if (cfg.carryWarmup()) {
+            Log.i(TAG, "$how - carrying the warm-up into the workout")
+        } else {
+            Log.i(TAG, "$how - warm-up was ${"%.0f".format(elapsedSec())} s and " +
+                    "${"%.0f".format(sessionDistance)} m; the workout starts from zero")
+            resetSession()
+        }
+    }
+
     /** Warm-up rolls into the workout; cool-down rolls into the summary. */
     private fun advancePhase() {
         if (phaseEndsAt == 0L || SystemClock.elapsedRealtime() < phaseEndsAt) return
         when (session) {
-            Session.WARMUP -> {
-                session = Session.ACTIVE
-                phaseEndsAt = 0L
-                phaseTotalMs = 0L
-                Log.i(TAG, "warm-up complete")
-            }
+            Session.WARMUP -> beginWorkout("warm-up complete")
             Session.COOLDOWN -> requestFinish()
         }
     }
