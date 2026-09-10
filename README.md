@@ -4,6 +4,25 @@
 
 **Please note**: This is a hobby project by one person and Claude Code, please don't get upset at that. Claude Code is enabling me to be able to do something I've dreamed of doing for a few years but didn't have the ability. Now I'm able to walk/run on my own physical hardware that I bought without it having someone else's subscription software on it. If you don't like that 90% of this was coded with AI tools like Claude Code - then this isn't the project for you. If you want to fork this, put your fingerprints all over it ... please do, I'd welcome that!
 
+> ### 🍴 This is a fork
+>
+> Forked from [keranm/strideApp](https://github.com/keranm/strideApp) and
+> adapted for an older machine. What is different here:
+>
+> * **`minSdk` 24 instead of 28**, because this console runs Android 7.0, and
+>   `HomeAlias` enabled so STRIDE is the launcher.
+> * **STOP is now COOL DOWN.** It eases the belt to the cool-down pace and
+>   runs the configured cool-down down to zero, then ends the walk; END on
+>   that screen finishes early. Cool-down speed is its own setting.
+> * **Imperial units everywhere**, in all five interfaces, the summaries, the
+>   settings and the coach — not just the one that already had them.
+> * **A stop that actually stops.** On this board the belt would slow and keep
+>   running: the write carrying `KPH 0` also carried a mode change the board
+>   refused, and the whole frame went with it. Belt-stop writes now travel
+>   alone.
+> * **[docs/DOCKER.md](docs/DOCKER.md)** — build and deploy with nothing
+>   installed but Docker.
+
 > ### 🚧 Early days and factory reset has saved me more than once
 >
 > It works, and I walk on it most days, but it works on *my* machine. Nobody
@@ -130,7 +149,10 @@ In outline:
    reads and changes nothing. Report what it says.
 7. **Install the console app**, then set it up on its own screen. Either grab
    the signed APK from [the latest release](https://github.com/keranm/strideApp/releases/latest)
-   and `adb install -r` it, or build your own with `console/stride/run.sh`.
+   and `adb install -r` it, or build your own — with `console/stride/run.sh` if
+   you have a JDK and the Android SDK, or with
+   [`tools/docker-build.sh`](tools/docker-build.sh) if you would rather install
+   nothing but Docker. See **[docs/DOCKER.md](docs/DOCKER.md)**.
    Pick one and stay on it — they're signed with different keys, so swapping
    later means uninstalling and losing your settings.
 8. **Optional:** enter broker details on the console to get the treadmill into

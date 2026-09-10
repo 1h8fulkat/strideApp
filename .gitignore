@@ -20,6 +20,24 @@ console/*/.gradle/
 *.iml
 .idea/
 
+# Build logs from whatever machine last built this.
+console/*/build-debug.out
+console/*/build-debug.err
+
+# An Android SDK unpacked into the project directory. This is 158 MB of
+# redistributable toolchain that arrived here once by accident and is not part
+# of the project — the container in tools/docker carries its own. See
+# docs/DOCKER.md.
+console/*/lib/
+console/*/bin/
+console/*/source.properties
+console/*/NOTICE.txt
+
+# Console data pulled off the treadmill by tools/docker-deploy.sh before an
+# uninstall: settings, the people on the console, and the walk history. Yours,
+# and nobody else's business.
+.backups/
+
 # --- private working notes --------------------------------------------------
 # The build journal, session plans and the v1.0 prep document. Kept locally
 # because they are useful, out of git because every one of them names people,
