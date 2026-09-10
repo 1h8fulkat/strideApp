@@ -16,6 +16,8 @@ import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import org.json.JSONArray
 import org.json.JSONObject
@@ -541,6 +543,17 @@ class MainActivity : Activity() {
      */
     @Volatile private var route: Route? = null
 
+    /**
+     * Whether this walk is the route out and then home again.
+     *
+     * The out-and-back is resolved into [route] before the walk starts — twice
+     * the segments, the second half reversed and inverted — so nothing that
+     * drives the deck needs to know. The map does: the return leg has no
+     * coordinates of its own, and the only way to place a dot on it is to know
+     * that metre `2d - x` is standing where metre `x` was.
+     */
+    @Volatile private var routeLooped = false
+
     @Volatile private var planSteps: List<Plan.Step> = emptyList()
     @Volatile private var stepIndex = -1
 
@@ -914,6 +927,7 @@ class MainActivity : Activity() {
             val r = if (loop) found.outAndBack() else found
 
             route = r
+            routeLooped = loop
             planLoops = false
             planLap = 1
             planElapsed = 0.0
@@ -1356,6 +1370,27 @@ class MainActivity : Activity() {
          * connection timeout, and five seconds of frozen console is not a
          * diagnostic. The screen polls [mqttStatus] for the answer.
          */
+        /**
+         * How much of the console's disk the map has taken.
+         *
+         * Megabytes rather than bytes: the settings screen prints it, nothing
+         * computes with it, and a number nobody can read is not information.
+         */
+        @JavascriptInterface fun tileCache(): String {
+            val bytes = tiles.cachedBytes()
+            return JSONObject()
+                .put("bytes", bytes)
+                .put("mb", bytes / 1024 / 1024)
+                .put("cap_mb", cfg.mapCacheMb())
+                .toString()
+        }
+
+        /** Throws the cached tiles away. Costs the next walk a re-fetch. */
+        @JavascriptInterface fun clearTileCache() {
+            tiles.clearCache()
+            Log.i(TAG, "tile cache cleared")
+        }
+
         @JavascriptInterface fun mqttTest() {
             Thread {
                 applyMqttSettings()
@@ -1627,6 +1662,9 @@ class MainActivity : Activity() {
      * fetched at the moment somebody is standing on the belt choosing it.
      */
     private val routes by lazy { Routes(this) }
+
+    /** Answers the map's tile requests. Idle unless a route view asks. */
+    private val tiles by lazy { Tiles(this, cfg) }
 
     /** Every walk this console has recorded — see History. */
     private val history by lazy { History(this) }
@@ -1916,6 +1954,7 @@ class MainActivity : Activity() {
 
     private fun clearPlan() {
         route = null
+        routeLooped = false
         planName = ""
         planSteps = emptyList()
         stepIndex = -1
@@ -2215,6 +2254,14 @@ class MainActivity : Activity() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     if (planSteps.isNotEmpty()) pushPlan()
                 }
+
+                /* Map tiles, and nothing else. Everything the interface itself
+                   loads is a local asset and goes straight through — see
+                   Tiles.intercept, which returns null for anything that is not
+                   addressed to its own host. */
+                override fun shouldInterceptRequest(
+                    view: WebView?, request: WebResourceRequest
+                ): WebResourceResponse? = tiles.intercept(request)
             }
             loadUrl(assetFor(ui))
         }
@@ -2869,6 +2916,19 @@ class MainActivity : Activity() {
         return org.json.JSONObject()
             .put("name", planName)
             .put("loops", planLoops)
+            /* Which route this is, or "" for a template.
+             *
+             * The geometry a map needs — the track, the elevation samples —
+             * is already on the page: it came down with `Stride.routes()` for
+             * the picker and it is far too much to send again at plan rate. So
+             * the plan carries the id and the page looks the rest up.
+             *
+             * It matters that this is sent rather than remembered: the page is
+             * reloaded on a UI switch and on a crash, and `onPageFinished`
+             * pushes the plan again. Without the id, a walk that survived a
+             * reload would come back with its ground drawn and its map blank. */
+            .put("routeId", route?.id ?: "")
+            .put("routeLooped", route != null && routeLooped)
             // Route steps are metres, template steps are seconds. They share
             // the field names (`startSec`/`endSec`) for historical reasons, so
             // the drawing cannot tell them apart without being told — and it

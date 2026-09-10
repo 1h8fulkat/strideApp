@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=1280,height=800,initial-scale=1">
 <title>STRIDE</title>
+<!-- Leaflet, vendored into the APK. Loaded before this page's own styles so
+     that anything here overrides it rather than the other way round: the map
+     is a panel in an interface, not a web page with a map on it. -->
+<link rel="stylesheet" href="vendor/leaflet.css">
 <style>
 /* ---------------------------------------------------------------------------
    STRIDE HUD — "Original", the interface the treadmill is actually walked on.
@@ -138,6 +142,93 @@ body::before{
    against that size, so move this box — never resize it — and they follow. */
 .stage,.phase,.path{position:absolute;left:274px;top:172px;width:732px;height:404px}
 .stage svg{width:732px;height:404px}
+
+/* ---- centre: the route on a map, and the ground under the walk ----------
+   A fourth tenant of the same hole, and the only one that is two boxes: the
+   map takes the top 300px and the elevation strip takes the 104 below it.
+   That split is the one where a 2.5 km route's streets are still readable and
+   the strip is still tall enough to have a shape rather than a wiggle.
+
+   The strip keeps the same position in the other hero, laid over the near end
+   of the path — see `.elev.over` and the note on Y0 in drawPath. Same box in
+   both views on purpose: toggling the setting should move one thing, not
+   rearrange the screen. */
+.rmap{
+  position:absolute;left:274px;top:172px;width:732px;height:300px;
+  display:none;
+}
+.rmapview{
+  position:absolute;top:0;right:0;bottom:0;left:0;
+  background:var(--bg-1);border-radius:14px;overflow:hidden;
+  /* Not decoration. Leaflet's own panes carry z-index 400 to 800, and with
+     this box left at `auto` they are not contained by it — they join the
+     stacking context outside and paint straight over the button below, which
+     is how the map arrived with no control on it at all. */
+  z-index:0;
+}
+/* Leaflet's own default is a white container, which behind a tile that has not
+   arrived is a flashbulb on a dark screen at six in the morning. */
+.rmapview .leaflet-container{background:var(--bg-1);font-family:inherit}
+.rmapview .leaflet-control-attribution{
+  background:rgba(5,11,31,.72);color:var(--ink-faint);
+  font-size:11px;padding:1px 6px;box-shadow:none;
+}
+.rmapview .leaflet-control-attribution a{color:var(--ink-dim);text-decoration:none}
+/* Small, cornered, and nothing like the four big controls along the bottom:
+   this changes what you are looking at, not what the belt is doing. */
+.rmapbtn{
+  position:absolute;right:12px;top:12px;z-index:1;
+  flex:none;width:auto;max-width:none;height:36px;margin:0;padding:0 16px;
+  font-size:12px;letter-spacing:.18em;border-radius:18px;
+  background:rgba(5,11,31,.78);
+}
+.rmapbtn.on{border-color:var(--accent);color:var(--accent)}
+
+.elev{
+  position:absolute;left:274px;top:472px;width:732px;height:104px;
+  display:none;
+}
+.ehost{position:absolute;left:0;top:0;width:732px;height:104px}
+/* Over the path rather than beside it. The path view has no 104px to give up,
+   and what the strip covers there is foreground the scene can spare. */
+.elev.over{
+  background:rgba(8,17,44,.80);
+  border-top:1px solid rgba(57,224,255,.16);
+  border-radius:0 0 14px 14px;
+}
+/* A chip, like the mode pill and the coach band, rather than a number lying
+   loose on the plot: it sits over the line, the line can run anywhere, and in
+   the map view there is no panel behind it to separate the two. */
+.ereadout{
+  position:absolute;right:8px;top:4px;
+  padding:3px 11px;border-radius:12px;
+  background:rgba(10,21,51,.92);border:1px solid rgba(57,224,255,.26);
+  font-size:17px;font-weight:300;font-variant-numeric:tabular-nums;
+}
+.ereadout small{font-size:11px;color:var(--ink-dim);margin-left:3px}
+
+/* The strip's own parts. stride-route.js sets no colours at all — it draws
+   the shape and names the pieces, and each interface says what they look
+   like, because five interfaces that deliberately share no palette cannot
+   share a stylesheet. */
+.elev .el-fill{fill:rgba(57,224,255,.16)}
+.elev .el-line{stroke:rgba(127,146,196,.5);stroke-width:2}
+.elev .el-done{stroke:var(--accent);stroke-width:2.5}
+.elev .el-grid{stroke:rgba(127,146,196,.16);stroke-width:1}
+.elev .el-lbl,.elev .el-ax{
+  fill:var(--ink-faint);font-size:11px;letter-spacing:.1em;
+  /* Drawn with a halo, because both sets of labels sit inside the plot — 732px
+     of width is all hero and none of it is going to an axis gutter — and the
+     low one lands on the line on any route that starts near its lowest point. */
+  paint-order:stroke;stroke:rgba(5,11,31,.8);stroke-width:3px;
+  stroke-linejoin:round;
+}
+.elev .el-pins circle{fill:rgba(127,146,196,.55)}
+/* The line is the answer to "how far through am I", read from three feet away
+   mid-stride, so it runs the full height. The dot on the curve is the answer
+   to "how high up", which is a question you ask deliberately. */
+.elev .el-now{stroke:var(--accent);stroke-width:2;opacity:.5}
+.elev .el-dot{fill:var(--ink);stroke:#04091c;stroke-width:2}
 .lap{
   position:absolute;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;pointer-events:none;
@@ -496,6 +587,12 @@ button.pulse{animation:pulse .9s ease-out 2}
   position:absolute;left:0;right:0;bottom:8px;text-align:center;pointer-events:none;
   font-size:16px;color:var(--ink-dim);
 }
+/* Moved to the header when the elevation strip has the bottom of this box.
+   Left where it was it drew underneath the strip — invisible, and the one line
+   on this screen that asks you to do something — and lifting it just clear
+   landed it on the walker instead. Above, under the segment name, it is the
+   third line of a block that is already being read. */
+.path.stripped .suggest{top:74px;bottom:auto}
 .suggest b{color:var(--accent-warm);font-weight:600}
 .suggest.hand b{color:var(--ink-faint)}
 
@@ -613,6 +710,22 @@ button.pulse{animation:pulse .9s ease-out 2}
       <div class="sub" id="segSub"></div>
     </div>
     <div class="suggest" id="suggest"></div>
+  </div>
+
+  <!-- The route on a real map: the fourth tenant of the same 732x404 hole,
+       and the only one that needs a network. Empty until a recorded route is
+       being walked and Settings has asked for it — see buildRouteView(). -->
+  <div class="rmap" id="rmap">
+    <div class="rmapview" id="rmapView"></div>
+    <button class="rmapbtn" id="rmapBtn">WHOLE ROUTE</button>
+  </div>
+
+  <!-- The recorded ground, end to end, with a line showing where on it you
+       are. Shown for routes in both hero views, because it answers a question
+       neither of them does: not "what is coming" but "how far through". -->
+  <div class="elev" id="elev">
+    <div class="ehost" id="elevHost"></div>
+    <div class="ereadout"><span id="elevAlt">—</span><small id="elevUnit">m</small></div>
   </div>
 
   <!-- The rail, the four lanes and the start/finish tick all have their `d`
@@ -745,6 +858,8 @@ button.pulse{animation:pulse .9s ease-out 2}
 
 <script src="stride-core.js"></script>
 <script src="stride-settings.js"></script>
+<script src="vendor/leaflet.js"></script>
+<script src="stride-route.js"></script>
 <script>
 /* The Kotlin side calls window.render(state) at ~5 Hz. `Stride` is the
    @JavascriptInterface bridge; stride-core stubs it so this page can be opened
@@ -1018,6 +1133,17 @@ tap($('btnBack'), () => showStep(Math.max(1, stepNow - 1)));
    mean holding + until you reached it. */
 tap($('suggest'), () => { if (suggestKph > 0) Stride.setSpeed(suggestKph); });
 
+/* The map's one control. Gestures are all off — a map that can be dragged off
+   the route by a palm on a handrail is worse than no map — so the two views
+   worth having get a button instead: the whole route framed, or close in and
+   following. */
+tap($('rmapBtn'), () => {
+  if (!routeMap) return;
+  const on = routeMap.toggleFollow();
+  $('rmapBtn').classList.toggle('on', on);
+  $('rmapBtn').textContent = on ? 'FOLLOWING' : 'WHOLE ROUTE';
+});
+
 tap($('btnBegin'), () => {
   // A route carries its own length, so it never takes a duration.
   if (planMode === 'routes') { if (chosenRoute) Stride.chooseRoute(chosenRoute, chosenLoop); }
@@ -1248,7 +1374,15 @@ const PW = 732, PH = 404;
    Everything is measured relative to the walker, so the path always flows from
    underfoot rather than beside it, and both the far end and the edges fade
    rather than being cut off. */
-const X0 = PW * 0.12, Y0 = PH * 0.82;   // where the walker stands
+const X0 = PW * 0.12;                    // where the walker stands, across
+/* And how far down. `let`, because the elevation strip takes the bottom 104px
+   of this box on a route and the walker stood inside it: at 0.82 of the canvas
+   the near path and the strip's own line were six pixels apart and read as one
+   drawing. Everything in the scene is measured from Y0, so moving it lifts the
+   whole composition and distorts nothing. Templates are untouched — they have
+   no strip. See routeStripShowing(). */
+let Y0 = PH * 0.82;
+const Y0_PLAIN = PH * 0.82, Y0_STRIP = PH * 0.66;
 /* Pulled in from the corner deliberately: the far end is the gap the ridges
    part around, and a vanishing point jammed against the right edge leaves no
    room for mountains on both sides of it. */
@@ -1276,18 +1410,161 @@ const SAMPLES_U = (function(){
 
 let planSteps = [], planName = '';
 let elevMarks = [];
+/* Whether the plan's steps are metres of ground or seconds of clock. A route's
+   are metres, and getting this wrong is not a rounding error: before it was
+   read, this view fed `s.elapsed` — seconds — into a plan measured in metres,
+   so a route's scenery arrived at one metre per second and the hill turned up
+   twenty minutes after it was walked. */
+let planByDistance = false;
+/* The route being walked, with its coordinates and its recorded elevation, or
+   null for a template or a casual walk. */
+let routeGeom = null;
+/* How the hero draws a route: the perspective path, or a map. Re-read on every
+   plan push rather than at load, because Settings is reachable between walks
+   and a setting that needs a reboot is a setting nobody trusts. */
+let routeView = 'path';
+let tileUrl = '', tileAttribution = '';
+
+const PATH_EXAG = 1.5;   // the path's vertical stretch, so a 2% hill reads as one
 
 window.plan = function(p){
   planSteps = (p && p.steps) || [];
   planName = (p && p.name) || '';
+  planByDistance = !!(p && p.byDistance);
+  /* Hand it to the core as well. This page keeps its own copy because the
+     perspective path wants the steps in a form the shared state does not
+     carry, but stride-route builds the strip through STRIDE.profile(), and
+     that reads what the core was told. */
+  STRIDE.setPlan(p);
+
   elevMarks = [];
   let h = 0;
   for (const st of planSteps){
     elevMarks.push(h);
-    h += (st.end - st.start) * st.incline * 0.01 * 1.5;
+    h += (st.end - st.start) * st.incline * 0.01 * PATH_EXAG;
   }
   elevMarks.push(h);
+
+  readRouteSettings();
+  routeGeom = null;
+  const id = (p && p.routeId) || '';
+  if (id){
+    /* Looked up rather than sent: the geometry is already on this page — it
+       came down with Stride.routes() for the picker — and a track and 500
+       elevation samples is not something to push again at plan rate. */
+    const r = myRoutes().filter(x => x.id === id)[0];
+    if (r) routeGeom = STRIDE_ROUTE.geometry(r, !!p.routeLooped);
+  }
+  buildRouteView();
 };
+
+/** Whether a route's ground is on screen, which is what moves the walker. */
+function routeStripShowing(){ return !!routeGeom; }
+
+function readRouteSettings(){
+  try {
+    const cfg = JSON.parse(Stride.settingsJson() || '{}');
+    routeView = cfg.route_view === 'map' ? 'map' : 'path';
+    tileAttribution = cfg.map_attribution || '';
+    /* The console's own tile URL is deliberately NOT used here.
+       `map_tile_url` names the provider Kotlin fetches from; the page always
+       asks `https://tiles.stride/...`, which Tiles.kt answers off its disk
+       cache and only then off the network. Handing the real URL to the WebView
+       would have it fetching tiles itself — no cache, no user agent, and no
+       way past this console's clock or its trust store. Empty means "use the
+       interceptor", which is stride-route's default.
+
+       A desktop browser has no interceptor behind it, so there and only there
+       the page goes to the provider directly. `standalone` is true exactly
+       when the bridge is a stub. */
+    tileUrl = standalone ? (cfg.map_tile_url || '') : '';
+  } catch (e) {
+    routeView = 'path';
+  }
+  /* `?route=map` forces the map view for design work in a browser, whatever
+     the settings say. Same trick as `?asleep=` in stride-core. */
+  if (/(^|[?&])route=map/.test(location.search)) routeView = 'map';
+}
+
+/* --- the elevation strip and the map ------------------------------------
+   Both are built once per walk, from the plan push, and then only moved. The
+   strip is drawn whenever there is a route, in either hero; the map only when
+   it is the hero. */
+let elevStrip = null, routeMap = null, stripImperial = null;
+
+function elevTick(metres){
+  const v = IMPERIAL ? metres / 1609.344 : metres / 1000;
+  const whole = Math.round(v);
+  // "2 km" where it is two, "1.5 km" where it is not. A grid drawn every half
+  // mile has labels the other rule would render as "1 mi" three times.
+  return (Math.abs(v - whole) < 0.02 ? whole.toFixed(0) : v.toFixed(1)) +
+         (IMPERIAL ? ' mi' : ' km');
+}
+function elevAxis(altitude){
+  return displayClimb(altitude, IMPERIAL) + (IMPERIAL ? ' ft' : ' m');
+}
+
+function buildRouteView(){
+  $('elevUnit').textContent = IMPERIAL ? 'ft' : 'm';
+  if (!routeGeom){
+    // Nothing to draw and nothing to keep: a map left alive behind a template
+    // walk goes on asking for tiles for ground nobody is on.
+    if (routeMap){ routeMap.destroy(); routeMap = null; }
+    if (elevStrip) elevStrip.setRoute([], null, elevTick, elevAxis);
+    return;
+  }
+
+  /* Rebuilt rather than relabelled when the units change: the grid's spacing
+     is chosen when the strip is made — every kilometre, or every mile — and
+     relabelling a kilometre grid in miles would put "0.6 mi" on every line. */
+  if (elevStrip && stripImperial !== IMPERIAL){
+    elevStrip = null;
+    $('elevHost').innerHTML = '';
+  }
+  if (!elevStrip){
+    elevStrip = STRIDE_ROUTE.strip($('elevHost'), {
+      width: 732, height: 104, padTop: 16, padBottom: 18,
+      tickEvery: IMPERIAL ? 1609.344 : 1000
+    });
+  }
+  stripImperial = IMPERIAL;
+  elevStrip.setRoute(planSteps, routeGeom, elevTick, elevAxis);
+
+  if (routeView !== 'map'){
+    if (routeMap){ routeMap.destroy(); routeMap = null; }
+    return;
+  }
+  if (routeMap){
+    /* Already alive from an earlier walk. It has to be re-pointed, not left
+       alone: walking one route, finishing, and choosing another used to put
+       the second walk's dot on the first walk's streets. */
+    routeMap.setRoute(routeGeom);
+    routeMap.resize();
+    $('rmapBtn').classList.remove('on');
+    $('rmapBtn').textContent = 'WHOLE ROUTE';
+    return;
+  }
+  /* Otherwise not created here. Leaflet measures its container the moment the
+     map is made, and this runs while the welcome screen is still up and the box
+     is `display:none` — which produces a 0x0 map that never recovers on its
+     own. render() makes it on the first frame the box is actually on screen. */
+}
+
+/** Called from render(), once the map's box is visible and has a size. */
+function ensureMap(){
+  if (routeMap || !routeGeom || !window.L) return;
+  routeMap = STRIDE_ROUTE.map($('rmapView'), {
+    tileUrl: tileUrl || undefined,
+    attribution: tileAttribution,
+    followZoom: 16,
+    colours: { ahead: '#e2564a', done: '#39e0ff' }
+  });
+  if (!routeMap) return;
+  routeMap.setRoute(routeGeom);
+  routeMap.resize();
+  $('rmapBtn').classList.remove('on');
+  $('rmapBtn').textContent = 'WHOLE ROUTE';
+}
 
 /* Rise in metres at plan-time t. Flat with no plan, which is right for a
    casual walk. */
@@ -1301,6 +1578,26 @@ function elevAt(t){
   return elevMarks[elevMarks.length - 1];
 }
 
+/**
+ * How high the ground is at `x`, in the same exaggerated metres as elevAt.
+ *
+ * `x` is metres of ground on a route and seconds of plan on a template — see
+ * project(), which is the only caller that has to know the difference.
+ *
+ * A route uses the elevation the phone recorded, not the deck's version of it.
+ * The two are not the same hill: the published segments are averaged over 150 m,
+ * quantised to half a percent and clamped at -3%, so drawing them here put a
+ * different landscape on screen from the one in the strip 100px below. Only
+ * differences are ever used, so working in metres above sea level rather than
+ * rise from the start costs nothing.
+ */
+function groundAt(x){
+  if (routeGeom && routeGeom.elev && routeGeom.elev.length > 1){
+    return STRIDE_ROUTE.sampleAt(routeGeom.elev, x) * PATH_EXAG;
+  }
+  return elevAt(x);
+}
+
 /* Lateral wander at a world position, metres. Two waves so it never reads as a
    sine test pattern. */
 function bendAt(w){
@@ -1312,8 +1609,12 @@ function project(u, ctx, flat){
   const p = KDEPTH / (KDEPTH + u);          // perspective scale, 1 → 0
   const along = SPAN * (1 - p);             // screen distance travelled
   const lat = (bendAt(ctx.world + u) - ctx.bend0) * p * LAT_SCALE;
+  /* `u` is metres of ground ahead. On a template the plan is a shape in time,
+     so those metres have to be converted to seconds at the current pace; on a
+     route the plan is already ground and the conversion would be a second,
+     compounding lie. `ahead` is whichever factor applies. */
   const rise = flat ? 0
-    : (elevAt(ctx.t0 + u / ctx.paceMs) - ctx.elev0) * p * ELEV_SCALE;
+    : (groundAt(ctx.along + u * ctx.ahead) - ctx.ground0) * p * ELEV_SCALE;
   return {
     // Lateral offset runs perpendicular to the direction of travel.
     x: X0 + along * CT + lat * ST,
@@ -1406,7 +1707,12 @@ function pines(offset, baseY, size, spacing, colour, pts){
   }
 }
 
-function drawPath(s){
+/**
+ * @param along  how far through the plan we are, on the plan's own axis:
+ *               metres for a route, seconds for a template. render() works it
+ *               out once and hands it to everything that needs it.
+ */
+function drawPath(s, along){
   pctx.clearRect(0, 0, PW, PH);
 
   const done = s.distance || 0;
@@ -1415,10 +1721,11 @@ function drawPath(s){
   const paceMs = Math.max(0.6, (s.speed || 0) / 3.6);
   const ctx = {
     world: done,
-    t0: s.elapsed || 0,
+    along: along,
+    ahead: planByDistance ? 1 : 1 / paceMs,
     paceMs: paceMs,
     bend0: bendAt(done),
-    elev0: elevAt(s.elapsed || 0),
+    ground0: groundAt(along),
   };
 
   /* Sample the path first: the scenery is placed around it, not the other way
@@ -1553,7 +1860,9 @@ function drawPath(s){
   if (planSteps.length){
     for (let i = 0; i < planSteps.length; i++){
       const t = planSteps[i].end;
-      const u = (t - ctx.t0) * paceMs;
+      /* The inverse of the conversion in project(): a segment boundary is
+         stated on the plan's axis and has to become metres of ground ahead. */
+      const u = (t - ctx.along) / ctx.ahead;
       if (u <= 0 || u > SEE_AHEAD) continue;
       const g = project(u, ctx);
       const fade = Math.max(0, 1 - Math.pow(u / SEE_AHEAD, 0.75));
@@ -1751,8 +2060,21 @@ window.render = function(s){
      do not. The oval counts laps instead, which is the thing a casual walk
      actually accumulates. */
   const guided = (s.segments || 0) > 0;
-  $('path').style.display = (!timed && guided) ? 'block' : 'none';
+  /* A route walk can have either hero. The map only ever draws a route — a
+     template has no coordinates — so `mapping` is the conjunction of three
+     things: a walk with a plan, a plan with geometry, and a setting asking
+     for it. Everything else falls back to the path, which needs nothing. */
+  const mapping = !timed && guided && !!routeGeom && routeView === 'map' && !!window.L;
+  const showStrip = !timed && guided && routeStripShowing();
+  $('path').style.display = (!timed && guided && !mapping) ? 'block' : 'none';
+  $('rmap').style.display = mapping ? 'block' : 'none';
   $('stage').style.display = (!timed && !guided) ? 'block' : 'none';
+  $('elev').style.display = showStrip ? 'block' : 'none';
+  // Over the path, beside the map. See `.elev.over`.
+  const overPath = showStrip && !mapping;
+  $('elev').classList.toggle('over', overPath);
+  $('path').classList.toggle('stripped', overPath);
+  Y0 = overPath ? Y0_STRIP : Y0_PLAIN;
 
   if (!timed && !guided) {
     // Dot travels the current lap; the arc behind it is the lap just finished,
@@ -1792,7 +2114,28 @@ window.render = function(s){
   }
 
   if (!timed && guided) {
-    drawPath(s);
+    /* The plan's own axis: metres into the route, or seconds into the
+       template. Everything that draws the ground takes this, and nothing
+       recomputes it. */
+    const along = planByDistance ? (s.planElapsed || 0) : (s.elapsed || 0);
+
+    if (mapping){
+      // Built here rather than on the plan push: Leaflet sizes itself from its
+      // container at construction, and the container was display:none until
+      // three lines ago.
+      ensureMap();
+      if (routeMap) routeMap.setPosition(along);
+    } else {
+      drawPath(s, along);
+    }
+
+    if (showStrip && elevStrip){
+      // Units can change under a walk in progress — the strip's labels are
+      // baked in, so it is rebuilt rather than relabelled. Once, not per frame.
+      if (stripImperial !== IMPERIAL) buildRouteView();
+      const at = elevStrip.setPosition(along);
+      if (at) $('elevAlt').textContent = displayClimb(at.altitude, IMPERIAL);
+    }
 
     $('segName').textContent = s.segmentLabel || '';
     $('segSub').textContent =

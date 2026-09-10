@@ -11,6 +11,21 @@ Put a GPX on Home Assistant under `www/treadmill/routes/` — reachable at
 `/local/treadmill/routes/<name>.gpx` — and it appears on the console. Delete
 it and it goes away.
 
+WHAT A ROUTE CARRIES
+
+Two unrelated things, and it is worth keeping them apart:
+
+  * `segments` — `[startM, endM, incline]` triples. **The only field the deck
+    reads.** Gradient averaged over a window, quantised, and clamped to what
+    the machine can do.
+  * `track`, `elev`, `bounds` — the geometry the console *draws*: the route on
+    a map with a dot moving along it, and the recorded ground along the bottom
+    of the screen. See docs/ROUTE_MAP.md.
+
+The coordinates used to be discarded here. They are kept now, but nothing about
+`segments` changed, so a route imported before this walks exactly as it did.
+Both come from one pass over the file — see convert().
+
 WHY THERE IS A LIST TO CONFIGURE AT ALL
 
 Home Assistant will happily serve those files and will not tell you what they
@@ -110,6 +125,22 @@ WINDOW = 150.0
 MIN_SEGMENT = 120.0
 STEP = 0.5
 
+# What the map needs, which is not what the deck needs.
+#
+# A phone records a point a second and the console draws the whole route about
+# 700 px wide, where four metres of wander is a third of a pixel. So the track
+# is simplified before it is published: TRACK_TOLERANCE is the furthest a
+# simplified line may stray from the recorded one, in metres, and TRACK_MAX is
+# the point budget it will raise that tolerance to stay inside. A retained MQTT
+# payload carrying every route in the house is not the place to be generous.
+TRACK_TOLERANCE = 4.0
+TRACK_MAX = 1200
+# Elevation goes over at an even spacing so the strip along the bottom of the
+# HUD is a straight plot of ground against altitude, with no interpolation at
+# paint time. ELEV_MAX caps the count on a long route.
+ELEV_STEP = 10.0
+ELEV_MAX = 600
+
 POLL_SEC = 30.0
 HTTP_TIMEOUT = 20
 
@@ -160,21 +191,31 @@ def metres(a, b):
     return 2 * r * math.asin(math.sqrt(h))
 
 
-def profile(pts):
-    """(distance, elevation) along the track.
+def walked(pts):
+    """(distance, elevation, lat, lon) along the track.
 
     Points closer than half a metre are dropped: editors repeat a vertex when
     a route doubles back on itself, and a zero-length step is a division
     waiting to happen for ground nobody walks.
+
+    The coordinates ride along because the console draws the route on a map now
+    — see `track()` — and the distance column is what ties the two together. A
+    treadmill has no GPS and never will: the dot on the map is placed by metres
+    of belt, so every point has to carry the distance at which it is reached.
     """
-    out, d = [(0.0, pts[0][2])], 0.0
+    out, d = [(0.0, pts[0][2], pts[0][0], pts[0][1])], 0.0
     for a, b in zip(pts, pts[1:]):
         step = metres(a, b)
         if step < 0.5:
             continue
         d += step
-        out.append((d, b[2]))
+        out.append((d, b[2], b[0], b[1]))
     return out
+
+
+def profile(pts):
+    """(distance, elevation), which is all the gradient maths needs."""
+    return [(d, e) for d, e, _, _ in walked(pts)]
 
 
 def elevation_at(prof, x):
@@ -226,6 +267,102 @@ def segments(prof, window, min_segment, step, floor, ceiling):
     return kept, lost
 
 
+def simplify(walk, tolerance):
+    """Ramer-Douglas-Peucker over (d, ele, lat, lon) points, metres tolerance.
+
+    Iterative rather than recursive. A recorded walk is tens of thousands of
+    points and the recursive form of this meets Python's stack limit on exactly
+    the routes somebody cares about most.
+
+    Distances are measured on a local flat projection centred on the walk. Over
+    a few kilometres that is accurate to well under the tolerance, and it
+    avoids doing trigonometry inside the inner loop of the one function here
+    that is O(n log n) on a big file.
+    """
+    n = len(walk)
+    if n < 3:
+        return list(walk)
+
+    kx = 111320.0 * math.cos(math.radians(walk[n // 2][2]))
+    ky = 110540.0
+
+    def xy(p):
+        return p[3] * kx, p[2] * ky
+
+    keep = [False] * n
+    keep[0] = keep[n - 1] = True
+    stack = [(0, n - 1)]
+    while stack:
+        lo, hi = stack.pop()
+        if hi - lo < 2:
+            continue
+        ax, ay = xy(walk[lo])
+        bx, by = xy(walk[hi])
+        dx, dy = bx - ax, by - ay
+        span = math.hypot(dx, dy)
+        worst, at = -1.0, lo
+        for i in range(lo + 1, hi):
+            px, py = xy(walk[i])
+            if span <= 0:
+                # A leg that doubles back has a zero-length chord, and every
+                # point on it is infinitely far from a line through the ends.
+                # Measure to the point instead.
+                far = math.hypot(px - ax, py - ay)
+            else:
+                t = min(1.0, max(0.0, ((px - ax) * dx + (py - ay) * dy) / (span * span)))
+                far = math.hypot(px - (ax + dx * t), py - (ay + dy * t))
+            if far > worst:
+                worst, at = far, i
+        if worst > tolerance:
+            keep[at] = True
+            stack.append((lo, at))
+            stack.append((at, hi))
+    return [p for p, k in zip(walk, keep) if k]
+
+
+def map_track(walk):
+    """The route as [lat, lon, metres] triples, inside the point budget.
+
+    The distance column is the whole point. A treadmill has no GPS, so the dot
+    on the console's map is placed by metres of belt travelled: every vertex has
+    to say how far into the walk it is reached, and simplifying the line must
+    not disturb that. Dropping a point is therefore all this ever does — no
+    point is moved, and no distance is recomputed.
+    """
+    tol = TRACK_TOLERANCE
+    out = simplify(walk, tol)
+    while len(out) > TRACK_MAX and tol < 256:
+        tol *= 2
+        out = simplify(walk, tol)
+    return [[round(lat, 6), round(lon, 6), round(d, 1)] for d, _, lat, lon in out]
+
+
+def elev_samples(prof):
+    """Elevation as [metres travelled, metres above sea level].
+
+    Absolute altitude, not rise from the start. It is the number the map beside
+    it shows, and a rise reconstructed from the published segments cannot agree
+    with it anyway — those are quantised to half a percent and clamped at the
+    deck's floor, so a long descent comes back shallower than the ground was.
+    """
+    total = prof[-1][0]
+    step = max(ELEV_STEP, total / ELEV_MAX)
+    out, x = [], 0.0
+    while x < total:
+        out.append([round(x, 1), round(elevation_at(prof, x), 1)])
+        x += step
+    out.append([round(total, 1), round(prof[-1][1], 1)])
+    return out
+
+
+def bounds_of(tk):
+    """[south, west, north, east], so the console can frame the route without
+    walking the whole track to find out how big it is."""
+    lats = [p[0] for p in tk]
+    lons = [p[1] for p in tk]
+    return [min(lats), min(lons), max(lats), max(lons)]
+
+
 def route_id(filename):
     """Stable across re-imports, so replacing a file replaces its route rather
     than adding a second copy of it."""
@@ -248,12 +385,15 @@ def convert(filename, data, window=WINDOW, min_segment=MIN_SEGMENT, step=STEP):
     pts = trackpoints(data)
     if len(pts) < 2:
         raise ValueError("no usable trackpoints (needs lat, lon and ele)")
-    prof = profile(pts)
+    walk = walked(pts)
+    prof = [(d, e) for d, e, _, _ in walk]
     if prof[-1][0] < 50:
         raise ValueError(f"only {prof[-1][0]:.0f} m long")
     floor, ceiling = deck_limits()
     segs, flattened = segments(prof, window, min_segment, step, floor, ceiling)
     climb = sum((b - a) * g / 100 for a, b, g in segs if g > 0)
+    tk = map_track(walk)
+    elev = elev_samples(prof)
     route = {
         "id": route_id(filename),
         "name": route_name(filename),
@@ -261,9 +401,18 @@ def convert(filename, data, window=WINDOW, min_segment=MIN_SEGMENT, step=STEP):
         "climb_m": round(climb, 1),
         "difficulty": 1.0,
         "segments": [[round(a, 1), round(b, 1), round(g, 1)] for a, b, g in segs],
+        # Everything below here is for drawing and nothing else. `segments` is
+        # the only field the deck reads, and it is byte for byte what it was
+        # before any of this existed — a route imported by an older version of
+        # this script walks identically, and a console older than the map draws
+        # what it always drew and ignores the rest.
+        "track": tk,
+        "elev": elev,
+        "bounds": bounds_of(tk),
     }
     raw_climb = sum(max(0.0, b[1] - a[1]) for a, b in zip(prof, prof[1:]))
-    return route, {"flattened": flattened, "raw_climb": raw_climb, "points": len(pts)}
+    return route, {"flattened": flattened, "raw_climb": raw_climb, "points": len(pts),
+                   "kept": len(tk), "samples": len(elev)}
 
 
 # --- finding the files -----------------------------------------------------
@@ -401,6 +550,8 @@ def describe(route, notes, pace_kph=6.2):
     line = (f"  {route['name'][:34]:36} {route['distance_m']/1000:5.2f} km  "
             f"{len(segs):3} segments  climb {route['climb_m']:3.0f} m  "
             f"a change every {every:4.0f} m ({every/(pace_kph/3.6):3.0f} s at {pace_kph} km/h)")
+    line += (f"\n  {'':36} map: {notes['kept']} of {notes['points']} points kept, "
+             f"{notes['samples']} elevation samples")
     if notes["flattened"] >= 1:
         line += (f"\n  {'':36} note: {notes['flattened']:.0f} m of descent flattened "
                  f"by the deck's {deck_limits()[0]:.0f}% floor")

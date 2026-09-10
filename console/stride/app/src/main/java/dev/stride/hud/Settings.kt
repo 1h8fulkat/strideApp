@@ -82,6 +82,36 @@ class Settings(context: Context) {
         const val HR_ADDR = "hr_addr"
         const val HR_NAME = "hr_name"
 
+        // --- routes and the map ---
+        /**
+         * What the hero draws while a recorded route is being walked:
+         * `"path"` for the perspective path this interface has always drawn,
+         * `"map"` for the route on a real map with a dot on it.
+         *
+         * Only ever consulted for routes. A template has no coordinates, so
+         * there is nothing for a map to show and the path is the only answer.
+         */
+        const val ROUTE_VIEW = "route_view"       // "path" | "map"
+        /**
+         * Where map tiles come from, as an `{z}/{x}/{y}` template.
+         *
+         * A setting rather than a constant because the right basemap for a
+         * route is not the one that suits a city: OpenTopoMap draws contours
+         * and footpaths, which is what you want behind a hill profile, and
+         * swapping to it should not need a rebuild. `{s}` is not supported —
+         * the fetcher is one connection at a time and subdomain sharding is a
+         * workaround for a browser limit this does not have.
+         */
+        const val MAP_TILE_URL = "map_tile_url"
+        /** Printed in the corner of the map. Tile terms generally require it. */
+        const val MAP_ATTRIBUTION = "map_attribution"
+        /** Megabytes of tiles kept on disk before the oldest are dropped. */
+        const val MAP_CACHE_MB = "map_cache_mb"
+
+        /** OpenStreetMap's own tiles, and the credit their terms ask for. */
+        const val DEFAULT_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        const val DEFAULT_ATTRIBUTION = "© OpenStreetMap contributors"
+
         // --- display ---
         const val SLEEP_MIN = "sleep_min"
         const val CLOCK_24 = "clock_24"
@@ -267,6 +297,24 @@ class Settings(context: Context) {
     fun units(): String = prefs.getString(UNITS, "km") ?: "km"
     fun metric(): Boolean = units() == "km"
 
+    // --- routes and the map ---------------------------------------------------
+
+    /**
+     * Defaults to the path, which is what every console did before there was a
+     * map. A basemap needs a network, a clock the certificates agree with and a
+     * tile server that will have us; the path needs none of those and has never
+     * failed to draw. So the map is opted into, not out of.
+     */
+    fun routeView(): String = prefs.getString(ROUTE_VIEW, "path") ?: "path"
+    fun mapTileUrl(): String =
+        (prefs.getString(MAP_TILE_URL, DEFAULT_TILE_URL) ?: DEFAULT_TILE_URL)
+            .trim().ifBlank { DEFAULT_TILE_URL }
+    fun mapAttribution(): String =
+        prefs.getString(MAP_ATTRIBUTION, DEFAULT_ATTRIBUTION) ?: DEFAULT_ATTRIBUTION
+    /** Clamped: a cache big enough to fill the console's storage is not a
+     *  setting, it is a fault waiting for the walk you care about. */
+    fun mapCacheMb(): Int = prefs.getInt(MAP_CACHE_MB, 120).coerceIn(16, 512)
+
     // --- home assistant -------------------------------------------------------
 
     /**
@@ -430,6 +478,10 @@ class Settings(context: Context) {
         .put(DEFAULT_WALKER, defaultWalker())
         .put(ALLOW_GUEST, allowGuest())
         .put(UNITS, units())
+        .put(ROUTE_VIEW, routeView())
+        .put(MAP_TILE_URL, mapTileUrl())
+        .put(MAP_ATTRIBUTION, mapAttribution())
+        .put(MAP_CACHE_MB, mapCacheMb())
         .put(HA_ENABLED, prefs.getBoolean(HA_ENABLED, false))
         .put(MQTT_HOST, mqttHost())
         .put(MQTT_PORT, mqttPort())
@@ -480,7 +532,8 @@ class Settings(context: Context) {
             COACH_MILESTONES, CLOCK_24, KEEP_AWAKE, CARRY_WARMUP ->
                 e.putBoolean(key, value == "true" || value == "1")
 
-            MQTT_PORT, WARMUP_MIN, COOLDOWN_MIN, OPEN_LAP_MIN, SLEEP_MIN ->
+            MQTT_PORT, WARMUP_MIN, COOLDOWN_MIN, OPEN_LAP_MIN, SLEEP_MIN,
+            MAP_CACHE_MB ->
                 e.putInt(key, value.toIntOrNull() ?: 0)
 
             WARMUP_KPH ->

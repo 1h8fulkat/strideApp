@@ -20,9 +20,20 @@ import java.io.File
  * routes from the broker without Home Assistant needing to be up. The disk copy
  * covers the case where the broker is unreachable too.
  *
- * There is no GPS here and never will be. What arrives is a gradient profile:
- * `[startM, endM, incline]` triples against distance travelled. The phone
- * discards the track before sending — see `iOS.md`.
+ * There is no GPS in a treadmill and there never will be. What drives the deck
+ * is a gradient profile: `[startM, endM, incline]` triples against distance
+ * travelled, and that is the only field anything in Kotlin reads.
+ *
+ * A route converted from a GPX file also carries the geometry the HUD draws
+ * with — `track` as `[lat, lon, metres]`, `elev` as `[metres, metres above sea
+ * level]`, and `bounds` — and none of it is parsed here. It does not need to
+ * be: [json] hands the payload to the page verbatim, the picker already reads
+ * it for the route list, and the map places its dot by metres of belt rather
+ * than by any position this console could know. Adding a parser for those
+ * fields would be adding a second copy of a format Kotlin has no use for.
+ *
+ * So the rule still holds where it matters: nothing here ever believes it
+ * knows where the treadmill is. The drawing knows where the *walk* was.
  */
 class Routes(context: Context) {
 

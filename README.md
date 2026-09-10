@@ -20,6 +20,13 @@
 >   running: the write carrying `KPH 0` also carried a mode change the board
 >   refused, and the whole frame went with it. Belt-stop writes now travel
 >   alone.
+> * **A route map.** A walk imported from a GPX file can be drawn on
+>   OpenStreetMap while you walk it, with a dot moving along the route and the
+>   recorded ground running along the bottom of the screen with a line showing
+>   how far through you are. Settings → My routes chooses between that and the
+>   path-ahead view this console has always drawn; the elevation strip is there
+>   either way. The console fetches and caches its own tiles, so a route walked
+>   twice only costs the network once. See [docs/ROUTE_MAP.md](docs/ROUTE_MAP.md).
 > * **[docs/DOCKER.md](docs/DOCKER.md)** — build and deploy with nothing
 >   installed but Docker.
 

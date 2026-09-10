@@ -391,10 +391,13 @@
     'asdfghjkl'.split(''),
     'zxcvbnm'.split('')
   ];
-  /* Everything a broker host, a topic prefix or a password realistically needs,
-     and nothing else — a full symbol plane would be another shift layer to
-     find. */
-  var KB_SYMS = ['.', '-', '_', ':', '/', '@', '#', '!'];
+  /* Everything a broker host, a topic prefix, a password or a tile URL
+     realistically needs, and nothing else — a full symbol plane would be
+     another shift layer to find.
+     `{ } ? = &` are here for the tile template: `{z}/{x}/{y}` cannot be typed
+     without braces, and a keyed provider's URL cannot be typed without the
+     query characters. */
+  var KB_SYMS = ['.', '-', '_', ':', '/', '@', '#', '!', '{', '}', '?', '=', '&'];
 
   function buildKeyboard() {
     if (kb) return kb;
@@ -1067,6 +1070,93 @@
         el('div', 'sx-ro', spark(r))));
     });
     sc.appendChild(g);
+
+    /* ---- what a route looks like while you walk it --------------------
+       Two heroes, one hole in the middle of the screen. Kept in this pane
+       rather than under Interface because it only ever applies to a route:
+       a template has no coordinates, so there is nothing a map could draw
+       and the setting would be a switch that did nothing. */
+    var gv = group('While you walk');
+    gv.appendChild(row('What the middle of the screen shows',
+      'The path ahead is the view this console has always drawn: the ground ' +
+      'coming towards you, hills rising before you reach them, and no network ' +
+      'needed. The map is the route itself, on OpenStreetMap, with a dot for ' +
+      'where you are along it. Either way the ground you have walked runs ' +
+      'along the bottom with a line showing how far through you are.',
+      segment('route_view', [['path', 'Path ahead'], ['map', 'Map']],
+        S.route_view === 'map' ? 'map' : 'path', function (v) {
+          /* Redraw: everything below only applies to the map, and a setting
+             that appears when you next open the screen is a setting that
+             looks broken. Same trick as sxTick above. */
+          S.route_view = v;
+          var wasOpen = pane.classList.contains('sx-on');
+          pane.innerHTML = '';
+          paneRoutes(pane);
+          if (wasOpen) pane.classList.add('sx-on');
+        })));
+
+    if (S.route_view === 'map') {
+      var presets = el('div', 'sx-ro');
+      [['Standard', 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        '\u00a9 OpenStreetMap contributors'],
+       ['Topo', 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
+        '\u00a9 OpenStreetMap, SRTM | \u00a9 OpenTopoMap (CC-BY-SA)'],
+       ['Cycle', 'https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
+        '\u00a9 OpenStreetMap contributors | CyclOSM']
+      ].forEach(function (o) {
+        var on = (S.map_tile_url || '') === o[1];
+        presets.appendChild(press(el('button', 'sx-pill' + (on ? ' sx-go' : ''), o[0]),
+          function () {
+            save('map_tile_url', o[1]);
+            save('map_attribution', o[2]);
+            S.map_tile_url = o[1];
+            S.map_attribution = o[2];
+            var wasOpen = pane.classList.contains('sx-on');
+            pane.innerHTML = '';
+            paneRoutes(pane);
+            if (wasOpen) pane.classList.add('sx-on');
+          }));
+      });
+      gv.appendChild(row('Basemap',
+        'Topo draws contours and footpaths, which read better behind a route ' +
+        'than the standard style does. All three are volunteer-run servers ' +
+        'with their own terms; this console fetches slowly, caches what it ' +
+        'draws and never pre-fetches ground you have not walked.', presets));
+
+      gv.appendChild(row('Tiles come from',
+        'An {z}/{x}/{y} template. OpenTopoMap and Thunderforest Outdoors draw ' +
+        'contours and footpaths, which read better behind a route than the ' +
+        'standard style does. Whatever you point this at, the console fetches ' +
+        'the tiles itself and keeps them, so a route walked twice only costs ' +
+        'the network once.',
+        field('map_tile_url', S.map_tile_url || '')));
+      gv.appendChild(row('Credit',
+        'Printed in the corner of the map. Tile terms generally require it, ' +
+        'and it is not the sort of thing to leave to a default when you have ' +
+        'changed the provider.',
+        field('map_attribution', S.map_attribution || '')));
+
+      var cacheWrap = el('div', 'sx-ro');
+      var cacheEl = el('span', '', 'counting…');
+      cacheWrap.appendChild(cacheEl);
+      cacheWrap.appendChild(press(el('button', 'sx-pill sx-warn', 'CLEAR'), function () {
+        try { bridge().clearTileCache(); } catch (e) {}
+        cacheEl.textContent = 'cleared';
+      }));
+      cacheEl.style.marginRight = '18px';
+      var drawCache = function () {
+        var mb = 0;
+        try { mb = JSON.parse(bridge().tileCache() || '{}').mb || 0; } catch (e) {}
+        cacheEl.textContent = mb + ' MB of ' + (S.map_cache_mb || 120) + ' MB';
+      };
+      drawCache();
+      gv.appendChild(row('Tiles kept on this console', 'The oldest go first once ' +
+        'the cache is full. Clearing costs nothing but the next walk fetching ' +
+        'them again.', cacheWrap));
+      gv.appendChild(row('How many to keep', '',
+        stepper('map_cache_mb', S.map_cache_mb || 120, 16, 512, 16, 'MB')));
+    }
+    sc.appendChild(gv);
 
     var g2 = group('Where they come from');
     g2.appendChild(row('Home Assistant',

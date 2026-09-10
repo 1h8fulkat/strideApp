@@ -299,6 +299,12 @@ var DECK_SEC_PER_PCT = 3;
  * @param opts.headroom             px kept clear at the top for the marker
  * @param opts.startIncline         grade the deck is on at t=0; chooseGuided
  *                                  writes zero, so that is the default
+ * @param opts.samples              [[metres, metres above sea level], ...] for
+ *                                  a GPX route: the ground as it was recorded,
+ *                                  not as the deck will approximate it. When
+ *                                  this is given it *is* the line, and the
+ *                                  segments are used for nothing but the pins.
+ *                                  See the note below on why it wins.
  */
 function profile(steps, opts) {
   opts = opts || {};
@@ -309,8 +315,11 @@ function profile(steps, opts) {
   steps = steps || [];
   if (!steps.length) {
     return { empty: true, d: '', fill: '', pins: [], total: 0, hi: 0, lo: 0,
-             length: 0, yFor: function () { return H; },
+             length: 0, absolute: false, yFor: function () { return H; },
+             xFor: function () { return 0; },
+             valueAt: function () { return 0; },
              atSeconds: function () { return { x: 0, y: H }; },
+             atMetres: function () { return { x: 0, y: H }; },
              dashAt: function () { return 0; } };
   }
 
@@ -366,7 +375,36 @@ function profile(steps, opts) {
   var byDistance = opts.byDistance != null ? !!opts.byDistance : planByDistance;
   var hi, lo, elevAt = null;
 
-  if (byDistance) {
+  /* ---- the ground as recorded, when we have it ------------------------
+     A GPX route arrives with the elevation the phone measured, sampled every
+     few metres, and where that exists it wins outright over anything
+     reconstructed from the published segments. Not a refinement — a
+     correction. Those segments have been through three lossy steps by the time
+     they get here: gradient averaged over a 150 m window, quantised to half a
+     percent, then clamped at the deck's -3% floor. The first flattens a summit,
+     the second stairsteps a smooth valley, and the third is the one that shows:
+     a 6% descent and a 3% descent draw as the same line, because the deck can
+     only offer one of them.
+
+     So the strip draws the hill that was walked, in metres above sea level, and
+     the deck does what the deck can. Those are two different claims and the
+     drawing should only ever make the first one. */
+  var samples = (opts.samples && opts.samples.length > 1) ? opts.samples : null;
+
+  if (samples) {
+    hi = lo = samples[0][1];
+    for (i = 1; i < samples.length; i++) {
+      if (samples[i][1] > hi) hi = samples[i][1];
+      if (samples[i][1] < lo) lo = samples[i][1];
+    }
+    /* A route along a canal is flat, and an axis fitted to two metres of noise
+       would draw it as an alpine stage. Twelve metres minimum, centred on the
+       ground that is there. */
+    if (hi - lo < 12) {
+      var mid = (hi + lo) / 2;
+      hi = mid + 6; lo = mid - 6;
+    }
+  } else if (byDistance) {
     // Elevation in metres at the end of each segment: rise = grade% × run.
     var elev = 0;
     elevAt = [0];
@@ -409,18 +447,49 @@ function profile(steps, opts) {
     return elevAt[i] + (elevAt[i + 1] - elevAt[i]) * f;
   }
 
-  var pts = [vertex(0, byDistance ? elevAt[0] : from)];
-  var crests = [];
-  for (i = 0; i < steps.length; i++) {
-    var r = reach[i];
-    var arriveT = steps[i].start + r.ramp;
-    var arrive = vertex(arriveT, byDistance ? elevAtT(i, arriveT) : r.to, steps[i].label);
-    // A zero-length ramp would put two vertices on the same spot; skip it.
-    if (r.ramp > 0) pts.push(arrive);
-    crests.push(arrive);
-    if (steps[i].start + r.ramp < steps[i].end) {
-      pts.push(vertex(steps[i].end,
-                      byDistance ? elevAt[i + 1] : r.to, steps[i].label));
+
+  /** Recorded altitude at x metres, interpolated between samples. */
+  function sampleAt(x) {
+    if (x <= samples[0][0]) return samples[0][1];
+    var last = samples[samples.length - 1];
+    if (x >= last[0]) return last[1];
+    for (var j = 1; j < samples.length; j++) {
+      if (x <= samples[j][0]) {
+        var span = samples[j][0] - samples[j - 1][0] || 1;
+        var f = (x - samples[j - 1][0]) / span;
+        return samples[j - 1][1] + (samples[j][1] - samples[j - 1][1]) * f;
+      }
+    }
+    return last[1];
+  }
+
+  var pts = [], crests = [];
+  var r, arriveT, arrive;
+
+  if (samples) {
+    for (i = 0; i < samples.length; i++) pts.push(vertex(samples[i][0], samples[i][1]));
+    /* The pins still come off the segments rather than off the summits of the
+       recorded ground, because a pin marks the moment the deck finishes moving
+       — something you feel underfoot. A crest in the samples is scenery. */
+    for (i = 0; i < steps.length; i++) {
+      arriveT = steps[i].start + reach[i].ramp;
+      if (arriveT <= total) {
+        crests.push(vertex(arriveT, sampleAt(arriveT), steps[i].label));
+      }
+    }
+  } else {
+    pts.push(vertex(0, byDistance ? elevAt[0] : from));
+    for (i = 0; i < steps.length; i++) {
+      r = reach[i];
+      arriveT = steps[i].start + r.ramp;
+      arrive = vertex(arriveT, byDistance ? elevAtT(i, arriveT) : r.to, steps[i].label);
+      // A zero-length ramp would put two vertices on the same spot; skip it.
+      if (r.ramp > 0) pts.push(arrive);
+      crests.push(arrive);
+      if (steps[i].start + r.ramp < steps[i].end) {
+        pts.push(vertex(steps[i].end,
+                        byDistance ? elevAt[i + 1] : r.to, steps[i].label));
+      }
     }
   }
 
@@ -467,6 +536,20 @@ function profile(steps, opts) {
      *  a template. A caller labelling the axis must read this, not assume. */
     unit: byDistance ? 'm' : '%',
     byDistance: byDistance,
+    /**
+     * True when the y axis is metres above sea level, from the route's own
+     * recorded elevation, rather than rise integrated from the segments.
+     *
+     * Worth asking about before labelling an axis: "330 m" beside a line that
+     * means "thirty metres up from where you started" is a different and
+     * wrong claim.
+     */
+    absolute: !!samples,
+    /** What the line reads at x, in whatever the unit is. */
+    valueAt: samples ? sampleAt : function (x) {
+      var p = atSeconds(x);
+      return lo + (H - p.y) / (H - headroom) * (hi - lo);
+    },
     d: d,
     fill: d + ' L ' + W + ' ' + H.toFixed(1) + ' L 0 ' + H.toFixed(1) + ' Z',
     /**
@@ -477,6 +560,9 @@ function profile(steps, opts) {
     pins: crests,
     yFor: yFor, xFor: xFor,
     atSeconds: atSeconds,
+    /** The same function under the name a route should call it by: for a route
+     *  the x axis is metres of ground, and `atSeconds` reads as a bug. */
+    atMetres: atSeconds,
     dashAt: dashAt
   };
 }
@@ -1331,6 +1417,21 @@ function stub() {
     global.setTimeout(function () { pretendWake = 'awake'; }, 1500);
   };
 
+  /* The route view, so the map can be designed in a browser. `?route=map`
+     picks it; the pages read this the same way they read the real thing. */
+  var pretendRouteView = /(^|[?&])route=map/.test(global.location.search) ? 'map' : 'path';
+  s.settingsJson = function () {
+    return JSON.stringify({
+      units: 'km', route_view: pretendRouteView,
+      /* A desktop browser has no tile interceptor behind it — that lives in
+         Tiles.kt — so on a desk the tiles come from OpenStreetMap directly.
+         The console never takes this branch: it has a bridge, and its own URL
+         from Settings. */
+      map_tile_url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      map_attribution: '© OpenStreetMap contributors'
+    });
+  };
+
   var pretendUi = 'original';
   s.currentUi = function () { return pretendUi; };
   s.availableUis = function () {
@@ -1338,20 +1439,65 @@ function stub() {
   };
   s.setUi = function (name) { pretendUi = name; console.log('Stride.setUi', name); };
 
+  /**
+   * Coordinates and recorded elevation for a demo route.
+   *
+   * Generated rather than written out: a real 5 km track is 130 points and 500
+   * elevation samples, and fifteen kilobytes of fixture data would ship inside
+   * the APK to be used by nothing but a browser on a desk.
+   *
+   * The shape is a closed wander scaled so its perimeter is the route's stated
+   * distance, and the altitude is the published segments integrated from a base
+   * — so the map, the strip and the deck all agree, which is the property being
+   * tested. See stride_gpx.py for what the real thing looks like.
+   */
+  function demoGeometry(route, lat, lon, baseEle) {
+    var N = 128, i, ang, r, pt = [], cum = [0], total = 0;
+    for (i = 0; i <= N; i++) {
+      ang = i / N * Math.PI * 2;
+      r = 1 + 0.22 * Math.cos(3 * ang) + 0.1 * Math.sin(5 * ang);
+      pt.push([r * Math.cos(ang), r * Math.sin(ang)]);
+      if (i > 0) {
+        total += Math.sqrt(Math.pow(pt[i][0] - pt[i - 1][0], 2) +
+                           Math.pow(pt[i][1] - pt[i - 1][1], 2));
+        cum.push(total);
+      }
+    }
+    var scale = route.distance_m / total;          // unit wander → real metres
+    var mPerLat = 111320, mPerLon = 111320 * Math.cos(lat * Math.PI / 180);
+    route.track = pt.map(function (p, j) {
+      return [+(lat + p[1] * scale / mPerLat).toFixed(6),
+              +(lon + p[0] * scale / mPerLon).toFixed(6),
+              +(cum[j] * scale).toFixed(1)];
+    });
+
+    var elev = [], alt = baseEle, x = 0, seg = 0;
+    while (x <= route.distance_m) {
+      while (seg < route.segments.length - 1 && x > route.segments[seg][1]) seg++;
+      elev.push([x, +alt.toFixed(1)]);
+      alt += route.segments[seg][2] / 100 * 10;
+      x += 10;
+    }
+    route.elev = elev;
+    return route;
+  }
+
   /* Two routes on the desktop, so the third control card and the route list can
      be designed and reviewed in a browser. Real ones come from the phone, and
      the shape matches RouteStore.swift exactly: segments are
      [startM, endM, incline] triples. */
   s.routes = function () {
     return JSON.stringify([
-      { id: 'demo-river', name: 'Friday river loop', distance_m: 5060,
+      demoGeometry({ id: 'demo-river', name: 'Friday river loop', distance_m: 5060,
         climb_m: 18, difficulty: 1.0,
         segments: [[0,900,0],[900,1400,1],[1400,2100,2],[2100,2600,1],
                    [2600,3400,0],[3400,3900,-1],[3900,4500,0],[4500,5060,1]] },
-      { id: 'demo-hill', name: 'Thursday the hill', distance_m: 3030,
+        51.4501, -2.5972, 24),
+      demoGeometry({ id: 'demo-hill', name: 'Thursday the hill', distance_m: 3030,
         climb_m: 68, difficulty: 1.0,
         segments: [[0,200,6],[200,700,8],[700,1100,5],[1100,1600,2],
-                   [1600,2100,-2],[2100,2500,-3],[2500,3030,0]] }
+                   [1600,2100,-2],[2100,2500,-3],[2500,3030,0]] },
+        51.4622, -2.6301, 41)
     ]);
   };
   global.Stride = s;
