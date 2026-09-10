@@ -1841,6 +1841,12 @@ window.render = function(s){
   }
 };
 
+/* IMPERIAL, not `imperial`: the local const by that name belongs to render()
+   and has never been in scope here. Reading it threw a ReferenceError on the
+   first line that wanted a unit, so every figure after it — distance,
+   calories, both speeds, the incline — kept the zero it was born with, while
+   the time above the throw came out right. A summary of zeros after a real
+   walk, which is a miserable thing to be handed at the end of one. */
 function renderSummary(s){
   const kind = s.workout && s.workout !== 'none' ? s.workout : 'workout';
   /* The walker's own name, or none at all for a guest — better than
@@ -1849,10 +1855,10 @@ function renderSummary(s){
   $('sumCoach').textContent = s.summaryLine || '';
   $('sumSub').textContent  = kind + ' complete';
   $('sumTime').textContent = mmss(s.elapsed == null ? 0 : s.elapsed);
-  $('sumDist').textContent = displayDistance(s.distance == null ? 0 : s.distance, imperial);
+  $('sumDist').textContent = displayDistance(s.distance == null ? 0 : s.distance, IMPERIAL);
   $('sumCal').textContent  = nf(s.calories == null ? 0 : s.calories);
-  $('sumAvg').textContent  = displaySpeed(s.avgSpeed == null ? 0 : s.avgSpeed, imperial);
-  $('sumMax').textContent  = displaySpeed(s.maxSpeed == null ? 0 : s.maxSpeed, imperial);
+  $('sumAvg').textContent  = displaySpeed(s.avgSpeed == null ? 0 : s.avgSpeed, IMPERIAL);
+  $('sumMax').textContent  = displaySpeed(s.maxSpeed == null ? 0 : s.maxSpeed, IMPERIAL);
   $('sumInc').textContent  = (s.avgIncline == null ? 0 : s.avgIncline).toFixed(1);
 }
 
