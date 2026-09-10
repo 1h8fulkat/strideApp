@@ -1458,8 +1458,16 @@ window.plan = function(p){
   buildRouteView();
 };
 
-/** Whether a route's ground is on screen, which is what moves the walker. */
-function routeStripShowing(){ return !!routeGeom; }
+/**
+ * Whether the strip has ground to draw, which is what lifts the walker.
+ *
+ * Asks the strip rather than assuming: a route with coordinates but no
+ * elevation samples has a map and no profile, and reserving 104px for a panel
+ * with nothing in it is worse than not reserving it.
+ */
+function routeStripShowing(){
+  return !!routeGeom && !!elevStrip && elevStrip.ready();
+}
 
 function readRouteSettings(){
   try {

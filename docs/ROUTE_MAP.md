@@ -119,7 +119,7 @@ deck has always driven from:
 | | |
 |---|---|
 | `track` | `[lat, lon, metres]` per vertex, simplified to stay within a point budget. No point is ever moved and no distance recomputed — simplifying only ever drops a vertex, because the distance column is what places the dot. |
-| `elev` | `[metres travelled, metres above sea level]`, evenly spaced. |
+| `elev` | `[metres travelled, metres above sea level]`, evenly spaced, averaged over 30 m. A phone without a barometer takes altitude from GPS, which is the noisiest number in the file — a couple of metres of hash on a flat road is normal, and both things that draw it amplify it. 30 m at walking pace is twenty seconds; no real gradient changes inside it. |
 | `bounds` | `[south, west, north, east]`, so the console can frame the route without walking the track to find out how big it is. |
 
 A 2.5 km walk comes to about 5 KB of JSON. `segments` is unchanged, byte for

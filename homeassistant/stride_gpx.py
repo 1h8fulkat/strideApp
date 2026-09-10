@@ -140,6 +140,20 @@ TRACK_MAX = 1200
 # paint time. ELEV_MAX caps the count on a long route.
 ELEV_STEP = 10.0
 ELEV_MAX = 600
+# Metres of ground the elevation is averaged over before it is published.
+#
+# A phone without a barometer reports altitude from GPS, and GPS altitude is
+# the noisiest number in the file: a couple of metres of hash on a flat road is
+# normal. It survives resampling, and both things that draw it amplify it — the
+# strip because it is 25 m of axis over 100 px, and the perspective path
+# because it multiplies the rise ahead by a perspective factor and a stretch.
+# Untouched, a level canal towpath drew as a cobbled street.
+#
+# Deliberately short. This is meant to remove hash, not hills: 30 m at walking
+# pace is about twenty seconds, and no real gradient changes inside it. The
+# gradient the deck drives is not smoothed here and does not need to be — it is
+# averaged over a 150 m window of its own, five times longer than this.
+ELEV_SMOOTH = 30.0
 
 POLL_SEC = 30.0
 HTTP_TIMEOUT = 20
@@ -347,12 +361,28 @@ def elev_samples(prof):
     """
     total = prof[-1][0]
     step = max(ELEV_STEP, total / ELEV_MAX)
-    out, x = [], 0.0
+    xs, ys = [], []
+    x = 0.0
     while x < total:
-        out.append([round(x, 1), round(elevation_at(prof, x), 1)])
+        xs.append(x)
+        ys.append(elevation_at(prof, x))
         x += step
-    out.append([round(total, 1), round(prof[-1][1], 1)])
-    return out
+    xs.append(total)
+    ys.append(prof[-1][1])
+
+    # A box filter, with the window shrinking at both ends so the first and
+    # last altitudes are the ones actually recorded there — those two are the
+    # labels on the axis, and a smoothed endpoint is a wrong one.
+    half = int(ELEV_SMOOTH / step / 2)
+    if half > 0:
+        smooth = []
+        for i in range(len(ys)):
+            k = min(half, i, len(ys) - 1 - i)
+            window = ys[i - k:i + k + 1] if k else [ys[i]]
+            smooth.append(sum(window) / len(window))
+        ys = smooth
+
+    return [[round(a, 1), round(b, 1)] for a, b in zip(xs, ys)]
 
 
 def bounds_of(tk):
