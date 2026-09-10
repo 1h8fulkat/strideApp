@@ -71,6 +71,52 @@ treadmill_prefix: treadmill
 console_adb:
 
 
+
+# === Routes from GPX files =================================================
+# Only needed if you use stride_gpx.py to turn recorded walks into routes.
+
+# Where the .gpx files live on Home Assistant, as a path under `www/`. With
+# the default, `config/www/treadmill/routes/friday-loop.gpx` is served at
+# `<ha_url>/local/treadmill/routes/friday-loop.gpx` and becomes a route
+# called "Friday loop" — the filename is the name, so name it well.
+ha_gpx_path: treadmill/routes
+
+# HOW THE FILES ARE FOUND. Home Assistant serves that folder but will not list
+# it: `/local/` answers 403 to a directory request and no API enumerates it.
+# So pick one of these two.
+#
+# EITHER a `folder` sensor, which is a listing that maintains itself — drop a
+# file in and it appears, with nothing else to edit ever again. Put this in
+# configuration.yaml and restart:
+#
+#     homeassistant:
+#       allowlist_external_dirs:
+#         - /config/www/treadmill/routes
+#     sensor:
+#       - platform: folder
+#         folder: /config/www/treadmill/routes
+#         filter: "*.gpx"
+#
+# then name the entity it creates here:
+gpx_folder_sensor:
+
+# OR, leaving that blank, an `index.json` sitting beside the .gpx files:
+#
+#     ["friday-loop.gpx", "the-hill.gpx"]
+#
+# Nothing to configure in Home Assistant, but you edit it when you add a walk.
+
+# A plain local folder instead, for running this on the machine that holds the
+# files. Only consulted when neither of the above is available.
+gpx_dir:
+
+# What your deck can do, in percent. Used only so the numbers printed at
+# import match the walk you will get: the console clamps to whatever its own
+# board reports regardless. The defaults are a NordicTrack C 1750's, and the
+# floor is the one that bites — no treadmill descends like a hill.
+deck_min_grade: -3
+deck_max_grade: 15
+
 # === Apple Health, via the iOS companion app ===============================
 # Only needed if you use the app. Skip all of this otherwise.
 
