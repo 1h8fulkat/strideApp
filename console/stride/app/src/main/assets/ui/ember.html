@@ -962,7 +962,6 @@ window.render = function(raw){
       s.phase === 'warmup'   ? 'WARMING UP'
     : s.phase === 'cooldown' ? 'COOLING DOWN'
     : s.phase === 'paused'   ? 'PAUSED'
-    : s.ramping === 'resuming' ? 'RESUMING'
     : 'WORKING OUT';
 
   /* Belt figures, always from the hardware. */

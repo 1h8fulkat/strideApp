@@ -811,7 +811,6 @@ window.render = function(raw){
       s.phase === 'warmup'   ? 'WARMING UP'
     : s.phase === 'cooldown' ? 'COOLING DOWN'
     : s.phase === 'paused'   ? 'PAUSED'
-    : s.ramping === 'resuming' ? 'RESUMING'
     : 'WORKING OUT';
   $('stLeft').textContent = 'STRIDE · ' + (s.profile || '').toUpperCase() + ' · ' + word;
 

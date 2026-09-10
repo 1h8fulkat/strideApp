@@ -946,7 +946,6 @@ window.render = function(raw){
       s.phase === 'warmup'   ? 'WARMING UP'
     : s.phase === 'cooldown' ? 'COOLING DOWN'
     : s.phase === 'paused'   ? 'HELD'
-    : s.ramping === 'resuming' ? 'RESUMING'
     : 'WORKING OUT';
   $('topLine').textContent = guided
     ? (planName + ' · ' + (s.plan.loops

@@ -585,8 +585,10 @@ function adapt(raw) {
        turns that into a sentence anyone can read. */
     board:     raw.boardLocked ? 'locked' : (raw.boardOk === false ? 'quiet' : 'ok'),
 
-    /* Seconds left in a timed phase, and which ramp is in flight ("warmup",
-       "resuming", "cooldown", "stopping" or ""). */
+    /* Seconds left in a timed phase, and whether the belt is being eased to a
+       halt ("stopping" or ""). The console commands every speed at once now,
+       so "warmup", "resuming" and "cooldown" no longer occur — the only
+       gradual speed change left is a stop. */
     phaseLeft: raw.phaseLeft || 0,
     /* How long that phase runs in total, so a progress bar has a denominator.
        Every interface used to assume 120 s. */

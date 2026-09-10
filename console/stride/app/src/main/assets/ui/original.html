@@ -1607,7 +1607,6 @@ window.render = function(s){
   const modeEl = $('mode');
   modeEl.textContent = mode === 'warmup'   ? 'warming up'
     : mode === 'cooldown' ? 'cooling down'
-    : s.ramping === 'resuming' ? 'resuming'
     : mode === 'running' ? 'working out'
     : mode;
   modeEl.dataset.mode = mode;

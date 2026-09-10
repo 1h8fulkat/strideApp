@@ -200,17 +200,6 @@ class MainActivity : Activity() {
         const val PREF_UI = "ui"
 
         /**
-         * How briskly a ramp winds the belt up.
-         *
-         * RESUME only, now. Starting a walk is handed its pace in one go —
-         * see [startKph] — because a setpoint climbing towards a target while
-         * the board's own motor ramp chases it is two ramps for one start.
-         * Coming back from a pause is a different case: the belt is at a
-         * standstill under someone already on it.
-         */
-        const val RAMP_KPH_PER_SEC = 1.0
-
-        /**
          * How briskly the belt is allowed to wind *down* to a standstill.
          *
          * The first full guided walk ended by cutting the belt from 4.2 km/h to
@@ -479,21 +468,20 @@ class MainActivity : Activity() {
     private fun quantise(v: Double, step: Double) = Math.round(v / step) * step
 
     /**
-     * The pace a walk opens at, inside what the machine will accept.
+     * A pace the console is about to ask for, inside what the machine accepts.
      *
-     * Choosing a workout used to set a *ramp* to this speed and let
-     * [rampStep] walk the setpoint up at [RAMP_KPH_PER_SEC], so a 4.8 km/h
-     * warm-up took nearly five seconds of standing on a belt that was barely
-     * moving before it reached a pace anyone would call walking. The ramp was
-     * protecting against a lurch that is not ours to cause: the setpoint is
-     * not the belt, and the board runs its own motor ramp underneath whatever
-     * it is told. Handing it the number at once lets it do that once, briskly,
-     * instead of chasing a setpoint that is itself still climbing.
+     * Every speed this console commands goes through here, and every one of
+     * them is commanded *at once*. The console used to walk its own setpoint
+     * towards a target over several seconds — a ramp on starting a walk, one
+     * on resuming, one easing into the cool-down. All three are gone. The
+     * setpoint is not the belt: the board runs its own motor ramp underneath
+     * whatever number it is handed, so a setpoint crawling towards a target
+     * while that ramp chases it is two ramps for one press, and the visible
+     * result is a treadmill that takes five seconds to become a walk.
      *
-     * Clamped rather than trusted. [Settings.warmupKph] is a stored preference
-     * and the board's real limits are only known once [readLimits] has run —
-     * below [minKph] there is no "slow", only stopped, which would open a walk
-     * by not moving at all.
+     * Clamped rather than trusted. Speeds come from stored preferences and
+     * from a paused session, and the board's real limits are only known once
+     * [readLimits] has run — below [minKph] there is no "slow", only stopped.
      *
      * Deliberately not `coerceIn(minKph, maxKph)`, which throws when the range
      * is empty. Both limits come off the board, this runs on the WebView
@@ -502,8 +490,11 @@ class MainActivity : Activity() {
      * somebody tapped to start a walk. Applied in this order the floor wins,
      * which is the right way for it to fail: a walk that moves.
      */
-    private fun startKph(): Double =
-        cfg.warmupKph().coerceAtMost(maxKph).coerceAtLeast(minKph)
+    private fun paceKph(kph: Double): Double =
+        kph.coerceAtMost(maxKph).coerceAtLeast(minKph)
+
+    /** The pace a walk opens at. */
+    private fun startKph(): Double = paceKph(cfg.warmupKph())
 
     /**
      * Average pace for the session, km/h, from distance over time.
@@ -542,8 +533,14 @@ class MainActivity : Activity() {
     /** Pace at the moment of pausing, and the speed the resume ramp is climbing
      *  towards. Zero for either means no ramp is in progress. */
     @Volatile private var pausedKph = 0.0
-    @Volatile private var rampTo = 0.0
-    /** "warmup", "resuming" or "cooldown" while a ramp is in flight. */
+    /**
+     * "stopping" while the belt is being eased to a halt, empty otherwise.
+     *
+     * Was also "warmup", "resuming" and "cooldown", back when the console
+     * walked its own setpoint towards a target over several seconds. Nothing
+     * does that now — every speed the console asks for it asks for at once,
+     * and the board's motor ramp is the only easing there is. See [startKph].
+     */
     @Volatile private var rampReason = ""
 
     /** Deadline for a timed phase (warm-up / cool-down), on the elapsedRealtime clock. */
@@ -886,7 +883,6 @@ class MainActivity : Activity() {
             // speed: the board ignores a KPH write while the console is IDLE,
             // and the poll loop's split is what guarantees that order.
             targetKph = startKph()
-            rampTo = 0.0
             rampReason = ""
             pendingWrite = mapOf(
                 FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble(),
@@ -937,7 +933,6 @@ class MainActivity : Activity() {
             phaseTotalMs = 0L
             targetKph = startKph()
             targetGrade = 0.0
-            rampTo = 0.0
             rampReason = ""
             pendingWrite = mapOf(
                 FitPro.Field.GRADE to 0.0,
@@ -1010,7 +1005,6 @@ class MainActivity : Activity() {
             phaseTotalMs = 0L
             targetKph = startKph()
             targetGrade = 0.0
-            rampTo = 0.0
             rampReason = ""
             pendingWrite = mapOf(
                 FitPro.Field.GRADE to 0.0,
@@ -1067,7 +1061,6 @@ class MainActivity : Activity() {
             // Remember the pace so RESUME can climb back to it. Taken before the
             // wind-down starts eating it.
             if (targetKph > 0.0) pausedKph = targetKph
-            rampTo = 0.0
             rampReason = ""
             // Above a walk the speed is shed first — see STOP_EASE_ABOVE_KPH.
             // The screen still answers the press immediately: the clock stops
@@ -1087,10 +1080,15 @@ class MainActivity : Activity() {
         }
 
         /**
-         * Pressing RESUME means "I want to keep going", so getting back to pace
-         * shouldn't be a dozen taps. But it must not lurch either — the belt
-         * starts from a standstill and climbs to the old speed at [RAMP_KPH_PER_SEC],
-         * driven from the poll loop. Touching SPEED cancels it.
+         * Pressing RESUME means "I want to keep going", so it goes back to the
+         * pace you left — at once, not over the next several seconds.
+         *
+         * This used to climb at RAMP_KPH_PER_SEC from wherever the belt was.
+         * The console is not the thing that eases a treadmill up: the board
+         * runs its own motor ramp under whatever setpoint it is handed, and a
+         * setpoint crawling towards a target while that ramp chases it is two
+         * ramps for one press. Handing over the number lets the machine do
+         * the easing once.
          */
         @JavascriptInterface fun resume() {
             if (dmk) return
@@ -1106,24 +1104,25 @@ class MainActivity : Activity() {
             activeSince = SystemClock.elapsedRealtime()
             phaseEndsAt = 0L
             phaseTotalMs = 0L
-            // RESUME during a STOP's wind-down catches the belt where it is and
-            // climbs from there. Zeroing the target would drop it to a
-            // standstill first, which is a lurch in each direction for someone
-            // who has changed their mind a second after pressing STOP.
-            //
-            // A cool-down is the same situation without the wind-down: the belt
-            // is already walking, so it climbs from where it is too. Only a
-            // genuine pause starts from zero.
+            // A wind-down still in flight is over: the belt is going back up,
+            // not down, and leaving `stopping` set would have decelStep fight
+            // the speed this is about to command.
             if (stopping) {
                 stopping = false
                 Log.i(TAG, "resumed mid wind-down at ${"%.1f".format(targetKph)} km/h")
-            } else if (!fromCooldown) {
-                targetKph = 0.0
             }
-            rampTo = if (pausedKph > 0.0) pausedKph else cfg.warmupKph()
-            rampReason = "resuming"
-            pendingWrite = mapOf(FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble())
-            Log.i(TAG, "resuming — ramping back to ${"%.1f".format(rampTo)} km/h")
+            rampReason = ""
+            targetKph = paceKph(if (pausedKph > 0.0) pausedKph else cfg.warmupKph())
+            // Mode first, speed behind it — the board ignores a KPH write from
+            // a console it does not think is running, and coming back from a
+            // pause is exactly that case. The poll loop's split is what puts
+            // them in that order.
+            pendingWrite = mapOf(
+                FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble(),
+                FitPro.Field.KPH to targetKph,
+            )
+            Log.i(TAG, "resuming at ${"%.1f".format(targetKph)} km/h" +
+                    if (fromCooldown) " (out of the cool-down)" else "")
             repaint()
         }
 
@@ -1176,7 +1175,7 @@ class MainActivity : Activity() {
             // zeroed here, which was right when a cool-down was a one-way trip
             // to the summary and nothing could come back out of it.
             if (targetKph > 0.0) pausedKph = targetKph
-            rampTo = cfg.cooldownKph()
+            targetKph = paceKph(cfg.cooldownKph())
             rampReason = "cooldown"
             // Put the machine back how you'd want to find it. Incline is the one
             // setting that persists otherwise, and starting the next walk on
@@ -1185,9 +1184,10 @@ class MainActivity : Activity() {
             pendingWrite = mapOf(
                 FitPro.Field.GRADE to 0.0,
                 FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble(),
+                FitPro.Field.KPH to targetKph,
             )
             Log.i(TAG, "cooling down for ${cfg.cooldownMs() / 1000}s " +
-                    "at ${"%.1f".format(cfg.cooldownKph())} km/h")
+                    "at ${"%.1f".format(targetKph)} km/h")
             repaint()
         }
 
@@ -1234,7 +1234,6 @@ class MainActivity : Activity() {
 
         @JavascriptInterface fun speed(delta: Double) {
             if (!Session.isMoving(session) || dmk) return
-            rampTo = 0.0; rampReason = ""   // manual control abandons the ramp
             var next = targetKph + delta
             // Below the machine's minimum there is no "slow", only stopped —
             // so stepping down out of the bottom of the range means stop, and
@@ -1257,7 +1256,6 @@ class MainActivity : Activity() {
          */
         @JavascriptInterface fun setSpeed(kph: Double) {
             if (!Session.isMoving(session) || dmk) return
-            rampTo = 0.0; rampReason = ""   // as with any manual change
             targetKph = if (kph < minKph) 0.0 else kph.coerceIn(0.0, maxKph)
             pendingWrite = mapOf(FitPro.Field.KPH to targetKph)
             Log.i(TAG, "pace: took the suggestion, ${"%.1f".format(targetKph)} km/h")
@@ -1781,7 +1779,6 @@ class MainActivity : Activity() {
         stopRate = rate
         stopFloor = floor
         stopSince = SystemClock.elapsedRealtime()
-        rampTo = 0.0
         rampReason = "stopping"
         // Whatever was queued is superseded: an incline nudge has nothing to say
         // to a belt that is stopping, and a write the board is refusing sits in
@@ -1827,7 +1824,6 @@ class MainActivity : Activity() {
         targetKph = (targetKph - step).coerceAtLeast(0.0)
         if (targetKph <= stopFloor || targetKph < minKph) {
             stopping = false
-            rampTo = 0.0
             rampReason = ""
             targetKph = 0.0
             // "Commanded zero", not "stopped". The belt takes a moment to come
@@ -2026,7 +2022,6 @@ class MainActivity : Activity() {
         session = Session.SUMMARY
         phaseEndsAt = 0L
         phaseTotalMs = 0L
-        rampTo = 0.0
         pausedKph = 0.0
         Log.i(TAG, "workout ended: ${"%.0f".format(sessionDistance)} m in " +
                 "${accumulatedMs / 1000} s, ${"%.0f".format(sessionCalories)} kcal" +
@@ -2620,7 +2615,7 @@ class MainActivity : Activity() {
                 ?: decelStep()
                 ?: enforceLevel(lastActualGrade)
                 ?: enforceFanOff()
-                ?: queued ?: rampStep()
+                ?: queued
 
             if (writes != null) lastWriteMs = SystemClock.elapsedRealtime()
             val reply = conn.exchange(FitPro.readWrite(deviceId, READS, writes ?: emptyMap()))
@@ -2786,41 +2781,6 @@ class MainActivity : Activity() {
         }
     }
 
-    /**
-     * One tick of a ramp, or null if there's nothing to wind.
-     *
-     * Two callers left, and neither is the start of a walk: RESUME, climbing
-     * back to the pace a pause interrupted, and the cool-down easing *down* to
-     * its own slower pace. Starting a workout used to come through here too
-     * and no longer does — see [startKph].
-     *
-     * Climbing, the first step goes straight to the machine's minimum, because
-     * below it this treadmill has no "slow", only stopped; from there it moves
-     * at a walking-pace-per-second until it arrives.
-     */
-    private fun rampStep(): Map<FitPro.Field, Double>? {
-        val goal = rampTo
-        if (goal <= 0.0 || !Session.isMoving(session) || dmk) return null
-
-        val step = RAMP_KPH_PER_SEC * POLL_MS / 1000.0
-        val done: Boolean
-        if (targetKph < goal) {
-            // Below the machine's minimum there is no "slow", only stopped, so
-            // the first step off zero jumps straight to it.
-            targetKph = (if (targetKph < minKph) minKph else targetKph + step).coerceAtMost(goal)
-            done = targetKph >= goal
-        } else {
-            // Ramping down — cool-down easing back from whatever pace was set.
-            targetKph = (targetKph - step).coerceAtLeast(goal)
-            done = targetKph <= goal
-        }
-        if (done) {
-            rampTo = 0.0
-            rampReason = ""
-            Log.i(TAG, "ramp complete at ${"%.1f".format(targetKph)} km/h")
-        }
-        return mapOf(FitPro.Field.KPH to targetKph)
-    }
 
     /** Fold one board reading into the session and return what to display. */
     private fun accumulate(v: Map<FitPro.Field, Double>): Snapshot {
@@ -2856,7 +2816,6 @@ class MainActivity : Activity() {
             // the safety key; whatever happens next should start from a
             // standstill and be asked for explicitly.
             pausedKph = 0.0
-            rampTo = 0.0
             rampReason = ""
         }
 
@@ -2991,7 +2950,7 @@ class MainActivity : Activity() {
             session = session,
             workout = workout,
             dmk = dmk,
-            ramping = if (rampTo > 0.0) rampReason else "",
+            ramping = rampReason,
             phaseLeft = phaseLeftSec(),
             phaseTotal = phaseTotalMs / 1000.0,
             boardMode = boardMode ?: -1,
@@ -3320,7 +3279,7 @@ class MainActivity : Activity() {
             elapsed = elapsedSec(),
             phaseLeft = phaseLeftSec(),
             phaseTotal = phaseTotalMs / 1000.0,
-            ramping = if (rampTo > 0.0) rampReason else "",
+            ramping = rampReason,
         ))
     }
 

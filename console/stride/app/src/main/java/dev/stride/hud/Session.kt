@@ -90,7 +90,9 @@ data class Snapshot(
     val session: Int,
     val workout: String,
     val dmk: Boolean,
-    /** "warmup", "resuming", "cooldown", or empty when no ramp is in flight. */
+    /** "stopping" while the belt is being eased to a halt, empty otherwise.
+     *  Every other speed the console asks for it asks for at once, so there is
+     *  no ramp left to report. See MainActivity.paceKph. */
     val ramping: String,
     /** Seconds left in a timed phase (warm-up / cool-down); 0 otherwise. */
     val phaseLeft: Double,
