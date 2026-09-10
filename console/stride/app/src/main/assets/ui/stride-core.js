@@ -65,6 +65,9 @@
  * @param opts.squash    vertical scale; 1 is face-on, ~0.5 is a shallow oblique
  * @param opts.lapMetres real-world lap, m (default 400)
  * @param opts.samples   resolution of the true→screen length table
+ * @param opts.anticlockwise  run it the way a track is actually run — see the
+ *                            mirror below. Default false, which is clockwise
+ *                            from the top left and what every UI had.
  */
 function track(opts) {
   opts = opts || {};
@@ -75,6 +78,7 @@ function track(opts) {
   var squash    = opts.squash    == null ? 1   : opts.squash;
   var lapMetres = opts.lapMetres || 400;
   var samples   = opts.samples   || 720;
+  var anti      = !!opts.anticlockwise;
 
   var half      = straight / 2;
   var bend      = Math.PI * radius;          // one semicircle
@@ -83,7 +87,10 @@ function track(opts) {
   /* Distance zero is the left end of the top straight, running clockwise, so
      it lines up with where an SVG path written `M left,top H right A…` starts
      drawing. Keeping those two in step is what lets a dash and a dot describe
-     the same position. */
+     the same position.
+
+     Anticlockwise tracks are this, mirrored — see `mirror` below. Nothing in
+     here knows about that, and it should stay that way. */
   function trueAt(d) {
     d = d % perimeter;
     if (d < 0) d += perimeter;
@@ -120,9 +127,43 @@ function track(opts) {
     };
   }
 
+  /* ---- running it the other way ------------------------------------------
+     A real track is run anticlockwise, starting on the bottom straight. That
+     is not a second parameterisation of the stadium: it is this one reflected
+     about its own centre line, y -> 2cy - y.
+
+     Check each piece against trueAt above. Zero, the left end of the TOP
+     straight, lands on the left end of the BOTTOM straight. The top straight
+     running right becomes the bottom straight running right. The right bend
+     going down becomes the right bend going up. Exactly the mockup.
+
+     Doing it as a mirror rather than a second set of cases buys the thing
+     that matters: a reflection is an isometry, so every length is untouched.
+     `cum`, `screenLength` and therefore `dashFraction` are computed once, in
+     clockwise space, and remain correct — the oblique trap is not reopened,
+     because nothing about the squash has changed.
+
+     The outward normal reflects too, and stays outward: outwardness is a fact
+     about the point and the shape, not about handedness. That is why this is
+     applied to the finished screen point rather than folded into toScreen,
+     whose normal is derived by turning the tangent a quarter CLOCKWISE — a
+     rule a reflection would otherwise silently invert, and the first sign of
+     it would be the start tick struck into the infield. */
+  function mirror(p) {
+    if (!anti) return p;
+    return {
+      x: p.x, y: 2 * cy - p.y,
+      tx: p.tx, ty: -p.ty,
+      nx: p.nx, ny: -p.ny,
+      angle: -p.angle
+    };
+  }
+
   /* Cumulative *screen* length at each sample of true arc-length. Built once;
      720 samples of hypot is nothing, and it is the only honest way to convert
-     a true-space distance into a dash offset on a squashed path. */
+     a true-space distance into a dash offset on a squashed path.
+
+     Deliberately measured before the mirror: see above, it changes no length. */
   var cum = new Array(samples + 1);
   cum[0] = 0;
   var prev = toScreen(trueAt(0));
@@ -164,6 +205,21 @@ function track(opts) {
       var l = r2(cx - half), rt = r2(cx + half);
       var t = r2(cy - ry), b = r2(cy + ry);
       r = r2(r); ry = r2(ry);
+      /* The same mirror, written out. Start on the bottom edge and take the
+         bends the other way round — sweep 0, because from the bottom-right
+         corner it is the anticlockwise arc that bulges away from the infield
+         and the clockwise one that cuts straight through it.
+
+         This must begin where atFraction(0) is and wind the way the dot does,
+         or the bright arc and the head part company: `stroke-dasharray`
+         measures from the start of the path as written, and knows nothing
+         about which end anybody meant. */
+      if (anti) {
+        return 'M ' + l + ' ' + b + ' H ' + rt +
+               ' A ' + r + ' ' + ry + ' 0 0 0 ' + rt + ' ' + t +
+               ' H ' + l +
+               ' A ' + r + ' ' + ry + ' 0 0 0 ' + l + ' ' + b + ' Z';
+      }
       return 'M ' + l + ' ' + t + ' H ' + rt +
              ' A ' + r + ' ' + ry + ' 0 0 1 ' + rt + ' ' + b +
              ' H ' + l +
@@ -171,7 +227,7 @@ function track(opts) {
     },
 
     /** Screen point + tangent + outward normal at a fraction of one lap. */
-    atFraction: function (f) { return toScreen(trueAt(wrap(f) * perimeter)); },
+    atFraction: function (f) { return mirror(toScreen(trueAt(wrap(f) * perimeter))); },
 
     /** Same, from metres run. Laps beyond the first simply wrap. */
     at: function (metres) { return this.atFraction((metres || 0) / lapMetres); },

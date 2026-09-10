@@ -1107,9 +1107,12 @@ function ticks(el, n, active){
    as it goes — the rail's glow spreads about 14px past a 7px stroke, and the
    SVG viewport clips at 404.
 
-   Everything the ring needs comes out of this one object, so the rail the dot
-   runs on and the rail that is drawn cannot drift apart. */
-const TRACK = STRIDE.track({straight:264, radius:176, cx:366, cy:202, squash:1});
+   Run anticlockwise from the bottom-left, the way a track is actually run:
+   away along the near straight, up the far bend, back along the top. Every
+   number below still comes out of this one object, so the rail the dot runs
+   on and the rail that is drawn cannot drift apart. */
+const TRACK = STRIDE.track({straight:264, radius:176, cx:366, cy:202, squash:1,
+                            anticlockwise:true});
 
 const progress = $('progress'), tail = $('tail'), dot = $('dot');
 progress.setAttribute('d', TRACK.pathD(0));
