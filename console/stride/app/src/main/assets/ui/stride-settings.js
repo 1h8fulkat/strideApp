@@ -1144,17 +1144,36 @@
         cacheEl.textContent = 'cleared';
       }));
       cacheEl.style.marginRight = '18px';
+      /* Reads bytes and chooses the unit here.
+         It used to print whatever the bridge called "mb", which was an integer
+         division on the Kotlin side — so a cache holding twenty tiles and
+         336 KB reported "0 MB of 120 MB", and the honest conclusion from that
+         is that the map is not caching anything. It was. */
       var drawCache = function () {
-        var mb = 0;
-        try { mb = JSON.parse(bridge().tileCache() || '{}').mb || 0; } catch (e) {}
-        cacheEl.textContent = mb + ' MB of ' + (S.map_cache_mb || 120) + ' MB';
+        var got = {};
+        try { got = JSON.parse(bridge().tileCache() || '{}'); } catch (e) {}
+        var bytes = got.bytes || 0;
+        var cap = got.cap_mb || S.map_cache_mb || 128;
+        if (!bytes) {
+          cacheEl.textContent = 'nothing cached yet';
+          return;
+        }
+        var mb = bytes / 1048576;
+        // One decimal below ten megabytes, because that is where every real
+        // cache starts and "0 MB" is the whole bug being fixed here.
+        var size = mb < 9.95 ? mb.toFixed(1) : String(Math.round(mb));
+        var n = got.tiles || 0;
+        cacheEl.textContent = n + (n === 1 ? ' tile · ' : ' tiles · ') +
+                              size + ' MB of ' + cap + ' MB';
       };
       drawCache();
       gv.appendChild(row('Tiles kept on this console', 'The oldest go first once ' +
         'the cache is full. Clearing costs nothing but the next walk fetching ' +
         'them again.', cacheWrap));
       gv.appendChild(row('How many to keep', '',
-        stepper('map_cache_mb', S.map_cache_mb || 120, 16, 512, 16, 'MB')));
+        // 128 and a step of 16: the default has to sit on the ladder, or
+        // the stepper snaps the display and disagrees with the row above it.
+        stepper('map_cache_mb', S.map_cache_mb || 128, 16, 512, 16, 'MB')));
     }
     sc.appendChild(gv);
 

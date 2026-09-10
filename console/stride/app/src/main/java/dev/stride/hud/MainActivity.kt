@@ -1371,16 +1371,18 @@ class MainActivity : Activity() {
          * diagnostic. The screen polls [mqttStatus] for the answer.
          */
         /**
-         * How much of the console's disk the map has taken.
+         * What the map has taken off the console's disk.
          *
-         * Megabytes rather than bytes: the settings screen prints it, nothing
-         * computes with it, and a number nobody can read is not information.
+         * Bytes and a count; the settings screen chooses the units. It used to
+         * send megabytes, computed as `bytes / 1024 / 1024` on a Long, which
+         * reported a real cache of 336 KB as "0 MB" — the arithmetic was right
+         * and the unit was wrong.
          */
         @JavascriptInterface fun tileCache(): String {
-            val bytes = tiles.cachedBytes()
+            val (count, bytes) = tiles.cacheUsage()
             return JSONObject()
+                .put("tiles", count)
                 .put("bytes", bytes)
-                .put("mb", bytes / 1024 / 1024)
                 .put("cap_mb", cfg.mapCacheMb())
                 .toString()
         }

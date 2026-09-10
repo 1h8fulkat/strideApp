@@ -141,8 +141,8 @@ you have not walked** — which is the thing OpenStreetMap's tile usage policy
 specifically rules out. If you want a whole route's corridor fetched up front,
 use a provider whose terms allow it.
 
-**Disk.** 120 MB by default, adjustable from 16 to 512, oldest fetched dropped
-first. `Settings → My routes` shows what is in use and can empty it.
+**Disk.** 128 MB by default, adjustable from 16 to 512 in steps of 16, oldest
+fetched dropped first. `Settings → My routes` shows what is in use and can empty it.
 
 ---
 

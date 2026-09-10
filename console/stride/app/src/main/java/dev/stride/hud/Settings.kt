@@ -311,9 +311,17 @@ class Settings(context: Context) {
             .trim().ifBlank { DEFAULT_TILE_URL }
     fun mapAttribution(): String =
         prefs.getString(MAP_ATTRIBUTION, DEFAULT_ATTRIBUTION) ?: DEFAULT_ATTRIBUTION
-    /** Clamped: a cache big enough to fill the console's storage is not a
-     *  setting, it is a fault waiting for the walk you care about. */
-    fun mapCacheMb(): Int = prefs.getInt(MAP_CACHE_MB, 120).coerceIn(16, 512)
+    /**
+     * Clamped: a cache big enough to fill the console's storage is not a
+     * setting, it is a fault waiting for the walk you care about.
+     *
+     * 128 rather than a rounder 120 so that it lands on the settings stepper's
+     * ladder, which moves in sixteens. Off the ladder the stepper snapped the
+     * display to the nearest rung and showed 128 beside a cache row that said
+     * "of 120 MB" — two numbers for one setting, and the stepper's own promise
+     * is that the number on screen is the number kept.
+     */
+    fun mapCacheMb(): Int = prefs.getInt(MAP_CACHE_MB, 128).coerceIn(16, 512)
 
     // --- home assistant -------------------------------------------------------
 

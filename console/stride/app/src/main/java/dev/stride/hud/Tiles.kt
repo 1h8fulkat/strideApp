@@ -115,10 +115,22 @@ class Tiles(context: Context, private val cfg: Settings) {
         }
     }
 
-    /** Metres of disk in use, for the settings screen to report. */
-    fun cachedBytes(): Long =
-        try { dir.walkTopDown().filter { it.isFile }.sumOf { it.length() } }
-        catch (e: Exception) { 0L }
+    /**
+     * What the cache is holding, as (tiles, bytes), for the settings screen.
+     *
+     * Both from one walk of the tree, and **bytes rather than megabytes**: a
+     * couple of routes is a few hundred kilobytes, and this used to divide by
+     * 1024 twice in Long arithmetic and report a populated cache as "0 MB".
+     * Rounding belongs where the units are chosen, not here.
+     */
+    fun cacheUsage(): Pair<Int, Long> = try {
+        var n = 0
+        var b = 0L
+        dir.walkTopDown().forEach { if (it.isFile) { n++; b += it.length() } }
+        Pair(n, b)
+    } catch (e: Exception) {
+        Pair(0, 0L)
+    }
 
     fun clearCache() {
         housekeeping.execute {
