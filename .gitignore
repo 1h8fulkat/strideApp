@@ -33,6 +33,11 @@ console/*/bin/
 console/*/source.properties
 console/*/NOTICE.txt
 
+# jsdom and acorn, installed by tools/ui-test.sh on its first run. Thirty
+# megabytes of somebody else's code, restored by one command, and the
+# package.json beside it is the part that matters.
+tools/uitest/node_modules/
+
 # Console data pulled off the treadmill by tools/docker-deploy.sh before an
 # uninstall: settings, the people on the console, and the walk history. Yours,
 # and nobody else's business.

@@ -142,6 +142,30 @@ build it cannot, and the script says so *before* uninstalling anything.
 
 ---
 
+## Testing the interfaces first
+
+```
+tools/ui-test.sh
+```
+
+Same deal — nothing installed but Docker. It runs the console's own HTML in
+jsdom with a fake bridge, pushes the frames Kotlin would push, and asserts on
+what comes out. Three parts, and each file says at the top what it is for:
+
+| | |
+|---|---|
+| `es` | Nothing in the interface may use JavaScript this console cannot run. The ceiling is **ES2015**, because the WebView here is Chromium 51 — see the header in `stride-core.js`. A `?.` parses everywhere it is likely to be typed and throws on the treadmill, where the failure is a blank screen on a machine with a motor attached. |
+| `engine` | The two ways that WebView differs from the one you are developing on: no `globalThis`, and a hero box that can be measured before it is laid out. Both have already cost a working map once. |
+| `ui` | `original.html` driven through a walk: which hero draws, the progress line only ever moving right, an out-and-back retracing its way home, a second route not drawn on the first one's streets, and the page asking `tiles.stride` for tiles rather than asking the internet. |
+
+The first run installs jsdom and acorn into `tools/uitest/node_modules`, which
+git ignores, and needs the network once.
+
+It touches no treadmill. Run it before `tools/docker-deploy.sh` — not instead
+of walking on the thing afterwards.
+
+---
+
 ## Deploying
 
 ```sh

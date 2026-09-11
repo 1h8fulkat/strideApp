@@ -1,0 +1,9 @@
+{
+  "name": "stride-uitest",
+  "private": true,
+  "description": "Headless checks for the console's interfaces. See tools/ui-test.sh.",
+  "dependencies": {
+    "acorn": "^8.11.3",
+    "jsdom": "^26.0.0"
+  }
+}
