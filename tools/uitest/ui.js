@@ -345,6 +345,32 @@ JSDOM.fromFile(path, {
   check('casual: oval hero', () => w.document.getElementById('stage').style.display === 'block');
   check('casual: no strip', () => w.document.getElementById('elev').style.display === 'none');
 
+  /* A paused walk has to be finishable without starting the belt again.
+     It was not: COOL DOWN refuses while paused — correctly, the belt has
+     already stopped — and the panel that offers END WORKOUT was never raised,
+     so the only way out was RESUME. On a treadmill that is the wrong way
+     round, and it is the kind of thing that comes back. */
+  w.render({ ...frame(300, 180), mode: 'paused' });
+  check('a pause raises the resume/end panel', () =>
+    w.document.getElementById('confirm').classList.contains('show')
+      ? 'panel up' : '!no way out but RESUME');
+  check('and END WORKOUT ends without resuming', () => {
+    const called = [];
+    const realEnd = w.Stride.end, realResume = w.Stride.resume;
+    w.Stride.end = () => called.push('end');
+    w.Stride.resume = () => called.push('resume');
+    w.document.getElementById('btnEnd')
+      .dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    w.Stride.end = realEnd; w.Stride.resume = realResume;
+    return called.join(',') === 'end' ? 'end()'
+      : '!called ' + (called.join(',') || 'nothing');
+  });
+  check('and the panel goes when the walk is over', () => {
+    w.render({ ...frame(300, 180), mode: 'summary' });
+    return w.document.getElementById('confirm').classList.contains('show')
+      ? '!still up on the summary' : 'gone';
+  });
+
   if (errors.length) { console.log('\nUNCAUGHT:'); errors.forEach(e=>console.log('  '+e)); }
   console.log(fails.length || errors.length ? '\nFAILURES: ' + (fails.join(', ') || '(uncaught errors)') : '\nall checks passed');
   process.exit(fails.length || errors.length ? 1 : 0);

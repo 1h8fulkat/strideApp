@@ -1282,9 +1282,17 @@ function showScreen(mode){
   }
   /* The cool-down *is* this overlay, so entering that phase raises it however
      it was entered — not only from the button that usually does. Leaving both
-     phases takes it away. */
-  if (mode === 'cooldown') $('confirm').classList.add('show');
-  else if (mode !== 'paused') $('confirm').classList.remove('show');
+     phases takes it away.
+
+     A pause raises it too, and used not to. Everything needed was already
+     here — the overlay titles itself "Workout paused" and prints where you got
+     to, both a few lines up — but nothing ever put it on screen, so the only
+     route out of a pause was RESUME. COOL DOWN refuses while paused, and
+     rightly: the belt has already stopped and there is nothing to cool down
+     from. Which left a paused walk finishable only by starting the belt again
+     and stopping it a second time — on a treadmill, the wrong way round. */
+  if (mode === 'cooldown' || mode === 'paused') $('confirm').classList.add('show');
+  else $('confirm').classList.remove('show');
   if (mode !== 'welcome') STRIDE_SETTINGS.close();
   // Back to the first question whenever we land on the welcome screen, so a
   // finished walk never leaves a half-made choice sitting there.
