@@ -25,11 +25,25 @@ IMAGE="${STRIDE_NODE_IMAGE:-node:20-alpine}"
 
 WHICH="${1:-all}"
 
-run() { docker run --rm -v "$REPO:/repo" -w /repo/tools/uitest "$IMAGE" "$@"; }
+# As you, not as root. npm installing as root leaves a node_modules the owner
+# of the repo cannot delete or update without sudo — the same reasoning as the
+# uid mapping in docker-build.sh, minus the passwd dance: nothing here reads a
+# home directory out of /etc/passwd, it just needs one it can write.
+run() {
+  docker run --rm \
+    -u "$(id -u):$(id -g)" \
+    -e HOME=/tmp \
+    -e npm_config_cache=/tmp/.npm \
+    -v "$REPO:/repo" -w /repo/tools/uitest "$IMAGE" "$@"
+}
 
 if [ ! -d "$HERE/uitest/node_modules" ]; then
   echo ">>> installing jsdom and acorn into tools/uitest/node_modules (one time)"
-  run npm install --silent --no-audit --no-fund
+  # `ci`, not `install`: the lock file is committed, so the versions are
+  # already decided and this is the command that honours that rather than
+  # rewriting it. It also means the run needs no write access to anything but
+  # node_modules.
+  run npm ci --silent --no-audit --no-fund
 fi
 
 fail=0
