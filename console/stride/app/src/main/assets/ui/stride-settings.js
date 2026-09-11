@@ -50,8 +50,35 @@
     '  font-family:"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;',
     '  user-select:none;-webkit-tap-highlight-color:rgba(0,0,0,0)}',
 
-    '*{margin:0;padding:0;box-sizing:border-box}',
-    'button{font-family:inherit;outline:none;border:none;background:none;',
+    /* SCOPED, and it matters. This stylesheet is written to be contained by a
+       shadow root — see the `:host` rule above and `attachShadow` in open() —
+       and inside one, `*` and `button` could not reach the page.
+
+       Chromium 51 has no attachShadow. Shadow DOM v1 shipped in Chrome 53 and
+       this console's WebView is 51.0.2704.91, so open() falls back to mounting
+       in the ordinary document and every rule here is global. A bare
+       `button{border:none;background:none}` therefore stripped the background
+       and border off every button in the HUD — the speed and incline keys, the
+       fan, COOL DOWN — from the moment Settings was first opened until the
+       page was reloaded. It looked like a rendering fault on the treadmill and
+       it was this line.
+
+       So containment is by construction now rather than by a feature the
+       machine does not have. Specificity is deliberately unchanged *relative
+       to the .sx-* rules below*: `.sx-b` is one class, and it is declared
+       before them, so `.sx-pill`, `.sx-nav`, `.sx-close`, `.sx-sw` and
+       `.sx-seg button` all still win exactly as they did when this was a bare
+       element selector. See el(), which marks every button it makes. */
+    '.sx-root,.sx-root *{margin:0;padding:0;box-sizing:border-box}',
+    '.sx-b{font-family:inherit;outline:none;border:none;background:none;',
+    /* The leak ran both ways. Every button on this screen has been getting
+       `margin:0 8px` from the *page's* `button{}` rule — the rail pills, CLOSE
+       and the action pills are all spaced by a number that belongs to the HUD
+       and was never written here. Sealing the boundary takes that away and
+       moves the rail 8px, so it is stated explicitly instead. Same value, now
+       on purpose; `.sx-kb-row button` and `.sx-step button` still override it
+       with their own 4px and 2px. */
+    '  margin:0 8px;',
     '  -webkit-tap-highlight-color:rgba(0,0,0,0)}',
     '.sx-root::before{content:"";position:absolute;top:0;right:0;bottom:0;left:0;pointer-events:none;',
     '  background:radial-gradient(ellipse 900px 520px at 50% 44%,',
@@ -197,6 +224,11 @@
   /* ---- tiny DOM helpers -------------------------------------------------- */
   function el(tag, cls, html) {
     var e = document.createElement(tag);
+    /* Every button this screen makes is marked, because the reset that gives
+       them their flat look is written against `.sx-b` rather than against the
+       `button` element — see the note beside it in CSS. One place, so no
+       caller has to remember. */
+    if (tag === 'button') cls = cls ? 'sx-b ' + cls : 'sx-b';
     if (cls) e.className = cls;
     if (html != null) e.innerHTML = html;
     return e;
