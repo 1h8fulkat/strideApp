@@ -311,6 +311,37 @@ class Settings(context: Context) {
             .trim().ifBlank { DEFAULT_TILE_URL }
     fun mapAttribution(): String =
         prefs.getString(MAP_ATTRIBUTION, DEFAULT_ATTRIBUTION) ?: DEFAULT_ATTRIBUTION
+
+    /**
+     * A short stable name for the basemap in use.
+     *
+     * One string, two jobs, and both of them are about a tile being identified
+     * by *where it came from* and not only by its z/x/y:
+     *
+     *  * it is the directory the tiles are cached under, so switching basemap
+     *    cannot serve the old one's pictures for the same coordinates — which
+     *    is exactly what happened, and why Topo and Cycle appeared to change
+     *    nothing at all;
+     *  * it is part of the URL the page asks for, so the WebView's own cache
+     *    cannot do the same thing one layer higher up. Those responses are
+     *    deliberately given a year of `max-age`, which is right for a tile and
+     *    wrong for a URL that quietly means something else than it did.
+     *
+     * Host plus a digest rather than a digest alone: `find files/tiles` should
+     * be readable by whoever is wondering where their basemap went.
+     */
+    fun mapTilesTag(): String {
+        val url = mapTileUrl()
+        val host = try {
+            java.net.URL(url).host?.replace(Regex("[^A-Za-z0-9.-]"), "_") ?: "tiles"
+        } catch (e: Exception) { "tiles" }
+        val digest = try {
+            java.security.MessageDigest.getInstance("SHA-256")
+                .digest(url.toByteArray())
+                .take(3).joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) { "000000" }
+        return "$host-$digest"
+    }
     /**
      * Clamped: a cache big enough to fill the console's storage is not a
      * setting, it is a fault waiting for the walk you care about.
@@ -489,6 +520,7 @@ class Settings(context: Context) {
         .put(ROUTE_VIEW, routeView())
         .put(MAP_TILE_URL, mapTileUrl())
         .put(MAP_ATTRIBUTION, mapAttribution())
+        .put("map_tiles_tag", mapTilesTag())
         .put(MAP_CACHE_MB, mapCacheMb())
         .put(HA_ENABLED, prefs.getBoolean(HA_ENABLED, false))
         .put(MQTT_HOST, mqttHost())

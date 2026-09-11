@@ -71,6 +71,31 @@ class Tiles(context: Context, private val cfg: Settings) {
 
     @Volatile private var ssl: SSLContext? = null
 
+    init {
+        /* The cache was once keyed on z/x/y alone, so anything fetched before
+           the basemap became part of the path sits in directories that can
+           never be read again — `tiles/14`, `tiles/16`. They would go on the
+           first eviction sweep anyway, being the oldest, but only once the
+           cache filled; until then they are 300 KB of tiles that look current
+           to anyone running `find` and are not. A bucket is host-and-digest and
+           can never be all digits, so an all-digit directory here is
+           unambiguously from before.
+
+           On the housekeeping thread: the caller is a tile request. */
+        housekeeping.execute {
+            try {
+                dir.listFiles()?.forEach { f ->
+                    if (f.isDirectory && f.name.isNotEmpty() && f.name.all { it.isDigit() }) {
+                        Log.i(TAG, "dropping pre-bucket tile cache: ${f.name}")
+                        f.deleteRecursively()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "cannot tidy the old cache (${e.message})")
+            }
+        }
+    }
+
     /**
      * A tile request, or null if this is not one.
      *
@@ -83,14 +108,19 @@ class Tiles(context: Context, private val cfg: Settings) {
         if (!HOST.equals(uri.host, ignoreCase = true)) return null
 
         val m = KEY.matchEntire(uri.path ?: "") ?: return blank()
-        val z = m.groupValues[1].toIntOrNull() ?: return blank()
-        val x = m.groupValues[2].toIntOrNull() ?: return blank()
-        val y = m.groupValues[3].toIntOrNull() ?: return blank()
+        val z = m.groupValues[2].toIntOrNull() ?: return blank()
+        val x = m.groupValues[3].toIntOrNull() ?: return blank()
+        val y = m.groupValues[4].toIntOrNull() ?: return blank()
         if (z !in 0..22) return blank()
         val span = 1 shl z
         if (x < 0 || y < 0 || x >= span || y >= span) return blank()
 
-        val file = File(dir, "$z/$x/$y.png")
+        /* Under the basemap's own directory. The tag in the path is ignored
+           for storage on purpose: what is authoritative is the basemap that is
+           configured *now*, and a page still asking under an older tag should
+           be answered from where the tiles for the current one live. */
+        val bucket = File(dir, cfg.mapTilesTag())
+        val file = File(bucket, "$z/$x/$y.png")
         if (file.isFile && file.length() > 0L) return png(FileInputStream(file))
 
         // One thread fetches; anyone else asking for the same tile waits for it
@@ -100,7 +130,7 @@ class Tiles(context: Context, private val cfg: Settings) {
         // `putIfAbsent` rather than `getOrPut`: the Kotlin extension is two
         // operations and two threads can come away holding different locks,
         // which is a single-flight gate that lets everything through.
-        val key = "$z/$x/$y"
+        val key = "${bucket.name}/$z/$x/$y"
         val fresh = Any()
         val gate = inFlight.putIfAbsent(key, fresh) ?: fresh
         try {
@@ -392,7 +422,14 @@ class Tiles(context: Context, private val cfg: Settings) {
          */
         private val BUNDLED_ROOTS = intArrayOf(R.raw.isrg_root_x1, R.raw.isrg_root_x2)
 
-        private val KEY = Regex("^/(\\d{1,2})/(\\d{1,7})/(\\d{1,7})\\.png$")
+        /**
+         * `/{tag}/{z}/{x}/{y}.png`, with the tag optional.
+         *
+         * Optional because it is only there to make the URL change when the
+         * basemap changes — see Settings.mapTilesTag — and a page that predates
+         * it, or a hand-typed request from DevTools, should still be answered.
+         */
+        private val KEY = Regex("^/(?:([A-Za-z0-9._-]{1,64})/)?(\\d{1,2})/(\\d{1,7})/(\\d{1,7})\\.png$")
         private const val TIMEOUT_MS = 6000
         private const val SWEEP_EVERY = 64
         private const val UA =

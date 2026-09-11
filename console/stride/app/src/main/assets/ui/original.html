@@ -1484,8 +1484,17 @@ function readRouteSettings(){
 
        A desktop browser has no interceptor behind it, so there and only there
        the page goes to the provider directly. `standalone` is true exactly
-       when the bridge is a stub. */
-    tileUrl = standalone ? (cfg.map_tile_url || '') : '';
+       when the bridge is a stub.
+
+       The basemap's tag goes in the path. Not decoration: without it the URL
+       for a given tile is the same whichever basemap is chosen, so the
+       WebView's own cache — these come back with a year of `max-age`, which is
+       right for a tile — hands back the previous basemap's picture. Topo and
+       Cycle appeared to do nothing because of this and its twin in the disk
+       cache. See Settings.mapTilesTag. */
+    tileUrl = standalone ? (cfg.map_tile_url || '')
+                         : 'https://tiles.stride/' + (cfg.map_tiles_tag || 'tiles') +
+                           '/{z}/{x}/{y}.png';
   } catch (e) {
     routeView = 'path';
   }

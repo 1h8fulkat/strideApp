@@ -166,6 +166,17 @@
 
     '.sx-people{display:flex;flex-wrap:wrap;margin-top:6px}',
     '.sx-person{width:200px;margin:0 16px 16px 0;padding:18px 14px 14px;border-radius:22px;text-align:center;',
+    /* Geometry stated rather than inherited. This card is a <button>, and the
+       HUD's own `button{flex:1;max-width:160px;height:76px}` reaches it for the
+       same reason the reset above used to reach the HUD: no shadow root on
+       Chromium 51. Clamped to 76px the name and the "Coaching - console only"
+       line fell out of the bottom of the card and collided with the next
+       group's heading, which is what it looked like on the console.
+       Only this rule is sealed, deliberately. The same leak also makes the
+       rail's nav pills 160px wide and rounds them, and that has been the look
+       of this screen since it was written — changing it is a redesign, not a
+       fix. */
+    '  flex:none;max-width:none;height:auto;',
     '  background:rgba(22,37,90,.4);border:2px solid #1e3068;color:#eaf0ff}',
     '.sx-person.sx-on{border-color:#39e0ff;background:rgba(57,224,255,.14)}',
     '.sx-av{width:64px;height:64px;border-radius:50%;margin:0 auto 12px;',
@@ -1153,7 +1164,8 @@
         'Topo draws contours and footpaths, which read better behind a route ' +
         'than the standard style does. All three are volunteer-run servers ' +
         'with their own terms; this console fetches slowly, caches what it ' +
-        'draws and never pre-fetches ground you have not walked.', presets));
+        'draws and never pre-fetches ground you have not walked. Each one ' +
+        'brings its own credit line for the corner of the map.', presets));
 
       gv.appendChild(row('Tiles come from',
         'An {z}/{x}/{y} template. OpenTopoMap and Thunderforest Outdoors draw ' +
@@ -1162,11 +1174,6 @@
         'the tiles itself and keeps them, so a route walked twice only costs ' +
         'the network once.',
         field('map_tile_url', S.map_tile_url || '')));
-      gv.appendChild(row('Credit',
-        'Printed in the corner of the map. Tile terms generally require it, ' +
-        'and it is not the sort of thing to leave to a default when you have ' +
-        'changed the provider.',
-        field('map_attribution', S.map_attribution || '')));
 
       var cacheWrap = el('div', 'sx-ro');
       var cacheEl = el('span', '', 'counting…');

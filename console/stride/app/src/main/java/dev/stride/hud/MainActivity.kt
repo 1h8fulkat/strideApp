@@ -1091,7 +1091,16 @@ class MainActivity : Activity() {
             // Put the machine back how you'd want to find it. Incline is the one
             // setting that persists otherwise, and starting the next walk on
             // yesterday's hill is a nasty surprise.
+            //
+            // Asked once *and* enforced, the same way the end of a walk does it
+            // — see parkDeckAndFan. One write is a request; a board that drops
+            // the frame, or a deck that was mid-travel when it arrived, leaves
+            // you cooling down on a hill. `levelling` makes enforceLevel
+            // command it every poll until the board reports level, and a hand
+            // on the incline keys still outranks it.
             targetGrade = 0.0
+            levelling = true
+            levelNags = 0
             pendingWrite = mapOf(
                 FitPro.Field.GRADE to 0.0,
                 FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble(),
@@ -1830,11 +1839,21 @@ class MainActivity : Activity() {
      */
     private fun enforceLevel(actualGrade: Double): Map<FitPro.Field, Double>? {
         if (!levelling) return null
-        if (Session.isMoving(session)) { levelling = false; return null }
+        /* Abandoned when a walk proper is running, because then the grade
+         * belongs to the plan or to whoever is pressing the incline keys.
+         * **Not** during the cool-down: that is where levelling is now asked
+         * for, and testing `isMoving` here cancelled it on the very next poll
+         * after `end()` set it. */
+        if (session == Session.WARMUP || session == Session.ACTIVE) {
+            levelling = false
+            return null
+        }
         if (Math.abs(actualGrade) < LEVEL_GRADE) { levelling = false; return null }
         levelNags++
         if (levelNags == 1 || levelNags % 25 == 0) {
-            Log.w(TAG, "deck still at ${"%.1f".format(actualGrade)}% after the walk " +
+            // "after the walk" no longer: this also runs through the
+            // cool-down, which is where levelling is now asked for.
+            Log.w(TAG, "deck still at ${"%.1f".format(actualGrade)}% " +
                     "— commanding level again (attempt $levelNags)")
         }
         return mapOf(FitPro.Field.GRADE to 0.0)
@@ -2824,7 +2843,21 @@ class MainActivity : Activity() {
         }
 
         val elapsedNow = elapsedSec()
-        if (Session.isMoving(session)) {
+        /*
+         * ACTIVE, not `isMoving`.
+         *
+         * `isMoving` is true through the cool-down as well, so the plan went on
+         * driving the deck while the walk was winding down — and it re-commanded
+         * the hill about a fifth of a second after `end()` had asked for level.
+         * The deck therefore finished the walk on whatever grade the route
+         * happened to reach, which is the opposite of what a cool-down is for.
+         *
+         * Nothing is lost by stopping here. A guided walk and a route both go
+         * straight to ACTIVE — neither has a warm-up to tick through — and the
+         * cool-down draws the phase countdown rather than the hero, so a plan
+         * frozen at its last segment is not visible anywhere.
+         */
+        if (session == Session.ACTIVE) {
             // A route is ground, not a timetable — see routeTick.
             if (route != null) routeTick(sessionDistance) else planTick(elapsedNow)
         }
