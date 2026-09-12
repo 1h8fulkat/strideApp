@@ -132,4 +132,17 @@ dependencies {
     // and the script's own output. Everything else in this app needs a board,
     // a belt or a WebView, and is checked by tools/ui-test.sh or by walking.
     testImplementation("junit:junit:4.13.2")
+
+    // A *real* org.json for the JVM tests.
+    //
+    // The android.jar on the unit-test classpath is the "mockable" one, whose
+    // every method throws "not mocked" — so anything touching JSONObject is
+    // untestable off the device without this. It is testImplementation only:
+    // the app keeps using the platform's own copy, which is the one that will
+    // actually run, and nothing extra is packaged.
+    //
+    // Gpx.json() builds its payload by hand and so needs none of this, but for
+    // a different reason worth not confusing with this one — it needs control
+    // of the decimal scale of every number.
+    testImplementation("org.json:json:20240303")
 }

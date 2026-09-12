@@ -41,7 +41,30 @@ a file in that folder; renaming one renames the route; deleting one removes it
 at the next start. `Settings → Home Assistant → Routes` holds the address, the
 token and a FETCH button for when you do not want to wait for a restart.
 
-It needs two things in Home Assistant, both of which are ordinary:
+### Two ways for it to know what is in the folder
+
+`/local/` answers 403 to a directory request and nothing enumerates it, so the
+console has to be told. Pick whichever trade you prefer — the setting that
+decides is simply whether there is a token.
+
+**A list file, and no credential.** Put a JSON array beside the `.gpx` files:
+
+```json
+["my-walk.gpx", "the-hill.gpx"]
+```
+
+Leave the token empty, and the console reads
+`/local/treadmill/routes/index.json`. Nothing in Home Assistant to configure,
+no password anywhere on the treadmill. The cost is a line per route — and
+forgetting that line is the same shape of failure as forgetting to run the sync
+script was: a route that exists and does not appear. `Settings → Home Assistant
+→ Routes` names what it found, for exactly that reason.
+
+Objects work too, so a generated index can carry more later:
+`[{"file": "my-walk.gpx"}]`.
+
+**A folder sensor, and a token.** The listing then maintains itself and adding
+a route is dropping a file in a directory. Needs this in Home Assistant:
 
 ```yaml
 # configuration.yaml
@@ -55,9 +78,19 @@ sensor:
     filter: "*.gpx"
 ```
 
-and a long-lived access token from your profile page. Only the *listing* uses
-the token — `/local/` is served unauthenticated, which is also why a wrong token
-is the one failure that says so in as many words.
+plus a long-lived access token from your profile page. Only the listing uses it;
+the `.gpx` files are served unauthenticated either way, which is why a wrong
+token is the one failure that says so in as many words.
+
+The console does not fall back from one to the other. A token that has expired
+should say so, not quietly start reading a stale index and look like it worked.
+
+> **The token cannot live in the route folder.** It is tempting — the console is
+> already fetching files from there — but anything under `www/` is served over
+> `/local/` to anyone who can reach Home Assistant, and a long-lived token is
+> the whole of its API rather than one topic on one broker. A credential that
+> needs no credential to read is not a credential. It is stored on the console,
+> or there is no token and you use the list file.
 
 **A failure never costs you a route.** No network, a wrong token, a renamed
 sensor, a corrupt file: the routes already on the console stay exactly where

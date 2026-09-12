@@ -896,13 +896,20 @@
       'http://homeassistant.local:8123.',
       field('ha_url', S.ha_url)));
     gr.appendChild(row('Access token',
-      'A long-lived access token, from your Home Assistant profile page. Only the ' +
-      'folder listing needs it; the .gpx files themselves are served without one.',
+      'Optional, and fine to leave empty. All it buys is the listing: with a token ' +
+      'the console asks the folder sensor what is in the directory, so adding a route ' +
+      'is dropping a file in it. Without one it reads the list file below instead and ' +
+      'needs no password at all. The .gpx files never need one either way.',
       field('ha_token', S.ha_token_set ? SECRET_MASK : '', false, 'password')));
     gr.appendChild(row('Folder sensor',
-      'The sensor whose file_list is the route folder. Needs a `folder` platform ' +
-      'sensor in Home Assistant, and the folder on its allowlist_external_dirs.',
+      'Used only when there is a token. Needs a `folder` platform sensor in Home ' +
+      'Assistant with the route directory on allowlist_external_dirs.',
       field('ha_routes_sensor', S.ha_routes_sensor)));
+    gr.appendChild(row('List file',
+      'Used when there is no token. A JSON list of filenames sitting beside the .gpx ' +
+      'files — ["my-walk.gpx", "the-hill.gpx"]. No password needed, and one line to ' +
+      'add per route: leave it out and the route is there but will not appear.',
+      field('ha_index', S.ha_index)));
     gr.appendChild(row('Folder under www/',
       'Where the files sit, so they can be fetched over /local/. The default matches ' +
       'config/www/treadmill/routes.',

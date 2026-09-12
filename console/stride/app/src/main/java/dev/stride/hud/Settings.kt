@@ -72,6 +72,7 @@ class Settings(context: Context) {
         const val HA_URL = "ha_url"
         const val HA_TOKEN = "ha_token"
         const val HA_ROUTES_SENSOR = "ha_routes_sensor"
+        const val HA_INDEX = "ha_index"
         const val HA_GPX_PATH = "ha_gpx_path"
         const val ROUTE_FETCH = "route_fetch"
 
@@ -398,12 +399,23 @@ class Settings(context: Context) {
         (prefs.getString(HA_URL, "") ?: "").trim().trimEnd('/')
 
     /**
-     * A long-lived access token.
+     * A long-lived access token. **Optional**, and worth leaving empty.
      *
-     * Only the folder listing needs it. The `.gpx` files themselves sit under
-     * `/local/`, which Home Assistant serves unauthenticated — so a console
-     * that loses this can still be told which files to fetch by hand, and one
-     * that has it needs nothing else.
+     * The only thing it buys is the folder *listing*: with a token the console
+     * asks [haRoutesSensor] what is in the directory, which means adding a
+     * route is dropping a file in it and nothing else. Without one it reads
+     * [haIndex] instead — a plain list of filenames sitting beside the `.gpx`
+     * files — and the console needs no credential of any kind.
+     *
+     * The files themselves never need it either way. They are served from
+     * `/local/`, which Home Assistant hands out unauthenticated.
+     *
+     * Which is also the reason this is stored *here* and cannot be stored over
+     * there. A file under `www/` is readable by anything that can reach Home
+     * Assistant, and this token is the whole of its API — not one topic on one
+     * broker, the whole thing. Putting it in the route folder so the console
+     * could fetch it would publish it to the network, and a credential that
+     * needs no credential to read is not a credential.
      */
     fun haToken(): String = (prefs.getString(HA_TOKEN, "") ?: "").trim()
 
@@ -411,6 +423,25 @@ class Settings(context: Context) {
     fun haRoutesSensor(): String =
         (prefs.getString(HA_ROUTES_SENSOR, "sensor.routes") ?: "sensor.routes")
             .trim().ifBlank { "sensor.routes" }
+
+    /**
+     * The listing file to read when there is no token, beside the `.gpx` files.
+     *
+     * A JSON array, and the same one `stride_gpx.py` already accepts — bare
+     * names, or objects with a `file` key so a generated index can carry more
+     * later:
+     *
+     *     ["rolling-loop-5k.gpx", "the-hill.gpx"]
+     *
+     * The trade this makes is worth saying out loud: it costs no credential and
+     * it costs a line per route. Forgetting that line is the same shape of
+     * failure as forgetting to run the sync script was — a route that exists
+     * and does not appear, with nothing saying why. The settings screen names
+     * what it found for that reason.
+     */
+    fun haIndex(): String =
+        (prefs.getString(HA_INDEX, "index.json") ?: "index.json")
+            .trim().trim('/').ifBlank { "index.json" }
 
     /** Where the files are under `www/`, matching `ha_gpx_path` in stride.conf. */
     fun haGpxPath(): String =
@@ -426,8 +457,13 @@ class Settings(context: Context) {
      */
     fun routeFetch(): Boolean = prefs.getBoolean(ROUTE_FETCH, true)
 
-    fun routeFetchReady(): Boolean =
-        routeFetch() && haUrl().isNotEmpty() && haToken().isNotEmpty()
+    /**
+     * Enough to go and look. The address, and nothing else required.
+     *
+     * The token is deliberately not part of this: without one the console reads
+     * [haIndex] over `/local/`, which needs no credential — see [haToken].
+     */
+    fun routeFetchReady(): Boolean = routeFetch() && haUrl().isNotEmpty()
 
     fun brokerUri(): String =
         "${if (mqttTls()) "ssl" else "tcp"}://${mqttHost()}:${mqttPort()}"
@@ -624,6 +660,7 @@ class Settings(context: Context) {
         // rather than empty so a reader that wants it fails loudly.
         .put("ha_token_set", haToken().isNotEmpty())
         .put(HA_ROUTES_SENSOR, haRoutesSensor())
+        .put(HA_INDEX, haIndex())
         .put(HA_GPX_PATH, haGpxPath())
         .put(ROUTE_FETCH, routeFetch())
         .put(WARMUP_MIN, prefs.getInt(WARMUP_MIN, 2))

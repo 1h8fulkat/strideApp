@@ -108,12 +108,12 @@ class RouteSync(
 
     private fun fetch(why: String) {
         val base = cfg.haUrl()
-        val token = cfg.haToken()
-        if (base.isEmpty() || token.isEmpty()) {
+        if (base.isEmpty()) {
             status = "not configured"
-            Log.i(TAG, "$why — no Home Assistant URL or token; keeping the cache")
+            Log.i(TAG, "$why — no Home Assistant address; keeping the cache")
             return
         }
+        val token = cfg.haToken()
 
         val names = listing(base, token)
         if (names.isEmpty()) {
@@ -121,8 +121,9 @@ class RouteSync(
             // the cache stays. An empty folder is far more often a wrong path
             // or a sensor that has not updated than a decision to own no
             // routes, and the cost of being wrong is a walk that cannot start.
-            status = "the folder listed no .gpx files — cache kept"
-            Log.w(TAG, "$why — ${cfg.haRoutesSensor()} listed no .gpx; " +
+            val from = if (token.isNotEmpty()) cfg.haRoutesSensor() else cfg.haIndex()
+            status = "$from listed no .gpx files — cache kept"
+            Log.w(TAG, "$why — $from listed no .gpx; " +
                     "keeping ${routes.count()} cached route(s)")
             return
         }
@@ -170,35 +171,30 @@ class RouteSync(
     }
 
     /**
-     * The `.gpx` basenames a Home Assistant `folder` sensor is listing.
+     * Which `.gpx` files are there, by whichever of the two routes is available.
      *
-     * `file_list` holds absolute paths on the Home Assistant box, and only the
-     * basename is any use here: the file is fetched over `/local/` rather than
-     * read off that disk. Sorted, so the picker's order does not depend on how
-     * a filesystem felt about enumerating a directory.
+     * Same order of preference as `stride_gpx.py`'s own `discover()`, and for
+     * the same reason — the two should not disagree about where a route list
+     * comes from:
+     *
+     *  * **A token** means ask the `folder` sensor. The listing maintains
+     *    itself, so adding a route is dropping a file in a directory.
+     *  * **No token** means read [Settings.haIndex] over `/local/`, which needs
+     *    no credential at all. One line per route, maintained by hand.
+     *
+     * Nothing in between, and no falling back from one to the other: a token
+     * that has expired should say so, not quietly start reading a stale index
+     * and look like it worked.
      */
-    private fun listing(base: String, token: String): List<String> {
-        val url = "$base/api/states/${encode(cfg.haRoutesSensor())}"
-        val body = String(get(url, token))
-        val attrs = JSONObject(body).optJSONObject("attributes")
-            ?: throw Exception("${cfg.haRoutesSensor()} has no attributes")
-        val list = attrs.optJSONArray("file_list")
-            ?: throw Exception("${cfg.haRoutesSensor()} has no file_list — " +
-                    "is it a folder sensor?")
-        return basenames(list)
-    }
-
-    private fun basenames(list: JSONArray): List<String> {
-        val out = ArrayList<String>(list.length())
-        for (i in 0 until list.length()) {
-            val path = list.optString(i, "")
-            if (!path.lowercase().endsWith(".gpx")) continue
-            val base = path.substringAfterLast('/').substringAfterLast('\\')
-            if (base.isNotEmpty()) out.add(base)
+    private fun listing(base: String, token: String): List<String> =
+        if (token.isNotEmpty()) {
+            namesFromSensor(
+                String(get("$base/api/states/${encode(cfg.haRoutesSensor())}", token)),
+                cfg.haRoutesSensor())
+        } else {
+            namesFromIndex(
+                String(get("$base/local/${cfg.haGpxPath()}/${encode(cfg.haIndex())}", null)))
         }
-        out.sort()
-        return out
-    }
 
     /**
      * One GET, with a bearer token when one is given.
@@ -259,5 +255,53 @@ class RouteSync(
         private const val TAG = "Stride"
         private const val TIMEOUT_MS = 15_000
         private const val MAX_BYTES = 8 * 1024 * 1024
+
+        /**
+         * The `.gpx` basenames out of a `folder` sensor's state.
+         *
+         * `file_list` holds absolute paths on the Home Assistant box, and only
+         * the basename is any use here: the file is fetched over `/local/`
+         * rather than read off that disk. Sorted, so the picker's order does
+         * not depend on how a filesystem felt about enumerating a directory.
+         *
+         * Pure, and public for [RouteSyncTest] — the two shapes of listing are
+         * exactly the kind of parsing that is worth a test and does not need a
+         * network to have one.
+         */
+        fun namesFromSensor(body: String, entity: String): List<String> {
+            val attrs = JSONObject(body).optJSONObject("attributes")
+                ?: throw Exception("$entity has no attributes")
+            val list = attrs.optJSONArray("file_list")
+                ?: throw Exception("$entity has no file_list — is it a folder sensor?")
+            val out = ArrayList<String>(list.length())
+            for (i in 0 until list.length()) add(out, list.optString(i, ""))
+            out.sort()
+            return out
+        }
+
+        /**
+         * The `.gpx` basenames out of an index file.
+         *
+         * Two shapes, because `stride_gpx.py` accepts two and an index written
+         * for one should work with the other: a bare list of names, or a list
+         * of objects with a `file` key so a generated index can carry more
+         * later without breaking this.
+         */
+        fun namesFromIndex(body: String): List<String> {
+            val arr = JSONArray(body.trim())
+            val out = ArrayList<String>(arr.length())
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i)
+                add(out, if (obj != null) obj.optString("file", "") else arr.optString(i, ""))
+            }
+            out.sort()
+            return out
+        }
+
+        private fun add(out: ArrayList<String>, path: String) {
+            if (!path.lowercase().endsWith(".gpx")) return
+            val base = path.substringAfterLast('/').substringAfterLast('\\')
+            if (base.isNotEmpty()) out.add(base)
+        }
     }
 }
