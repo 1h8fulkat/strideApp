@@ -90,6 +90,23 @@ data class Snapshot(
     val session: Int,
     val workout: String,
     val dmk: Boolean,
+
+    /**
+     * The belt is turning and no workout is running, km/h. Zero when all is well.
+     *
+     * A number rather than a flag because the interfaces say it out loud, and
+     * "the belt is moving" is a different sentence from "the belt is moving at
+     * 4.3 km/h". It is also the difference between a coasting deck and a
+     * hazard.
+     *
+     * This exists because on 2026-09-12 a belt ran at 4.3 km/h for two minutes
+     * after a workout ended, through six hundred stop commands, one of which
+     * the board accepted and reported as `Pause` before ignoring it. The
+     * console knew throughout and said so only in logcat — which is not where
+     * somebody standing on a moving belt is looking. No write sequence is a
+     * remedy for a board that lies about its own motor; telling the person is.
+     */
+    val runawayKph: Double,
     /** "stopping" while the belt is being eased to a halt, empty otherwise.
      *  Every other speed the console asks for it asks for at once, so there is
      *  no ramp left to report. See MainActivity.paceKph. */
@@ -282,6 +299,7 @@ data class Snapshot(
         append("\"fan\":$fan,")
         append("\"workout\":\"${esc(workout)}\",")
         append("\"dmk\":$dmk,")
+        append("\"runawayKph\":${"%.1f".format(runawayKph)},")
         append("\"ramping\":\"${esc(ramping)}\",")
         append("\"phaseLeft\":${"%.0f".format(phaseLeft)},")
         append("\"phaseTotal\":${"%.0f".format(phaseTotal)},")

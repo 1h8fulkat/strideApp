@@ -19,7 +19,17 @@
 > * **A stop that actually stops.** On this board the belt would slow and keep
 >   running: the write carrying `KPH 0` also carried a mode change the board
 >   refused, and the whole frame went with it. Belt-stop writes now travel
->   alone.
+>   alone. Then it happened again in a worse way — the board *accepted* a
+>   `Pause`, reported itself paused, and ran on at 4.3 km/h for two minutes
+>   through six hundred commands. So the console now rotates `Pause`, `Idle`
+>   and a speed rather than repeating one command the board has already
+>   ignored, falls back to the board's own minimum speed once it has refused
+>   zero for five seconds, and — the part that actually matters — **puts a
+>   full-screen alarm on the interface** telling you to use the red button.
+>   A board that lies about its own motor cannot be argued out of it; the
+>   person on the belt is the only reliable actuator, and until now the
+>   console was arguing in a log file nobody was reading. See
+>   [SAFETY.md](SAFETY.md).
 > * **A route map.** A walk imported from a GPX file can be drawn on
 >   OpenStreetMap while you walk it, with a dot moving along the route and the
 >   recorded ground running along the bottom of the screen with a line showing

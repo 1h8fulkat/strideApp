@@ -464,6 +464,41 @@ JSDOM.fromFile(path, {
       : '!started=' + none.started + '/' + some.started + ' count=' + none.count;
   });
 
+  /* A belt that will not stop has to say so on the screen, because that is the
+     one place the person who can stop it is looking. On 2026-09-12 a belt ran
+     at 4.3 km/h for two minutes after a walk ended and the console reported it
+     only to logcat. Nobody notices a missing alarm until it is wanted, hence a
+     check. */
+  w.render({ ...frame(300, 180), mode: 'summary', runawayKph: 4.3 });
+  check('a runaway raises the alarm over the summary', () =>
+    w.document.getElementById('runaway').classList.contains('show')
+      ? 'up' : '!no alarm while the belt was moving');
+  check('and says how fast, so it reads as a hazard', () => {
+    const t = w.document.getElementById('runawaySpeed').textContent;
+    return /4\.3/.test(t) && /step off/i.test(t) ? t : '!reads "' + t + '"';
+  });
+  check('and it goes when the belt stops', () => {
+    w.render({ ...frame(300, 180), mode: 'summary', runawayKph: 0 });
+    return w.document.getElementById('runaway').classList.contains('show')
+      ? '!still up with the belt stopped' : 'gone';
+  });
+  /* The safety key means the belt has already stopped. Two full-screen alarms
+     at once would be a contradiction, and this is the one that is untrue. */
+  check('the safety key outranks it, being the one that is already safe', () => {
+    w.render({ ...frame(300, 180), mode: 'summary', runawayKph: 4.3, dmk: true });
+    const run = w.document.getElementById('runaway').classList.contains('show');
+    const key = w.document.getElementById('dmk').classList.contains('show');
+    return key && !run ? 'key only' : '!key=' + key + ' runaway=' + run;
+  });
+  /* And the shared helper the other four interfaces use. */
+  check('stride-core marks a runaway and formats its speed', () => {
+    const a = w.STRIDE.adapt({ ...frame(300, 180), runawayKph: 4.3 }).runaway;
+    const b = w.STRIDE.adapt({ ...frame(300, 180), runawayKph: 0 }).runaway;
+    return a.active && !b.active && /4\.3/.test(a.label)
+      ? 'active with "' + a.label + '"'
+      : '!active=' + a.active + '/' + b.active + ' label="' + a.label + '"';
+  });
+
   /* A paused walk has to be finishable without starting the belt again.
      It was not: COOL DOWN refuses while paused — correctly, the belt has
      already stopped — and the panel that offers END WORKOUT was never raised,

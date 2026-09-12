@@ -946,7 +946,8 @@ window.render = function(raw){
 
   /* The safety key preempts every screen and routes to none of them. Clearing
      it puts you back exactly where you were with the session intact. */
-  $('safety').classList.toggle('on', s.safetyKey === 'out');
+  // Both alarms, and which one wins, live in one place — see STRIDE.alarm.
+  STRIDE.alarm(s);
 
   if (screen === 'welcome'){ showScreen('scSetup'); shownPhase = s.phase; return; }
   if (screen === 'summary'){ showScreen('scSummary'); renderSummary(s); shownPhase = s.phase; return; }

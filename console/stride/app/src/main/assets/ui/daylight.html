@@ -797,7 +797,8 @@ window.render = function(raw){
   const screen = STRIDE.screenFor(s);
 
   // Hardware interrupt: preempts every screen, routes to none of them.
-  $('safety').classList.toggle('on', s.safetyKey === 'out');
+  // Both alarms, and which one wins, live in one place — see STRIDE.alarm.
+  STRIDE.alarm(s);
 
   if (screen === 'welcome'){ showScreen('scSetup'); shownPhase = s.phase; return; }
   if (screen === 'summary'){ showScreen('scSummary'); renderSummary(s); shownPhase = s.phase; return; }

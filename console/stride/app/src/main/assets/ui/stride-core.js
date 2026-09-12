@@ -748,6 +748,29 @@ function adapt(raw) {
                 achievements: raw.achievements || [] },
 
     safetyKey: raw.dmk ? 'out' : 'in',
+
+    /* The belt is turning with no workout running, and the console cannot make
+       it stop.
+
+       Every interface paints over the top of everything for this, the way it
+       does for the safety key — and note that it means the *opposite*: the
+       safety key being out is a belt that has already stopped.
+
+       On 2026-09-12 a belt ran at 4.3 km/h for two minutes after a walk ended,
+       through six hundred stop commands, one of which the board accepted and
+       reported back as `Pause` before ignoring it. The console knew the whole
+       time and said so only in logcat, which is not where somebody standing on
+       a moving belt is looking.
+
+       There is no software remedy for a board that lies about its own motor.
+       The person is the actuator, so the screen has to tell them, and tell
+       them the one thing that always works: the physical stop. */
+    runaway:  { active: (raw.runawayKph || 0) > 0,
+                kph: raw.runawayKph || 0,
+                /* Preformatted, in whichever unit is set. Five interfaces each
+                   converting a speed is five places to get it wrong, and this
+                   is not the message to get wrong. */
+                label: spd(raw.runawayKph || 0) + ' ' + spdUnit() },
     fan:       raw.fan || 0,
 
     /* How the control board is behaving. 'ok', or one of two kinds of trouble
@@ -1355,6 +1378,62 @@ function dist(m, dp) {
   return v.toFixed(dp == null ? 2 : dp);
 }
 /** km/h → km/h or mph. */
+/**
+ * Raise the full-screen alarm, for the two things that earn one.
+ *
+ * Shared because four interfaces each had the same one-liner toggling their
+ * `#safety` overlay, and a second alarm would have made that four copies of a
+ * conditional — in the code most worth only having once.
+ *
+ * The two are opposites and must never read alike. The safety key being out
+ * means the belt has **already stopped**; a runaway means it **will not**. So a
+ * runaway outranks the key when somehow both are true, because it is the one
+ * that is still dangerous, and the hold-to-clear button is taken away — there
+ * is nothing on this console to acknowledge. What stops it is the red button or
+ * the key, and that is what the words say.
+ *
+ * Each interface keeps its own wording for the key: the original text is stashed
+ * on first use and put back, so nothing here has to know what any theme says.
+ *
+ * @return true while an alarm is up, for anything that wants to stand down.
+ */
+function alarm(s) {
+  var host = document.getElementById('safety');
+  if (!host) return false;
+
+  var keyOut  = s.safetyKey === 'out';
+  var running = !!(s.runaway && s.runaway.active);
+  host.classList.toggle('on', keyOut || running);
+
+  var k   = host.querySelector('.k');
+  var h   = host.querySelector('.h');
+  var sub = host.querySelector('.s');
+  var btn = document.getElementById('btnKeyBack');
+
+  // Whatever this theme says about the safety key, remembered once so it can
+  // be put back after a runaway has borrowed the panel.
+  if (!host.sxSaved) {
+    host.sxSaved = { k:   k   ? k.textContent   : '',
+                     h:   h   ? h.textContent   : '',
+                     sub: sub ? sub.textContent : '' };
+  }
+
+  if (running && !keyOut) {
+    if (k)   k.textContent   = 'BELT STILL MOVING';
+    if (h)   h.textContent   = 'Step off \u2014 ' + s.runaway.label;
+    if (sub) sub.textContent = 'The console has told the treadmill to stop and it ' +
+                               'has not. Press the red stop button, or pull the ' +
+                               'safety key.';
+    if (btn) btn.style.display = 'none';
+  } else {
+    if (k)   k.textContent   = host.sxSaved.k;
+    if (h)   h.textContent   = host.sxSaved.h;
+    if (sub) sub.textContent = host.sxSaved.sub;
+    if (btn) btn.style.display = '';
+  }
+  return keyOut || running;
+}
+
 function spd(kph, dp) {
   var v = IMPERIAL ? (kph || 0) * 0.621371 : (kph || 0);
   return v.toFixed(dp == null ? 1 : dp);
@@ -1909,6 +1988,7 @@ global.STRIDE = {
   km: km,
   dist: dist,
   distanceLeft: distanceLeft,
+  alarm: alarm,
   spd: spd,
   elev: elev,
   distUnit: distUnit,

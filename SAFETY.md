@@ -49,6 +49,45 @@ numbers.
 
 ---
 
+## A belt that will not stop
+
+**This has happened, twice, on the machine STRIDE was built on.** It is the one
+failure worth reading about in advance, because the thing that fixes it is you.
+
+On 31 July a guided walk finished, the console showed the summary, and the belt
+kept running for thirty-five seconds until somebody pressed the physical stop.
+One dropped USB frame and the command was simply gone.
+
+On 12 September it happened again and worse: the belt ran at 4.3 km/h for two
+minutes after a walk ended, through six hundred stop commands. The board
+*accepted* one of them and reported itself paused — and its motor went on
+turning. A board that lies about its own motor cannot be argued out of it.
+
+**What the console does now.** It watches the belt's real speed rather than
+trusting that its own command landed, and while a belt is moving with no workout
+running it will:
+
+* rotate through three different stop commands rather than repeating one the
+  board has already refused or ignored — `Pause`, then `Idle`, then a speed;
+* after five seconds of a refused zero, command the board's own **minimum**
+  speed instead. That looks wrong in a stop routine and is deliberate: on this
+  board zero is below the minimum and is refused every time it is sent, so it
+  achieves nothing, while 0.8 km/h is accepted and is a shuffle you can step
+  off. A command that is obeyed and helps beats one that is refused because its
+  number is lower;
+* **put a full-screen alarm on every interface**, saying the belt is still
+  moving, how fast, and to use the red stop button or the safety key. Until
+  September this was reported only to a log file, which is not where somebody
+  standing on a moving belt is looking;
+* raise a runaway alarm in Home Assistant and write the incident to disk.
+
+**None of that is a guarantee, and it is not the emergency stop.** The physical
+stop button and the safety key are. If a belt is moving and you did not ask it
+to, use them — do not wait for the console to win the argument, because
+sometimes it does not.
+
+---
+
 ## What this isn't
 
 STRIDE is not a medical device and is not certified as anything.

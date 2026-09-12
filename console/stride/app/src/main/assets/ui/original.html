@@ -401,6 +401,11 @@ button.pulse{animation:pulse .9s ease-out 2}
 .overlay .row{margin-top:46px;display:flex;justify-content:center}
 .overlay .row button{flex:none;width:250px;max-width:none;height:92px;font-size:20px;margin:0 16px}
 #dmk h1{color:var(--alert)}
+/* Louder than the safety-key overlay on purpose: that one reports something
+   already safe, this one reports a moving belt. */
+#runaway{background:rgba(45,6,6,.98)}
+#runaway h1{color:var(--alert)}
+#runaway #runawaySpeed{color:#fff;font-size:26px;margin-top:18px}
 
 /* ---- welcome ------------------------------------------------------------ */
 .welcome{
@@ -841,6 +846,18 @@ button.pulse{animation:pulse .9s ease-out 2}
   <h1>Safety key removed</h1>
   <p>Insert the key to activate the treadmill</p>
   <div class="row"><button class="primary" id="btnDmkOk">KEY IS BACK IN</button></div>
+</div>
+
+<!-- Sits above every screen, including the summary and the welcome screen,
+     because those are exactly where a belt that will not stop is found: the
+     walk is over as far as the console is concerned. Unlike the safety-key
+     overlay above, this one means the belt has *not* stopped, so it offers
+     nothing to acknowledge — what stops it is the red button or the key. -->
+<div class="overlay" id="runaway">
+  <h1>Belt still moving</h1>
+  <p id="runawaySpeed">Step off the belt.</p>
+  <p>The console has told the treadmill to stop and it has not.<br>
+     Press the red stop button, or pull the safety key.</p>
 </div>
 
 <!-- ======================= COACH ====================================== -->
@@ -2012,6 +2029,16 @@ window.render = function(s){
   const mode = (s.mode || 'welcome').toLowerCase();
   showScreen(mode);
   $('dmk').classList.toggle('show', !!s.dmk);
+  /* A runaway outranks the safety key when both are somehow true: the key
+     being out means the belt has already stopped, and this means it has not.
+     This interface reads the raw frame rather than the shared state, so the
+     field is the one Kotlin sends. */
+  const runawayKph = s.runawayKph == null ? 0 : s.runawayKph;
+  $('runaway').classList.toggle('show', runawayKph > 0 && !s.dmk);
+  if (runawayKph > 0) {
+    $('runawaySpeed').textContent = 'Step off the belt — still turning at ' +
+      displaySpeed(runawayKph, IMPERIAL) + (IMPERIAL ? ' mph' : ' km/h') + '.';
+  }
 
   if (mode === 'summary'){ renderSummary(s); return; }
   if (mode === 'welcome') return;

@@ -212,6 +212,15 @@ class MainActivity : Activity() {
         const val STOPPED_KPH = 0.3
 
         /**
+         * Polls of a refused `KPH 0` before a runaway is asked to crawl instead.
+         *
+         * 25 at a fifth of a second each, so five seconds of trying to do the
+         * obviously right thing before settling for the thing that works. See
+         * [crawlKph].
+         */
+        const val CRAWL_AFTER_NAGS = 25
+
+        /**
          * Metres the odometer must advance before an idle belt counts as moving.
          *
          * Distance is whole metres, so one of them can appear at the boundary of
@@ -640,6 +649,17 @@ class MainActivity : Activity() {
 
     /** How many times we have had to re-command a stop. Reset when it takes. */
     @Volatile private var stopNags = 0
+
+    /**
+     * The speed a runaway belt is turning at, for [Snapshot.runawayKph]. Zero
+     * when there is no runaway.
+     *
+     * Held separately from [runawayPeakKph], which is the worst seen and is for
+     * the incident record. This one is what the alarm on screen is reading, so
+     * it has to be *now* rather than the high-water mark — a belt that has been
+     * commanded down to a crawl should say so.
+     */
+    @Volatile private var runawayKph = 0.0
 
     /** Wall clock and uptime at which the current runaway was first seen. */
     private var runawayAtWall = 0L
@@ -1919,6 +1939,7 @@ class MainActivity : Activity() {
         if (Session.isMoving(session)) return null
         if (actualKph < STOPPED_KPH) return null
         stopNags++
+        runawayKph = actualKph
         runawayPeakKph = maxOf(runawayPeakKph, actualKph)
         if (stopNags == 1) {
             runawayAtWall = System.currentTimeMillis()
@@ -1934,26 +1955,73 @@ class MainActivity : Activity() {
             Log.w(TAG, "belt still moving at ${"%.1f".format(actualKph)} km/h " +
                     "outside a workout — commanding stop again (attempt $stopNags)")
         }
-        // One field per frame, alternating, because the net must not depend on
-        // being right about which of the two a given board accepts.
-        //
-        // It has now been wrong in both directions. It began as
-        // {KPH 0, WORKOUT_MODE Pause} together, which this board rejects
-        // outright — a frame is refused whole over any one bad field. It was
-        // then narrowed to `KPH 0` alone on the theory that the mode was the
-        // problem; on this board `KPH 0` is the problem, because zero is below
-        // MIN_KPH and refused every single time. Either way the net nagged for
-        // ever and stopped nothing, which is the exact failure it exists to
-        // prevent.
-        //
-        // Alternating costs one extra poll — 200 ms — and needs no theory
-        // about the hardware. Pause goes first because it is what halts the
-        // belt on the board this runs on.
-        return if (stopNags % 2 == 1)
-            mapOf(FitPro.Field.WORKOUT_MODE to FitPro.Mode.PAUSE.toDouble())
-        else
-            mapOf(FitPro.Field.KPH to 0.0)
+        /*
+         * One field per frame, rotating, because the net must not depend on
+         * being right about which command a given board honours.
+         *
+         * It has been wrong three times now. It began as {KPH 0, WORKOUT_MODE
+         * Pause} together, which this board rejects outright — a frame is
+         * refused whole over any one bad field. It was narrowed to `KPH 0`
+         * alone on the theory that the mode was at fault; on this board `KPH 0`
+         * *is* the fault, because zero is below MIN_KPH and refused every
+         * single time. It then alternated Pause and KPH 0, which is what was
+         * running on 2026-09-12 when this happened:
+         *
+         *   10:42:01  workout ended — stopping the belt
+         *   10:42:03  belt still moving at 4.3 km/h — commanding stop (attempt 1)
+         *   10:42:03  board WorkoutMode -> 3 (pause)
+         *   10:44:07  belt still moving at 4.3 km/h — commanding stop (attempt 600)
+         *
+         * Read that third line. The board *accepted* Pause and reported itself
+         * paused, and the belt ran on at 4.3 km/h for two minutes and six
+         * hundred commands. Half of those commands were `KPH 0`, which this
+         * board refuses by definition, so the net was really sending one
+         * command — the one the board had already agreed to and ignored.
+         *
+         * So: rotate through three, and stop repeating a refusal.
+         *
+         *  1. **Pause.** What halts the belt on this board when it works.
+         *  2. **Idle**, in a frame of its own. ICON's own console makes this
+         *     transition to bring a board out of any non-idle state, and the
+         *     protocol notes verify `Kph=0` + `WorkoutMode=Idle` stopping the
+         *     belt end to end. The old net never once tried it.
+         *  3. **A speed.** Zero while there is any chance the board takes it;
+         *     once it has refused for [CRAWL_AFTER_NAGS] polls, the board's own
+         *     floor instead — see [crawlKph].
+         *
+         * None of this can *guarantee* a stop. A board that reports Pause while
+         * its motor turns is lying, and no sequence of writes is a remedy for
+         * that. Which is why the louder half of this fix is [Snapshot.runaway]
+         * and the alarm every interface now raises: the person on the belt is
+         * the only reliable actuator left, and until today the console was
+         * arguing with the board in a log file nobody was reading.
+         */
+        return when (stopNags % 3) {
+            1 -> mapOf(FitPro.Field.WORKOUT_MODE to FitPro.Mode.PAUSE.toDouble())
+            2 -> mapOf(FitPro.Field.WORKOUT_MODE to FitPro.Mode.IDLE.toDouble())
+            else -> mapOf(FitPro.Field.KPH to crawlKph())
+        }
     }
+
+    /**
+     * The speed to command while a belt refuses to stop.
+     *
+     * Zero, at first, because zero is what is meant and some boards take it.
+     *
+     * Then the board's own minimum. This looks wrong — it is a stop routine
+     * commanding motion — so the reasoning had better be good: on this board
+     * zero is *below* [minKph] and is therefore refused every time it is sent,
+     * which makes it worth nothing. The floor is 0.8 km/h and is accepted. A
+     * belt at 0.8 km/h is a slow shuffle that somebody can step off; a belt at
+     * the 4.3 km/h that was seen will take them off it. Given the choice
+     * between a command that is refused and one that is obeyed and helps, the
+     * refused one is not the safe option merely because its number is lower.
+     *
+     * Only after [CRAWL_AFTER_NAGS] polls, so a board that would have honoured
+     * zero is given every chance to first.
+     */
+    private fun crawlKph(): Double =
+        if (stopNags < CRAWL_AFTER_NAGS || minKph <= 0.0) 0.0 else minKph
 
     /**
      * The deck must not be left tilted when the walk is over.
@@ -3089,6 +3157,7 @@ class MainActivity : Activity() {
                     "peak ${"%.1f".format(runawayPeakKph)} km/h, $stopNags nag(s)")
             mqtt.publishRunaway(false, runawayPeakKph, stamp, ran)
             runawayPeakKph = 0.0
+            runawayKph = 0.0
             stopNags = 0
         }
         val incline = v[FitPro.Field.ACTUAL_INCLINE] ?: 0.0
@@ -3221,6 +3290,7 @@ class MainActivity : Activity() {
             session = session,
             workout = workout,
             dmk = dmk,
+            runawayKph = runawayKph,
             ramping = rampReason,
             phaseLeft = phaseLeftSec(),
             phaseTotal = phaseTotalMs / 1000.0,
@@ -3553,6 +3623,9 @@ class MainActivity : Activity() {
             session = session,
             workout = workout,
             dmk = dmk,
+            // Live, like dmk and the session: an alarm must not wait for the
+            // next good board frame to appear or to clear.
+            runawayKph = runawayKph,
             plan = planName,
             segments = steps.size,
             // Same rule accumulate() uses, so a repaint between two polls

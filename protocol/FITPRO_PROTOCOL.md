@@ -387,6 +387,39 @@ Worth separating the two halves in any console that has a screen of its own: wak
 one gesture, and waking a machine spins a motor controller up in whatever room it is standing in.
 ICON's own console asked before doing the second, which is the right instinct.
 
+## A `Pause` this board accepts and then ignores
+
+Worth its own heading, because it breaks the assumption everything else here
+rests on: that a frame the board acknowledges is a frame the board acted on.
+
+On 2026-09-12, after a workout ended:
+
+```
+10:42:01  workout ended — stopping the belt
+10:42:03  belt still moving at 4.3 km/h outside a workout — commanding stop (attempt 1)
+10:42:03  board WorkoutMode -> 3 (pause)      <- accepted, and reported back
+10:44:07  belt still moving at 4.3 km/h outside a workout — commanding stop (attempt 600)
+```
+
+The board took the `Pause`, reported mode 3 on the next read, and its motor ran
+for a further two minutes. Five other endings the same morning stopped the belt
+on the first or second command, so it is intermittent rather than a mode the
+board refuses.
+
+Two things follow for anyone implementing against this protocol:
+
+1. **Read `ActualKph`; do not trust the acknowledgement.** A write that was
+   accepted, and a state that was read back as changed, are both still not
+   evidence that the belt slowed down.
+2. **`Kph = 0` is refused outright on this board**, because zero is below the
+   `MinKph` the machine reports (0.8). A stop routine built on it repeats a
+   frame that can never succeed. `MinKph` itself *is* accepted, and a belt at
+   0.8 km/h is a great deal safer than one at 4.3.
+
+Cause unknown. It is below the protocol — the frame was well formed, accepted
+and answered — so it is either the motor controller or something between it and
+the board. Anyone who finds out should add it here.
+
 ## Remaining unknowns
 
 1. Whether FitPro**2** framing differs from FitPro**1**; the console answers FitPro1 framing, so
