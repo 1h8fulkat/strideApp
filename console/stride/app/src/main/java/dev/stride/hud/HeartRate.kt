@@ -170,6 +170,24 @@ class HeartRate(
     /** True while hunting for [wanted] to advertise — see [seek]. */
     @Volatile private var seeking = false
 
+    /**
+     * Which hunt is the current one.
+     *
+     * [seek] posts a timer to end its own scan, and that timer used to identify
+     * the scan it belonged to only by the [seeking] flag — which the *next*
+     * hunt sets true again. So an expiring timer could end a later, unrelated
+     * scan. Measured on 2026-09-12: a hunt started at 14:11:22.972 for pairing,
+     * satisfied a moment later; the watchdog started a fresh one at 14:12:10.614
+     * when the link went quiet; and the first one's timer fired at 14:12:23.017
+     * — 60.045 s after it was posted, and 12 s into a hunt that was supposed to
+     * have a minute. The strap was pushed onto the five-minute background path
+     * for no reason.
+     *
+     * Harmless while hunts were rare. The watchdog makes them ordinary, so
+     * overlapping timers are now the normal case rather than the odd one.
+     */
+    private var seekGen = 0
+
     @Volatile private var lastBpm = 0
     @Volatile private var lastAt = 0L
 
@@ -378,13 +396,16 @@ class HeartRate(
             return
         }
         seeking = true
+        val gen = ++seekGen
         Log.i(FitProConnection.TAG, "hr: looking for $address")
 
         // One start and one stop per seek. Android silently throttles an app
         // that starts more than five scans in thirty seconds, and a throttled
         // scan fails the same way an absent strap does.
         handler.postDelayed({
-            if (!seeking) return@postDelayed
+            // Mine, and still running. See [seekGen] for what happens without
+            // that first half of the question.
+            if (!seeking || gen != seekGen) return@postDelayed
             stopSeek()
             if (wanted.isNotBlank() && gatt == null && !busy()) {
                 Log.i(FitProConnection.TAG, "hr: not advertising, waiting in the background")
