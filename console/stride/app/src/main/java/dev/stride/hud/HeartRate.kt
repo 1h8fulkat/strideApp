@@ -131,6 +131,27 @@ class HeartRate(
          * class of mistake as a stale sensor holding yesterday's step count.
          */
         const val STALE_MS = 10_000L
+
+        /**
+         * How long a *connected* strap may deliver nothing before the link is
+         * treated as dead regardless of what the stack says. See [watchdog].
+         *
+         * A strap notifies about once a second, so this is thirty missed
+         * notifications — long enough that no slow reporter trips it, short
+         * enough to be back before the walk it was wanted for is over.
+         */
+        const val SILENT_LINK_MS = 30_000L
+
+        /** How often [watchdog] looks. Cheap; it is two field reads. */
+        const val LINK_CHECK_MS = 5_000L
+
+        /**
+         * How long to wait before asking again for a hunt the radio refused.
+         *
+         * Long enough not to spin while somebody is riding Zwift, short enough
+         * that putting a strap on part-way through a session still finds it.
+         */
+        const val BUSY_RETRY_MS = 30_000L
     }
 
     data class Found(val address: String, val name: String, val rssi: Int)
@@ -151,6 +172,22 @@ class HeartRate(
 
     @Volatile private var lastBpm = 0
     @Volatile private var lastAt = 0L
+
+    /**
+     * When a measurement notification last *arrived* — valid or not.
+     *
+     * Deliberately not [lastAt], which is the last usable reading and is what
+     * [bpm] ages out for the display. A strap that is connected but off the
+     * chest still notifies, with a zero in it, and [parse] drops those: keying
+     * the watchdog on [lastAt] would declare a perfectly healthy link dead
+     * every time somebody put the strap down.
+     *
+     * What this measures is whether the radio link is carrying anything at all.
+     */
+    @Volatile private var lastFrameAt = 0L
+
+    /** One watchdog in flight at a time, not one per connection. */
+    private var watching = false
     @Volatile var battery = -1
         private set
     @Volatile var connected = false
@@ -181,6 +218,18 @@ class HeartRate(
     /** The current pulse, or 0 if there has not been one recently. */
     fun bpm(): Int =
         if (lastBpm > 0 && SystemClock.elapsedRealtime() - lastAt < STALE_MS) lastBpm else 0
+
+    /**
+     * Is the link actually carrying anything?
+     *
+     * Not the same question as `connected`, which is the platform's opinion and
+     * can be stale — see [watchdog]. Not the same question as [bpm] either: a
+     * strap off the chest is delivering frames and no pulse, and that link is
+     * perfectly healthy.
+     */
+    private fun delivering(): Boolean =
+        connected && lastFrameAt > 0L &&
+                SystemClock.elapsedRealtime() - lastFrameAt < SILENT_LINK_MS
 
     // --- scanning -------------------------------------------------------------
 
@@ -254,11 +303,18 @@ class HeartRate(
      * time, and the only escape was to change the address — which is precisely
      * what forgetting the strap and pairing it again does. Keyed on [connected]
      * the guard still protects a live link and no longer protects a dead one.
+     *
+     * Except that [connected] can be wrong in the same direction — see
+     * [watchdog] — and then this guard was back to refusing the one thing that
+     * would have fixed it. So it asks whether the link is *delivering*, not
+     * whether the stack thinks it exists. The watchdog gets there on its own
+     * within [SILENT_LINK_MS]; somebody who has walked over and pressed the
+     * button should not have to wait for it.
      */
     @SuppressLint("MissingPermission")
     fun connect(address: String) {
         if (address.isBlank()) return
-        if (address == wanted && (connected || seeking)) return
+        if (address == wanted && (delivering() || seeking)) return
         disconnect()
         wanted = address
         seek()
@@ -297,7 +353,16 @@ class HeartRate(
         // Put the strap on before pairing and you get both. Otherwise the
         // thing somebody is looking at wins over the thing that might be in a
         // drawer.
-        if (gatt == null && busy()) return
+        if (gatt == null && busy()) {
+            // Not "give up" — "not now". This used to simply return, and a
+            // return here is the end of the line: every other path into seek()
+            // is a one-shot posted by whatever just failed, so a hunt refused
+            // while the radio was busy was a strap lost until the next
+            // disconnect or restart. Ask again when the client has gone.
+            handler.postDelayed({ if (wanted.isNotBlank() && gatt == null) seek() },
+                               BUSY_RETRY_MS)
+            return
+        }
         val scanner = adapter?.bluetoothLeScanner ?: return
 
         val filter = ScanFilter.Builder().setDeviceAddress(address).build()
@@ -376,6 +441,68 @@ class HeartRate(
     }
 
     /**
+     * Notice a link that is up in name only, and throw it away.
+     *
+     * **Every recovery path in this class is driven by the platform telling us
+     * the strap disconnected, and the platform does not always say so.** Turn a
+     * strap off and on again and Android can keep the GATT client in
+     * `STATE_CONNECTED` with nothing behind it — the peer is gone, no
+     * notification ever arrives again, and no disconnect callback is delivered.
+     *
+     * Reported on 2026-09-12: pair the strap and the pulse appears; power the
+     * strap off and back on and it never comes back until the strap is paired
+     * again. Every route back was shut: [seek] refuses while `gatt != null`,
+     * [giveBackgroundUpEventually] returns early while `connected`, and
+     * [connect] returns early for the address it already has while `connected`.
+     * All three were consulting the same field, and the field was wrong.
+     *
+     * So this watches the data instead of the claim, which is the same lesson
+     * the belt taught: a command the board acknowledged is not a belt that
+     * slowed down, and a socket the stack calls connected is not a strap that
+     * is sending anything. [lastFrameAt] is the evidence; the stack's opinion
+     * is not.
+     *
+     * Recycling rather than probing, because a GATT that has gone quiet does
+     * not come back — the client is closed and the hunt starts again, exactly
+     * as it does for a disconnect the platform *did* report.
+     *
+     * The cost: a strap left switched on, off the chest, that stops notifying
+     * rather than sending zeros will be reconnected every [SILENT_LINK_MS].
+     * That is radio churn for a strap nobody is wearing, which is worth less
+     * than a strap nobody can use.
+     */
+    private fun armWatchdog() {
+        if (watching) return
+        watching = true
+        handler.postDelayed(watchdog, LINK_CHECK_MS)
+    }
+
+    private val watchdog = object : Runnable {
+        @SuppressLint("MissingPermission")
+        override fun run() {
+            watching = false
+            if (wanted.isBlank()) return
+            val g = gatt
+            if (!connected || g == null) return        // a disconnect will drive it
+
+            val silent = SystemClock.elapsedRealtime() - lastFrameAt
+            if (lastFrameAt > 0L && silent > SILENT_LINK_MS) {
+                Log.w(FitProConnection.TAG,
+                    "hr: connected but nothing for ${silent / 1000}s — " +
+                            "the link is dead, going to look again")
+                connected = false
+                lastBpm = 0
+                lastFrameAt = 0L
+                try { g.close() } catch (e: SecurityException) { }
+                gatt = null
+                seek()
+                return
+            }
+            armWatchdog()
+        }
+    }
+
+    /**
      * Put a clock on a background connection, because nothing else will.
      *
      * See [BACKGROUND_GIVE_UP_MS]. The client is closed rather than kept and
@@ -409,6 +536,7 @@ class HeartRate(
         gatt = null
         connected = false
         lastBpm = 0
+        lastFrameAt = 0L
         battery = -1
     }
 
@@ -444,6 +572,13 @@ class HeartRate(
                 "hr: ${if (connected) "connected" else "disconnected"} (status $status)")
 
             if (connected) {
+                // The clock starts here rather than at the first notification,
+                // so a link that connects and never subscribes is caught too.
+                // That has happened: every failure path in
+                // onServicesDiscovered used to be silent, and the symptom was a
+                // strap that said "Connected" and never sent a beat.
+                lastFrameAt = SystemClock.elapsedRealtime()
+                armWatchdog()
                 discover(g, attempt = 1)
                 return
             }
@@ -510,13 +645,21 @@ class HeartRate(
 
         @Suppress("DEPRECATION")
         override fun onCharacteristicChanged(g: BluetoothGatt, ch: BluetoothGattCharacteristic) {
-            if (ch.uuid == MEASUREMENT) parse(ch.value)
+            if (ch.uuid != MEASUREMENT) return
+            lastFrameAt = SystemClock.elapsedRealtime()
+            parse(ch.value)
         }
 
         override fun onCharacteristicChanged(
             g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray
         ) {
-            if (ch.uuid == MEASUREMENT) parse(value)
+            if (ch.uuid != MEASUREMENT) return
+            // Here rather than in parse(), because the question this answers is
+            // "did anything arrive", and parse() throws away the frames that
+            // carry no pulse. Both overloads, because which one the platform
+            // calls depends on the API level.
+            lastFrameAt = SystemClock.elapsedRealtime()
+            parse(value)
         }
 
         @Suppress("DEPRECATION")

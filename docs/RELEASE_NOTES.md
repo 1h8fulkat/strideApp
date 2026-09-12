@@ -27,7 +27,18 @@ another room is a different decision.
 **Your heart strap and Zwift compete for the radio.** This console cannot scan
 for a strap and hold a Bluetooth connection at the same time, so STRIDE stops
 hunting for a strap while something is paired. A strap that is already
-connected is kept. Put it on before you pair and you get both.
+connected is kept. Put it on before you pair and you get both. A hunt refused
+for that reason is retried rather than abandoned — it used to be abandoned,
+which lost the strap until the next restart.
+
+**A strap switched off and on again comes back on its own.** It did not, and
+the workaround was to pair it a second time. Android can leave a Bluetooth
+connection in `STATE_CONNECTED` after the strap on the other end has gone —
+no disconnect is ever reported, so nothing went looking. The console now
+watches whether the link is *delivering* rather than whether the platform
+says it exists, and throws away a connection that has carried nothing for
+thirty seconds. Pressing pair again works immediately too, instead of being
+refused as already connected.
 
 Thanks to [ciarancoffey/nordictrack-ftms-bridge](https://github.com/ciarancoffey/nordictrack-ftms-bridge),
 which showed this console can be a Bluetooth peripheral at all.
