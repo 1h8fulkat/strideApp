@@ -185,6 +185,37 @@ class HeartRate(
     /** The address we are meant to be holding, blank when deliberately down. */
     @Volatile private var wanted = ""
 
+    /**
+     * The remembered name of the strap, and the only durable thing about some
+     * of them.
+     *
+     * A Galaxy Watch — and anything else using a **resolvable private
+     * address** — changes its Bluetooth address every few minutes by design.
+     * Four were seen for one watch inside eleven minutes on 2026-09-12:
+     * `45:9C:…`, `78:64:…`, `77:17:…`, `76:73:…`, every one of them with `01`
+     * in the top two bits of the first octet, which is precisely what says
+     * "this address is temporary".
+     *
+     * So [wanted] is a lead, not an identity, and a hunt filtered on it alone
+     * can never find such a device again. That is the whole reason pairing
+     * appeared to be the only cure: pairing scans for the *service* and takes
+     * whatever address is current, which is to say it re-learns the address
+     * rather than resetting anything.
+     *
+     * Resolving an RPA properly needs the identity key from bonding, which
+     * these straps do not require and this console does not do. The name is
+     * what is left, and it is enough: it is chosen by the device, it is in the
+     * advertisement, and "Galaxy Watch7 (64HA)" is not going to collide with
+     * somebody else's strap in a shed.
+     */
+    @Volatile private var wantedName = ""
+
+    /**
+     * Told when the strap turns up at an address other than the stored one, so
+     * the caller can write the new one down. See [wantedName].
+     */
+    var onAddressChanged: ((String) -> Unit)? = null
+
     /** True while hunting for [wanted] to advertise — see [seek]. */
     @Volatile private var seeking = false
 
@@ -348,11 +379,12 @@ class HeartRate(
      * button should not have to wait for it.
      */
     @SuppressLint("MissingPermission")
-    fun connect(address: String) {
+    fun connect(address: String, name: String = "") {
         if (address.isBlank()) return
-        if (address == wanted && (delivering() || seeking)) return
+        if (address == wanted && name == wantedName && (delivering() || seeking)) return
         disconnect()
         wanted = address
+        wantedName = name
         seek()
     }
 
@@ -401,11 +433,22 @@ class HeartRate(
         }
         val scanner = adapter?.bluetoothLeScanner ?: return
 
-        val filter = ScanFilter.Builder().setDeviceAddress(address).build()
+        /*
+         * Two filters, which a scan treats as "or": the address we last saw,
+         * and *any* heart rate service. The second is what finds a strap whose
+         * address has rotated — see [wantedName] — and costs nothing extra,
+         * since it rides along in the same scan. Which results are acceptable
+         * is decided in [seekCallback], not here.
+         */
+        val filters = ArrayList<ScanFilter>(2)
+        filters.add(ScanFilter.Builder().setDeviceAddress(address).build())
+        if (wantedName.isNotBlank()) {
+            filters.add(ScanFilter.Builder().setServiceUuid(ParcelUuid(SERVICE)).build())
+        }
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
         try {
-            scanner.startScan(listOf(filter), settings, seekCallback)
+            scanner.startScan(filters, settings, seekCallback)
         } catch (e: SecurityException) {
             Log.w(FitProConnection.TAG, "hr: no scan permission to seek")
             return
@@ -447,8 +490,27 @@ class HeartRate(
         @SuppressLint("MissingPermission")
         override fun onScanResult(type: Int, result: ScanResult) {
             if (!seeking || gatt != null) return
+            val dev = result.device ?: return
+
+            // The address if we recognise it, otherwise the name. The scan is
+            // filtered on "any heart rate service" as well as on the address,
+            // so this is where somebody else's strap is turned away.
+            val byAddress = dev.address == wanted
+            val byName = wantedName.isNotBlank() && nameOf(dev, result) == wantedName
+            if (!byAddress && !byName) return
+
+            if (!byAddress) {
+                // Write it down: the next hunt then starts with a lead that is
+                // current, and a direct connect to a known address is much the
+                // faster path when it happens to still be valid.
+                Log.i(FitProConnection.TAG,
+                    "hr: $wantedName is at ${dev.address} now, not $wanted — " +
+                            "its address rotates")
+                wanted = dev.address
+                onAddressChanged?.invoke(dev.address)
+            }
             stopSeek()
-            open(result.device, autoConnect = false)
+            open(dev, autoConnect = false)
         }
 
         override fun onScanFailed(code: Int) {
@@ -463,6 +525,15 @@ class HeartRate(
             }, DISCOVERY_RETRY_MS)
         }
     }
+
+    /** Whatever this device calls itself, from the two places it might say. */
+    @SuppressLint("MissingPermission")
+    private fun nameOf(dev: BluetoothDevice, result: ScanResult): String =
+        try {
+            dev.name ?: result.scanRecord?.deviceName ?: ""
+        } catch (e: SecurityException) {
+            ""
+        }
 
     /** Open the GATT client against a device we have, however we came by it. */
     @SuppressLint("MissingPermission")
@@ -566,6 +637,7 @@ class HeartRate(
     @SuppressLint("MissingPermission")
     fun disconnect() {
         wanted = ""
+        wantedName = ""
         stopSeek()
         try {
             gatt?.close()

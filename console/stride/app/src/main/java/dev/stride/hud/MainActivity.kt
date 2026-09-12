@@ -376,7 +376,15 @@ class MainActivity : Activity() {
     /* The strap hunt is held off while an FTMS client is subscribed: this
        console's radio cannot scan as a central and hold a peripheral link at
        the same time. See HeartRate.seek. */
-    private val strap by lazy { HeartRate(this) { ftms.listeners > 0 } }
+    private val strap by lazy {
+        HeartRate(this) { ftms.listeners > 0 }.apply {
+            // A strap whose address rotates turns up somewhere new and is
+            // recognised by name — see HeartRate.wantedName. Writing the new
+            // address down means the next hunt has a current lead, and a
+            // console that restarts does not have to fall back to the name.
+            onAddressChanged = { addr -> cfg.saveStrap(addr, cfg.hrName()) }
+        }
+    }
     /** The treadmill as a standard Bluetooth fitness machine, for Zwift and
      *  friends. Telemetry only, and silent on a radio that cannot advertise. */
     private val ftms by lazy { Ftms(this) }
@@ -1469,7 +1477,7 @@ class MainActivity : Activity() {
         @JavascriptInterface fun hrPair(address: String, name: String) {
             strap.stopScan()
             cfg.saveStrap(address, name)
-            strap.connect(address)
+            strap.connect(address, name)
             Log.i(TAG, "hr: pairing with $name")
         }
 
@@ -1705,7 +1713,7 @@ class MainActivity : Activity() {
     /** Hold a connection only when a strap could actually be used. */
     private fun applyStrap() {
         if (cfg.hrSource() == "grips" || cfg.hrAddr().isBlank()) strap.disconnect()
-        else strap.connect(cfg.hrAddr())
+        else strap.connect(cfg.hrAddr(), cfg.hrName())
     }
 
     /**
