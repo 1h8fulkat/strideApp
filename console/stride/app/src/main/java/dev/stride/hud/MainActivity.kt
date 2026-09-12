@@ -2276,11 +2276,22 @@ class MainActivity : Activity() {
      * trailhead and finished that far short of the far end.
      *
      * Called from all three things that can cut a warm-up short without
-     * finishing it: STOP, the safety key, and COOL DOWN — see [beginCooldown].
-     * The warm-up is equally unfinished in each case. The key pull deliberately
-     * forgets the *pace*, which is a different question and answers itself:
-     * [Bridge.resume] falls back to [Settings.warmupKph] when there is no pace
-     * to return to, and in a warm-up that is the right pace anyway.
+     * finishing it, though only two of them can actually happen in one:
+     *
+     *  * **COOL DOWN** — see [beginCooldown]. The common case, and the one
+     *    that produced the 13 m bug.
+     *  * **The safety key** — a pull lands in PAUSED like any other stop.
+     *  * **[Bridge.pause]** — defensive only. Every interface puts SKIP in the
+     *    lead button during a warm-up, never PAUSE (`case 'warmup':
+     *    Stride.skipWarmup()`, in all five of them), so there is no way to
+     *    pause out of a warm-up from the screen. Kept because the call is one
+     *    line and the day that button changes should not be the day the
+     *    warm-up silently starts being charged to the workout again.
+     *
+     * The key pull deliberately forgets the *pace*, which is a different
+     * question and answers itself: [Bridge.resume] falls back to
+     * [Settings.warmupKph] when there is no pace to return to, and in a warm-up
+     * that is the right pace anyway.
      */
     private fun holdWarmup() {
         if (session == Session.WARMUP) {
