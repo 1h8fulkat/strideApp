@@ -1105,6 +1105,22 @@ class MainActivity : Activity() {
              */
             val toWarmup = pausedInWarmup
             val warmLeftMs = pausedWarmupLeftMs
+            /*
+             * Bank the time already served before restarting the clock.
+             *
+             * Out of a PAUSED there is nothing to bank — [pause] did it on the
+             * way in, and the session has not been moving since. Out of a
+             * COOLDOWN the clock never stopped, so `activeSince = now` alone
+             * discards everything from the start of the walk to this press.
+             *
+             * Which it did. On 2026-09-12 a walk of 49 s — warm-up, COOL DOWN
+             * at 15 s, RESUME at 18 s, ended at 49 s — was summarised as
+             * "63 m in 31 s": the 31 s being the interval after the RESUME and
+             * the 63 m being all of it, since the distance is a board counter
+             * and was never in doubt. A summary at odds with itself, claiming a
+             * 7.3 km/h average off a belt that never passed 4.8.
+             */
+            if (Session.isMoving(session)) accumulatedMs += now - activeSince
             session = if (toWarmup) Session.WARMUP else Session.ACTIVE
             activeSince = now
             phaseEndsAt = if (toWarmup) now + warmLeftMs else 0L
