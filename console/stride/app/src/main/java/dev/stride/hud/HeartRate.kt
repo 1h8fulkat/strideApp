@@ -113,14 +113,32 @@ class HeartRate(
          * strap and pair it again, because changing the address is the one
          * thing that got past the guard in [connect].
          *
-         * So the background attempt is given a long but finite go, and then the
-         * cheap-and-patient mode and the fast-and-expensive one simply take
-         * turns for as long as a strap is wanted. Five minutes because the
-         * background connection usually does work and is much the kinder of the
-         * two on the radio; the seek is what catches the strap that was in a
-         * drawer when the walk started.
+         * So the background attempt is given a finite go, and then the
+         * cheap-and-patient mode and the fast-and-expensive one take turns for
+         * as long as a strap is wanted.
+         *
+         * **Thirty seconds, and it used to be five minutes.** The reasoning for
+         * five was that the background connection "usually does work and is
+         * much the kinder of the two on the radio". The first half is not borne
+         * out. Pairing through this path was measured at 98–108 seconds, and on
+         * 2026-09-12 a watch whose sharing was switched back on during a
+         * background window was not found at all: the console opened the client
+         * at 14:14:37 and then did nothing whatever for five minutes, because
+         * it had committed to the slow path and stopped looking.
+         *
+         * The scan is the half that works — a device advertises about once a
+         * second and a filtered scan finds it almost immediately. So the split
+         * is now heavily in the scan's favour: a minute of looking, half a
+         * minute of waiting, repeat. The worst case for somebody switching a
+         * strap on is half a minute rather than five.
+         *
+         * That is more radio than before, and deliberately. It only runs while
+         * a strap is wanted and not connected, [seek] still stands aside for a
+         * Bluetooth client that is actually being used, and one scan every
+         * ninety seconds is nowhere near the five-in-thirty-seconds that gets
+         * an app throttled.
          */
-        const val BACKGROUND_GIVE_UP_MS = 5 * 60_000L
+        const val BACKGROUND_GIVE_UP_MS = 30_000L
 
         /**
          * A reading older than this is not a reading.
