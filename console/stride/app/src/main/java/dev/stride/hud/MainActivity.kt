@@ -1090,15 +1090,20 @@ class MainActivity : Activity() {
             val now = SystemClock.elapsedRealtime()
             /*
              * Back into the warm-up, with what was left of it, if that is what
-             * the pause interrupted — see [holdWarmup].
+             * was interrupted — see [holdWarmup].
              *
-             * Only ever out of a PAUSED. RESUME pressed inside a *cool-down*
-             * means "I have changed my mind about finishing", and what that
-             * goes back to is the workout; a walk cannot be paused out of a
-             * cool-down anyway, since the cool-down's own overlay is what is
-             * on screen and it offers RESUME and END rather than STOP.
+             * Whichever phase this is coming out of. RESUME inside a cool-down
+             * does mean "I have changed my mind about finishing", but what it
+             * goes back to is only *the workout* if the workout had started;
+             * from a cool-down that interrupted the warm-up there is nothing
+             * yet to go back to, and dropping into ACTIVE there is what left a
+             * route starting 13 m along with the warm-up charged to it.
+             *
+             * No guard on the session needed: this is only reached from PAUSED
+             * or COOLDOWN, and `pausedInWarmup` is false unless a warm-up was
+             * genuinely interrupted.
              */
-            val toWarmup = session == Session.PAUSED && pausedInWarmup
+            val toWarmup = pausedInWarmup
             val warmLeftMs = pausedWarmupLeftMs
             session = if (toWarmup) Session.WARMUP else Session.ACTIVE
             activeSince = now
@@ -1117,6 +1122,9 @@ class MainActivity : Activity() {
             )
             Log.i(TAG, "resuming at ${"%.1f".format(targetKph)} km/h" +
                     when {
+                        toWarmup && fromCooldown ->
+                            " (out of the cool-down and back into the warm-up, " +
+                                    "${warmLeftMs / 1000}s left)"
                         toWarmup -> " (back into the warm-up, ${warmLeftMs / 1000}s left)"
                         fromCooldown -> " (out of the cool-down)"
                         else -> ""
@@ -2251,12 +2259,12 @@ class MainActivity : Activity() {
      * metres are route already walked: the walk resumed some way past the
      * trailhead and finished that far short of the far end.
      *
-     * Called from both things that can stop a walk that is moving — STOP and
-     * the safety key. The warm-up is equally unfinished either way. The key
-     * pull deliberately forgets the *pace*, which is a different question and
-     * answers itself: [Bridge.resume] falls back to [Settings.warmupKph] when
-     * there is no pace to return to, and in a warm-up that is the right pace
-     * anyway.
+     * Called from all three things that can cut a warm-up short without
+     * finishing it: STOP, the safety key, and COOL DOWN — see [beginCooldown].
+     * The warm-up is equally unfinished in each case. The key pull deliberately
+     * forgets the *pace*, which is a different question and answers itself:
+     * [Bridge.resume] falls back to [Settings.warmupKph] when there is no pace
+     * to return to, and in a warm-up that is the right pace anyway.
      */
     private fun holdWarmup() {
         if (session == Session.WARMUP) {
@@ -2272,8 +2280,8 @@ class MainActivity : Activity() {
     /**
      * There is no warm-up to come back to.
      *
-     * Said by everything that starts a warm-up, ends one, or starts a walk —
-     * four places, which is why it is a function. A stale remainder is not a
+     * Said by everything that starts a warm-up, ends one, or starts a walk,
+     * which is why it is a function. A stale remainder is not a
      * harmless leftover: it would put the *next* walk back into a warm-up on
      * its first RESUME.
      */
@@ -2297,6 +2305,17 @@ class MainActivity : Activity() {
      * walking the thing to its end is the point of choosing it.
      */
     private fun beginCooldown(why: String) {
+        // Before the phase is replaced. A cool-down can interrupt a warm-up —
+        // COOL DOWN is on screen throughout one — and RESUME out of it then
+        // owes the walker the rest of that warm-up, for exactly the reasons in
+        // holdWarmup. Observed on 2026-09-12: a route warmed up for 8 s, COOL
+        // DOWN, RESUME four seconds later, and the route opened at "segment
+        // 1/30 at 13 m" instead of 0 m — 13 m of trailhead never walked, and
+        // 13 m short at the far end.
+        //
+        // The other two callers are always ACTIVE, so for them this is the
+        // else branch and a no-op.
+        holdWarmup()
         val now = SystemClock.elapsedRealtime()
         // Coming out of a pause the clock is already stopped; restart it so
         // the cool-down is counted like any other part of the workout.
