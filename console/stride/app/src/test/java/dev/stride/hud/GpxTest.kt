@@ -221,6 +221,53 @@ class GpxTest {
         }
     }
 
+    /**
+     * A DOCTYPE parses, and an external entity is not fetched.
+     *
+     * Both halves matter, and the first one is a scar. The textbook hardening
+     * for this is `setFeature("...disallow-doctype-decl", true)`, which is a
+     * Xerces feature that Android's parser does not implement — so it threw on
+     * every file on the real console while passing here, because the JVM these
+     * tests run on does implement it. Three routes failed at the first boot
+     * after install with "nothing converted".
+     *
+     * So: no reliance on a feature flag, and a test whose result means the same
+     * thing on both parsers.
+     */
+    @Test
+    fun `a doctype is tolerated and an external entity is never fetched`() {
+        val perMetreDeg = Math.toDegrees(1.0 / 6371008.8)
+        val pts = StringBuilder()
+        var m = 0
+        while (m <= 600) {
+            pts.append("<trkpt lat=\"0.0\" lon=\"")
+               .append("%.9f".format(m * perMetreDeg))
+               .append("\"><ele>").append(100 + m / 100.0).append("</ele></trkpt>")
+            m += 10
+        }
+
+        // A DOCTYPE with an entity pointing at a local file, used in a element
+        // we read. Exporters really do emit doctypes; this one also tries to
+        // read /etc/hostname on the way past.
+        val xxe = "<?xml version=\"1.0\"?>" +
+            "<!DOCTYPE gpx [<!ENTITY secret SYSTEM \"file:///etc/hostname\">]>" +
+            "<gpx><trk><name>&secret;</name><trkseg>" + pts + "</trkseg></trk></gpx>"
+
+        val r = Gpx.convert("doctype.gpx", xxe.toByteArray(), floor, ceiling)
+
+        // Parsed rather than thrown: this is the half that regressed.
+        assertTrue("a doctype cost us the route", r.distanceM > 500)
+        assertEquals("Doctype", r.name)
+
+        // And nothing was read off the filesystem. The name comes from the
+        // filename rather than the document, so the entity had nowhere to
+        // surface anyway — but the resolver is what makes that true rather
+        // than lucky, and a fetch would show up as a hang or a throw.
+        val json = Gpx.json(listOf(r))
+        assertTrue("something that is not route data reached the payload",
+                   !json.contains("secret") && !json.contains("ENTITY"))
+    }
+
     @Test
     fun `the payload is the shape Routes and the page already read`() {
         val r = Gpx.convert("rolling-loop-5k.gpx",

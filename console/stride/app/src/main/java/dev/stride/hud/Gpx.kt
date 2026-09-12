@@ -105,13 +105,34 @@ object Gpx {
      * `tag.endswith` is in.
      */
     private fun trackpoints(xml: ByteArray): List<Point> {
-        val doc = DocumentBuilderFactory.newInstance().apply {
+        val builder = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = false
-            // A GPX file is data from a phone. It has no business naming
-            // entities or pulling in a DTD from the network.
-            setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+            // A GPX file is data from a phone, fetched over the network from a
+            // folder anybody with Home Assistant can write to. It has no
+            // business naming entities or pulling in a DTD from anywhere.
             isExpandEntityReferences = false
-        }.newDocumentBuilder().parse(ByteArrayInputStream(xml))
+        }.newDocumentBuilder()
+
+        /*
+         * Refuse every external entity, by resolving them all to nothing.
+         *
+         * This used to be `setFeature("...disallow-doctype-decl", true)`, which
+         * is the textbook answer and threw `ParserConfigurationException` on
+         * every file on the actual console: that is a Xerces feature and
+         * Android's parser does not implement it. The unit tests could not have
+         * caught it — the JVM they run on *does* implement it — so all three
+         * routes failed at the first boot after install and the log said
+         * "nothing converted".
+         *
+         * An EntityResolver is on both platforms and does the part that
+         * matters. It is also better than the feature it replaces in one way:
+         * a DOCTYPE is now tolerated rather than fatal, and exporters do emit
+         * them. What cannot happen is an entity being *fetched*.
+         */
+        builder.setEntityResolver { _, _ ->
+            org.xml.sax.InputSource(java.io.StringReader(""))
+        }
+        val doc = builder.parse(ByteArrayInputStream(xml))
 
         val all = doc.getElementsByTagName("*")
         val out = ArrayList<Point>(all.length / 4)
