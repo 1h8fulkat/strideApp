@@ -27,6 +27,13 @@
 >   path-ahead view this console has always drawn; the elevation strip is there
 >   either way. The console fetches and caches its own tiles, so a route walked
 >   twice only costs the network once. See [docs/ROUTE_MAP.md](docs/ROUTE_MAP.md).
+> * **A route is warmed up to and cooled down from.** Picking one off My routes
+>   starts the same warm-up a manual walk gets — same length, same pace, SKIP
+>   when you are ready — and the route itself starts from zero metres when that
+>   ends, so it is walked in full. Reaching the end eases down through the same
+>   cool-down COOL DOWN gives, instead of dropping from route pace to a stop.
+>   Guided templates still skip both: they open with a settle segment of their
+>   own, where a route opens on whatever the trailhead happens to be.
 > * **[docs/DOCKER.md](docs/DOCKER.md)** — build and deploy with nothing
 >   installed but Docker.
 

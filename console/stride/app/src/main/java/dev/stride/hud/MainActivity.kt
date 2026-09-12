@@ -554,6 +554,18 @@ class MainActivity : Activity() {
      */
     @Volatile private var routeLooped = false
 
+    /**
+     * Whether the route has been walked to its end.
+     *
+     * Reaching the end starts the cool-down rather than the summary, and a
+     * cool-down is a phase RESUME can come back out of — which lands back in
+     * [routeTick] with the route still finished. Without this the walker gets a
+     * fresh countdown for pressing RESUME, which is the opposite of what they
+     * asked for. Once the route is done it stays done, and whatever is walked
+     * past it is an ordinary walk that ends on END.
+     */
+    @Volatile private var routeFinished = false
+
     @Volatile private var planSteps: List<Plan.Step> = emptyList()
     @Volatile private var stepIndex = -1
 
@@ -841,16 +853,11 @@ class MainActivity : Activity() {
             workout = WORKOUT
             clearPlan()
             resetSession()
-            session = Session.WARMUP
-            activeSince = SystemClock.elapsedRealtime()
-            phaseEndsAt = activeSince + cfg.warmupMs()
-            phaseTotalMs = cfg.warmupMs()
             // Straight to the warm-up pace, not a ramp towards it — see
             // [startKph]. The mode still travels on its own and ahead of the
             // speed: the board ignores a KPH write while the console is IDLE,
             // and the poll loop's split is what guarantees that order.
-            targetKph = startKph()
-            rampReason = ""
+            beginWarmup()
             pendingWrite = mapOf(
                 FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble(),
                 FitPro.Field.KPH to targetKph,
@@ -966,14 +973,24 @@ class MainActivity : Activity() {
             lastInclineMoveAt = 0L
 
             workout = WORKOUT
+            routeFinished = false
             resetSession()
-            session = Session.ACTIVE
-            activeSince = SystemClock.elapsedRealtime()
-            phaseEndsAt = 0L
-            phaseTotalMs = 0L
-            targetKph = startKph()
+            // A route gets the warm-up a manual walk gets, and the same one:
+            // same length, same pace, same SKIP, and [beginWorkout] asking the
+            // same [Settings.carryWarmup] question at the end of it — see
+            // [beginWarmup], which both callers share so the two cannot drift.
+            //
+            // Not the reasoning [chooseGuided] gives for skipping it. A
+            // template opens with a flat settle segment of its own, so warming
+            // up as well would be warming up twice; a route's first segment is
+            // the actual ground at the trailhead, and on a real route that can
+            // be the steepest part of the walk.
+            //
+            // The route itself starts from zero metres when the warm-up ends,
+            // so it is walked in full rather than beginning wherever the
+            // warm-up's metres had got to — again [beginWorkout].
+            beginWarmup()
             targetGrade = 0.0
-            rampReason = ""
             pendingWrite = mapOf(
                 FitPro.Field.GRADE to 0.0,
                 FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble(),
@@ -1094,39 +1111,7 @@ class MainActivity : Activity() {
                 repaint()
                 return
             }
-            val now = SystemClock.elapsedRealtime()
-            // Coming out of a pause the clock is already stopped; restart it so
-            // the cool-down is counted like any other part of the workout.
-            if (!Session.isMoving(session)) activeSince = now
-            session = Session.COOLDOWN
-            phaseEndsAt = now + cfg.cooldownMs()
-            phaseTotalMs = cfg.cooldownMs()
-            // Remembered so RESUME has a pace to climb back to. It used to be
-            // zeroed here, which was right when a cool-down was a one-way trip
-            // to the summary and nothing could come back out of it.
-            if (targetKph > 0.0) pausedKph = targetKph
-            targetKph = paceKph(cfg.cooldownKph())
-            rampReason = "cooldown"
-            // Put the machine back how you'd want to find it. Incline is the one
-            // setting that persists otherwise, and starting the next walk on
-            // yesterday's hill is a nasty surprise.
-            //
-            // Asked once *and* enforced, the same way the end of a walk does it
-            // — see parkDeckAndFan. One write is a request; a board that drops
-            // the frame, or a deck that was mid-travel when it arrived, leaves
-            // you cooling down on a hill. `levelling` makes enforceLevel
-            // command it every poll until the board reports level, and a hand
-            // on the incline keys still outranks it.
-            targetGrade = 0.0
-            levelling = true
-            levelNags = 0
-            pendingWrite = mapOf(
-                FitPro.Field.GRADE to 0.0,
-                FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble(),
-                FitPro.Field.KPH to targetKph,
-            )
-            Log.i(TAG, "cooling down for ${cfg.cooldownMs() / 1000}s " +
-                    "at ${"%.1f".format(targetKph)} km/h")
+            beginCooldown("cool down pressed")
             repaint()
         }
 
@@ -1995,6 +1980,7 @@ class MainActivity : Activity() {
     private fun clearPlan() {
         route = null
         routeLooped = false
+        routeFinished = false
         planName = ""
         planSteps = emptyList()
         stepIndex = -1
@@ -2038,17 +2024,30 @@ class MainActivity : Activity() {
         // and a route's steps are in metres — so this is metres too. Without
         // it the walker sat at the start line for the whole walk while the
         // ground moved under them, which is what the first route showed.
-        planElapsed = metres
+        //
+        // Clamped at the finish line, because the walk no longer stops there:
+        // the cool-down runs on, and RESUME out of it runs on further. An
+        // unclamped position walks the marker off the end of the path and the
+        // dot off the end of the map.
+        planElapsed = metres.coerceAtMost(r.distanceM)
 
         if (metres >= r.distanceM) {
-            if (session != Session.SUMMARY) {
+            if (!routeFinished) {
+                routeFinished = true
                 Log.i(TAG, "route: ${r.name} complete at ${"%.0f".format(metres)} m")
                 // The route is *not* cleared here, for the same reason a
                 // template is not — see planTick. Clearing it dropped the guided
                 // view, and what the console fell back to was the casual lap
                 // counter, which is where a finished route used to spend its
                 // last few seconds. It goes on the way out of the summary.
-                requestFinish()
+                //
+                // Nor does it go straight to the summary any more. Reaching the
+                // end of a route dropped the belt from route pace to a stop
+                // with no cool-down at all — and it was the only ending a route
+                // had that did not offer one, since COOL DOWN has always worked
+                // on a route the same as anywhere else. It gets the same
+                // cool-down that button gives, out of the same function.
+                beginCooldown("route complete")
             }
             return
         }
@@ -2148,6 +2147,78 @@ class MainActivity : Activity() {
     }
 
     /**
+     * Arm the warm-up: WARMUP for [Settings.warmupMs], belt at
+     * [Settings.warmupKph], SKIP offered on the screen it puts up.
+     *
+     * Shared by [Bridge.choose] and [Bridge.chooseRoute] rather than written
+     * out twice, which is the point of it — a route's warm-up is not *like* a
+     * manual walk's, it is the same one, and the two cannot drift apart if
+     * there is only one of them. Whoever calls it owns the write that follows:
+     * a route levels the deck in the same breath, a manual walk has no opinion
+     * about the incline it starts on.
+     *
+     * Zero minutes is a warm-up that ends on the next poll — that is what a
+     * zero on the stepper means, and it means the same thing here as it always
+     * did on a manual walk.
+     */
+    private fun beginWarmup() {
+        session = Session.WARMUP
+        activeSince = SystemClock.elapsedRealtime()
+        phaseEndsAt = activeSince + cfg.warmupMs()
+        phaseTotalMs = cfg.warmupMs()
+        targetKph = startKph()
+        rampReason = ""
+    }
+
+    /**
+     * Ease down: belt to [Settings.cooldownKph], deck to level, and the
+     * configured cool-down counting away to the summary through [advancePhase].
+     *
+     * Two ways in and one implementation, for the same reason as [beginWarmup]:
+     * COOL DOWN pressed on a walk in progress, and a route reaching its end —
+     * see [routeTick]. Walking the last metre of a route used to go straight to
+     * the summary with the belt dropping from route pace to a stop, which is
+     * the one thing a cool-down is for.
+     */
+    private fun beginCooldown(why: String) {
+        val now = SystemClock.elapsedRealtime()
+        // Coming out of a pause the clock is already stopped; restart it so
+        // the cool-down is counted like any other part of the workout.
+        if (!Session.isMoving(session)) activeSince = now
+        session = Session.COOLDOWN
+        phaseEndsAt = now + cfg.cooldownMs()
+        phaseTotalMs = cfg.cooldownMs()
+        // Remembered so RESUME has a pace to climb back to. It used to be
+        // zeroed here, which was right when a cool-down was a one-way trip
+        // to the summary and nothing could come back out of it.
+        if (targetKph > 0.0) pausedKph = targetKph
+        targetKph = paceKph(cfg.cooldownKph())
+        rampReason = "cooldown"
+        // Put the machine back how you'd want to find it. Incline is the one
+        // setting that persists otherwise, and starting the next walk on
+        // yesterday's hill is a nasty surprise. It matters more coming off a
+        // route, which can be a dozen percent up a hill when the finish line
+        // arrives.
+        //
+        // Asked once *and* enforced, the same way the end of a walk does it
+        // — see parkDeckAndFan. One write is a request; a board that drops
+        // the frame, or a deck that was mid-travel when it arrived, leaves
+        // you cooling down on a hill. `levelling` makes enforceLevel
+        // command it every poll until the board reports level, and a hand
+        // on the incline keys still outranks it.
+        targetGrade = 0.0
+        levelling = true
+        levelNags = 0
+        pendingWrite = mapOf(
+            FitPro.Field.GRADE to 0.0,
+            FitPro.Field.WORKOUT_MODE to FitPro.Mode.RUNNING.toDouble(),
+            FitPro.Field.KPH to targetKph,
+        )
+        Log.i(TAG, "$why — cooling down for ${cfg.cooldownMs() / 1000}s " +
+                "at ${"%.1f".format(targetKph)} km/h")
+    }
+
+    /**
      * The warm-up is over and the workout proper begins here — whether the
      * clock ran out or somebody pressed SKIP. Both used to do this inline,
      * which is how one of them could learn something the other did not.
@@ -2164,6 +2235,17 @@ class MainActivity : Activity() {
      * time and the warm-up is moving time, so a two-minute warm-up used to
      * eat the first two minutes of a thirty-minute plan. Restart the clock
      * and the plan gets all thirty. That is the same fix, not a second one.
+     *
+     * And it is what lets a route have a warm-up at all — see
+     * [Bridge.chooseRoute]. A route advances on distance, so without the
+     * re-zeroing the warm-up's hundred-odd metres would be a hundred metres of
+     * the route already walked: the summit arriving early and the last stretch
+     * never arriving. Same fix a third time.
+     *
+     * Which is also why [Settings.carryWarmup] costs a route its first stretch
+     * of ground rather than nothing. That is what the setting asks for — the
+     * warm-up counted as part of the walk — and it is the same bargain it has
+     * always struck with a template's clock.
      */
     private fun beginWorkout(how: String) {
         session = Session.ACTIVE
@@ -2883,10 +2965,12 @@ class MainActivity : Activity() {
          * The deck therefore finished the walk on whatever grade the route
          * happened to reach, which is the opposite of what a cool-down is for.
          *
-         * Nothing is lost by stopping here. A guided walk and a route both go
-         * straight to ACTIVE — neither has a warm-up to tick through — and the
-         * cool-down draws the phase countdown rather than the hero, so a plan
-         * frozen at its last segment is not visible anywhere.
+         * Nothing is lost by stopping here. A guided walk goes straight to
+         * ACTIVE and has no warm-up to tick through; a route has one, but no
+         * ground is covered in it — the route starts from zero metres when the
+         * warm-up ends, see [beginWorkout]. And the cool-down draws the phase
+         * countdown rather than the hero, so a plan frozen at its last segment
+         * is not visible anywhere.
          */
         if (session == Session.ACTIVE) {
             // A route is ground, not a timetable — see routeTick.

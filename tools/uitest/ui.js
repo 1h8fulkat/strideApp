@@ -386,6 +386,59 @@ JSDOM.fromFile(path, {
   check('casual: oval hero', () => w.document.getElementById('stage').style.display === 'block');
   check('casual: no strip', () => w.document.getElementById('elev').style.display === 'none');
 
+  /* A route now opens on a warm-up and closes on a cool-down, the same two
+     phases a manual walk gets — so "a walk with a plan" and "a walk in a timed
+     phase" can be true at once for the first time. Both heroes are wrong in
+     that state: the path and the map would draw a route that has not been
+     started, with the marker sitting on the start line for two minutes. The
+     phase panel takes the middle instead. */
+  // Back on the route: the template push above is still standing, and the
+  // preview below is about *this* route's ground.
+  w.plan({ name: r.name, loops: false, byDistance: true, routeId: r.id, routeLooped: false, steps });
+  w.render({ ...frame(0, 0), mode: 'warmup', phaseLeft: 95, phaseTotal: 180 });
+  check('route warm-up: the phase panel takes the hero', () =>
+    w.document.getElementById('phase').classList.contains('on')
+      ? 'panel up' : '!no phase panel');
+  check('route warm-up: neither hero is drawn', () => {
+    const shown = ['path', 'rmap', 'stage', 'elev']
+      .filter(id => w.document.getElementById(id).style.display !== 'none');
+    return shown.length === 0 ? 'all four hidden' : '!still showing ' + shown.join(', ');
+  });
+  /* The pushed length, not the hardcoded 120 that every interface used to
+     assume: 95 of 180 left is 47% done, and a bar reading 21% would be the
+     three-minute warm-up being drawn as a two-minute one. */
+  check('route warm-up: the bar uses the pushed length', () => {
+    const pct = parseFloat(w.document.getElementById('phaseBar').style.width);
+    return Math.abs(pct - 47.2) < 1 ? pct.toFixed(1) + '%'
+      : '!bar at ' + pct.toFixed(1) + '%, expected 47.2 (95 of 180 left)';
+  });
+  check('route warm-up: the clock counts the phase down', () =>
+    w.document.getElementById('phaseClock').textContent === '1:35'
+      ? '1:35' : '!clock reads ' + w.document.getElementById('phaseClock').textContent);
+  /* Stated as what is coming, never as live plan state — a warm-up that
+     reads "2 of 14" is claiming to be a walk that has not started yet. */
+  check('route warm-up: the preview names the ground ahead', () => {
+    const t = w.document.getElementById('phasePrev').textContent;
+    return t.indexOf(steps.length + ' stretches ahead') === 0 ? t
+      : '!preview reads "' + t + '"';
+  });
+  check('route warm-up: the button offers SKIP', () =>
+    w.document.getElementById('btnStart').textContent === 'SKIP'
+      ? 'SKIP' : '!button reads ' + w.document.getElementById('btnStart').textContent);
+
+  /* And the other end. Walking the last metre of a route used to go straight
+     to the summary; it eases down first now, which means the cool-down overlay
+     has to come up over a route walk and not just a manual one. */
+  w.render({ ...frame(r.distance_m, 1800), mode: 'cooldown', phaseLeft: 62, phaseTotal: 120 });
+  check('route cool-down: the overlay comes up', () =>
+    w.document.getElementById('confirm').classList.contains('show')
+      && w.document.getElementById('confirmTitle').textContent === 'Cool down'
+      ? 'Cool down' : '!title is "' + w.document.getElementById('confirmTitle').textContent + '"');
+  check('route cool-down: it says how long is left', () =>
+    w.document.getElementById('pausedWhere').textContent.indexOf('1:02 left') === 0
+      ? w.document.getElementById('pausedWhere').textContent
+      : '!reads "' + w.document.getElementById('pausedWhere').textContent + '"');
+
   /* A paused walk has to be finishable without starting the belt again.
      It was not: COOL DOWN refuses while paused — correctly, the belt has
      already stopped — and the panel that offers END WORKOUT was never raised,
