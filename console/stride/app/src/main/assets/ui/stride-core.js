@@ -626,10 +626,18 @@ function adapt(raw) {
 
   if (distance < lastDistance - 1 || mode === 'welcome') {
     resetDerived();
-  } else if (distance > lastDistance) {
+  } else if (distance > lastDistance && incline > 0) {
     /* Grade is a percentage, so rise = run × grade/100. At walking speeds the
        difference between that and the true sine is under half a percent, well
-       inside the noise on a whole-metre odometer. */
+       inside the noise on a whole-metre odometer.
+
+       `incline > 0` because this is ascent, not net elevation change. Summing
+       the signed rise gave "Local loop 5k" — 5 km, 34 m of climbing — a climb
+       of -1.5 m, because a loop comes back down everything it went up. Every
+       card reading this one says CLIMBED. It is also the definition the rest of
+       the console already uses: loopedClimb() below, Route.outAndBack in
+       Kotlin, and the `climb_m` each route arrives with all sum absolute rise.
+    */
     climbM += (distance - lastDistance) * incline / 100;
   }
   lastDistance = distance;

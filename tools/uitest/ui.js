@@ -340,6 +340,47 @@ JSDOM.fromFile(path, {
      running it in the two modes that have STRIDE.stub() behind them is
      enough. */
 
+  /* The summary, which had no coverage at all until a route walk was recapped
+     with "Avg incline 0.0" after 34 m of climbing.
+
+     Two halves, and both of them were wrong in the same way: Kotlin averaged
+     the signed grade over the whole walk, and the climb this file derives
+     summed the signed rise. A loop comes back down everything it goes up, so
+     both came out at zero however steep the route — the arithmetic was right
+     and the number said nothing. Checked here because every route worth walking
+     twice is a loop.
+
+     The all-zeros case is worth guarding for a second reason too: renderSummary
+     reads a const that was once out of scope, and the ReferenceError left every
+     figure below the throw at the zero it was born with. Same symptom, an
+     entirely different cause, and the card cannot tell you which. */
+  check('the summary draws every figure it is handed', () => {
+    w.render({ mode:'summary', units:'km', workout:'workout', who:'Sam',
+               elapsed:1830, distance:5021, calories:342, avgSpeed:6.2,
+               maxSpeed:7.4, avgIncline:1.6, maxIncline:3.0,
+               summaryLine:'That last drag was the one.' });
+    const got = ['sumTime','sumDist','sumCal','sumAvg','sumMax','sumInc']
+      .map(id => id + '=' + w.document.getElementById(id).textContent);
+    const zero = got.filter(t => /=(0|0\.0|0:00|-0\.0)$/.test(t));
+    return zero.length ? '!left at zero: ' + zero.join(' ') : got.join(' ');
+  });
+  check('a loop\'s climb is its ascent, not its net rise', () => {
+    /* Out 30 m and back down 30 m, as the belt would report it: the grade
+       arrives on the frame, the distance only goes up. Net is zero; climbed is
+       30 m, which is what the card says and what the route's own climb_m is
+       measured as. */
+    w.STRIDE.resetDerived();
+    let climb = 0;
+    for (let m = 0; m <= 2000; m += 10) {
+      const grade = m < 1000 ? 3 : -3;      // 1 km at +3%, 1 km back at -3%
+      climb = w.STRIDE.adapt({ mode:'running', units:'km', distance:m,
+                               incline:grade, elapsed:m/1.7 }).session.climb;
+    }
+    return Math.abs(climb - 30) < 0.5
+      ? climb.toFixed(1) + ' m climbed over a 2 km loop'
+      : '!climbed ' + climb.toFixed(1) + ' m, expected 30 (net rise is 0)';
+  });
+
   // A casual walk: the oval, nothing else.
   w.render({ ...frame(300, 180), segments: 0, control: 'casual' });
   check('casual: oval hero', () => w.document.getElementById('stage').style.display === 'block');

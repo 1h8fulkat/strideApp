@@ -718,10 +718,29 @@ class MainActivity : Activity() {
     // Rolling stats for the summary screen.
     @Volatile private var maxSpeed = 0.0
     @Volatile private var maxIncline = 0.0
-    // Written by the poll thread, cleared from the WebView thread on START.
-    @Volatile private var speedSum = 0.0
+    /**
+     * The climbing half of the walk, and only that half.
+     *
+     * Written by the poll thread, cleared from the WebView thread on START.
+     *
+     * Averaged over the frames the deck was *going up*, not over the walk —
+     * which is the difference between a number and nothing at all. Summed
+     * signed across every frame, the mean grade of a route that ends where it
+     * started is zero by construction: a loop has exactly as much descent in it
+     * as ascent, and the two cancel. "Local loop 5k" — 5 km, 34 m of climbing —
+     * averaged -0.03% and was rendered, quite correctly and quite uselessly, as
+     * `-0.0`. Every GPX loop does this; the steeper the hills, the more
+     * emphatically they cancel.
+     *
+     * So the question this answers is "how steep were the hills", which a
+     * descent has no part in. The same walk now reads 1.6%, and Adams Big Loop
+     * — 96 m of climbing in 5 km — reads 4.2% rather than 0.8%.
+     *
+     * Zero when the deck never climbed, which is honest: a flat walk had no
+     * hills to be steep.
+     */
     @Volatile private var inclineSum = 0.0
-    @Volatile private var samples = 0
+    @Volatile private var climbingFrames = 0
 
     /** Pulse keeps its own count: it is the one number that can be absent for
      *  part of a walk, and averaging zeros from before the strap connected
@@ -2181,9 +2200,8 @@ class MainActivity : Activity() {
         sessionCalories = 0.0
         maxSpeed = 0.0
         maxIncline = 0.0
-        speedSum = 0.0
         inclineSum = 0.0
-        samples = 0
+        climbingFrames = 0
         maxPulse = 0
         pulseSum = 0L
         pulseSamples = 0
@@ -2810,15 +2828,28 @@ class MainActivity : Activity() {
             sessionCalories = (rawCalories - baseCalories).coerceAtLeast(0.0)
             if (speed > maxSpeed) maxSpeed = speed
             if (incline > maxIncline) maxIncline = incline
-            speedSum += speed
-            inclineSum += incline
-            samples++
+            // Uphill frames only — see climbingFrames for why averaging the
+            // whole walk reported zero on every loop.
+            if (incline > 0.0) {
+                inclineSum += incline
+                climbingFrames++
+            }
 
             // Rise over run, against ground actually covered. Guarded against
             // the odometer jumping backwards, which it does when the board
             // resets its own counter mid-session.
+            //
+            // **Ascent, not net elevation change.** Summing the signed rise
+            // gave "Local loop 5k" a climb of -1.5 m, because a loop comes back
+            // down everything it went up; what the card says is CLIMBED, and
+            // the answer for that walk is 34 m. Counting only the rises is also
+            // the definition every other climb figure in the console already
+            // uses — Route.outAndBack sums the absolute rise of every segment,
+            // and it is what each route's stated `climb_m` was measured as.
             val ran = sessionDistance - lastClimbMetres
-            if (ran > 0.0 && ran < 100.0) climbM += ran * incline / 100.0
+            if (ran > 0.0 && ran < 100.0 && incline > 0.0) {
+                climbM += ran * incline / 100.0
+            }
             lastClimbMetres = sessionDistance
 
             // Zero is "no reading", never "no pulse" — see pulseNow.
@@ -2888,7 +2919,8 @@ class MainActivity : Activity() {
             // off counters the board keeps itself.
             avgSpeed = avgPace(),
             maxSpeed = maxSpeed,
-            avgIncline = if (samples > 0) inclineSum / samples else 0.0,
+            // Over the climbing frames, not the walk — see climbingFrames.
+            avgIncline = if (climbingFrames > 0) inclineSum / climbingFrames else 0.0,
             maxIncline = maxIncline,
             avgPulse = if (pulseSamples > 0) (pulseSum / pulseSamples).toInt() else 0,
             maxPulse = maxPulse,

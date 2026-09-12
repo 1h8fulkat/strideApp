@@ -108,6 +108,20 @@ data class Snapshot(
     val boardMode: Int,
     val avgSpeed: Double,
     val maxSpeed: Double,
+    /**
+     * Mean grade over the stretches that were **uphill**, not over the walk.
+     *
+     * Averaged across the whole walk it is zero on any route that ends where it
+     * started, which is what a GPX loop always is: the descents cancel the
+     * ascents exactly, and the steeper the route the more emphatically they do
+     * it. "Local loop 5k" — 5 km with 34 m of climbing in it — came out at
+     * -0.03% and was drawn as `-0.0`. The figure was right and told nobody
+     * anything.
+     *
+     * So this answers "how steep were the hills", a question a descent has no
+     * part in. Zero means the deck never climbed, which on a flat walk is the
+     * true answer rather than a cancelled one. See MainActivity.climbingFrames.
+     */
     val avgIncline: Double,
     val maxIncline: Double,
     /** Averaged over the frames that had a reading, not over the walk — a
