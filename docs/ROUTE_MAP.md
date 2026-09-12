@@ -82,8 +82,34 @@ plus a long-lived access token from your profile page. Only the listing uses it;
 the `.gpx` files are served unauthenticated either way, which is why a wrong
 token is the one failure that says so in as many words.
 
-The console does not fall back from one to the other. A token that has expired
-should say so, not quietly start reading a stale index and look like it worked.
+**The list does not have to be a file.** The setting takes a bare filename, a
+path on the same Home Assistant, or a whole URL, so anything that answers with a
+JSON array of names will do — which is how you get the automatic listing without
+the token. `homeassistant/nodered-route-listing.json` is an importable Node-RED
+flow with two ways to do it:
+
+* a live endpoint, so nothing is stored and nothing can be stale —
+  `List file = http://<home-assistant>:1880/stride-routes`
+* or it writes `index.json` beside the `.gpx` files every five minutes, for
+  when you would rather not expose a port.
+
+Being a few minutes behind is not the thing worth avoiding here. The failure
+this feature exists to fix was a *human* forgetting to run a script for weeks,
+not a file being ninety seconds old.
+
+The console does not fall back from one method to the other. A token that has
+expired should say so, not quietly start reading a stale index and look like it
+worked.
+
+### What does not work, measured rather than assumed
+
+**A Home Assistant webhook cannot answer with the list.** It is the obvious
+shape for this — unauthenticated by design, reads the folder sensor live,
+nothing stored — and on 2026.9.1 it does not work. A webhook-triggered
+automation using `stop` with `response_variable` runs (`last_triggered` updates)
+and returns an empty body, over GET and POST, with a templated list and with a
+hardcoded literal alike. Whatever that mechanism is for, it is not for putting a
+body on a webhook's HTTP response. Tried so nobody has to try it again.
 
 > **The token cannot live in the route folder.** It is tempting — the console is
 > already fetching files from there — but anything under `www/` is served over

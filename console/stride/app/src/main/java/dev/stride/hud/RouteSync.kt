@@ -192,8 +192,8 @@ class RouteSync(
                 String(get("$base/api/states/${encode(cfg.haRoutesSensor())}", token)),
                 cfg.haRoutesSensor())
         } else {
-            namesFromIndex(
-                String(get("$base/local/${cfg.haGpxPath()}/${encode(cfg.haIndex())}", null)))
+            namesFromIndex(String(get(
+                listingUrl(base, cfg.haIndex(), cfg.haGpxPath()), null)))
         }
 
     /**
@@ -297,6 +297,36 @@ class RouteSync(
             out.sort()
             return out
         }
+
+        /**
+         * Where to read the listing from when there is no token.
+         *
+         * Three shapes, because the listing does not have to be a file:
+         *
+         *  * `index.json` — a name, so it sits beside the `.gpx` files under
+         *    `/local/`. The simple case, and the one that can go stale.
+         *  * `/api/webhook/stride-routes` — a path on the same Home Assistant.
+         *    A webhook can answer with the folder's contents *live*, which
+         *    means nothing is generated and nothing can be out of date. It is
+         *    also unauthenticated by design, so this stays credential-free.
+         *  * `http://somewhere/else.json` — taken exactly as given, for a
+         *    Node-RED endpoint or anything else already serving a list.
+         *
+         * Pure and public so [RouteSyncTest] can check the three branches
+         * without a network: getting this wrong produces a 404 at boot on
+         * somebody's treadmill, which is a poor place to debug a URL.
+         */
+        fun listingUrl(base: String, where: String, gpxPath: String): String = when {
+            where.startsWith("http://", true) || where.startsWith("https://", true) ->
+                where
+            where.startsWith("/") -> base + where
+            else -> "$base/local/$gpxPath/" + encodeSegment(where)
+        }
+
+        /** Percent-encoding for one path segment, leaving `/` alone. */
+        private fun encodeSegment(s: String): String =
+            java.net.URLEncoder.encode(s, "UTF-8")
+                .replace("+", "%20").replace("%2F", "/")
 
         private fun add(out: ArrayList<String>, path: String) {
             if (!path.lowercase().endsWith(".gpx")) return

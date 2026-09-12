@@ -1,0 +1,130 @@
+[
+ {
+  "id": "stride-routes-tab",
+  "type": "tab",
+  "label": "STRIDE routes",
+  "info": "Tells the treadmill which .gpx files are in www/treadmill/routes.\n\nTwo ways, and you only need one \u2014 see docs/ROUTE_MAP.md in the STRIDE\nrepo. Both send a bare JSON array of filenames, which is the format\nthe console's 'List file' setting expects.\n\nA) LIVE ENDPOINT. The console asks Node-RED directly, so nothing is\n   stored and nothing can be out of date. Console setting:\n       List file = http://<home-assistant>:1880/stride-routes\n   Needs the add-on's port 1880 reachable on your network.\n\nB) WRITES index.json. A file beside the .gpx files, rewritten every\n   five minutes and on start. Needs no exposed port. Console setting:\n       List file = index.json   (the default)\n   Slightly behind reality rather than live, which was never the\n   problem: the bug this replaces was a human forgetting to run a\n   script for weeks, not a file being ninety seconds old.\n\nDelete whichever flow you are not using."
+ },
+ {
+  "id": "in-http",
+  "type": "http in",
+  "z": "stride-routes-tab",
+  "name": "GET /stride-routes",
+  "url": "/stride-routes",
+  "method": "get",
+  "upload": false,
+  "swaggerDoc": "",
+  "x": 170,
+  "y": 100,
+  "wires": [
+   [
+    "fn-http"
+   ]
+  ]
+ },
+ {
+  "id": "fn-http",
+  "type": "function",
+  "z": "stride-routes-tab",
+  "name": "list .gpx",
+  "func": "// Which .gpx files are in the route folder, newest answer every time.\n//\n// The add-on's view of Home Assistant's config directory moved: older ones\n// mount it at /config, current ones at /homeassistant. Rather than hard-code\n// the guess and fail obscurely, try both and say which was used.\nconst dirs = ['/homeassistant/www/treadmill/routes',\n              '/config/www/treadmill/routes'];\nconst dir = dirs.find(function (d) {\n    try { return fs.statSync(d).isDirectory(); } catch (e) { return false; }\n});\nif (!dir) {\n    node.error('none of these are a directory: ' + dirs.join(' '), msg);\n    node.status({fill: 'red', shape: 'dot', text: 'no route folder'});\n    return null;\n}\nconst names = fs.readdirSync(dir)\n    .filter(function (f) { return /\\.gpx$/i.test(f); })\n    .sort();\n// A bare JSON array of filenames, which is what the console reads. Never an\n// empty array on error: the console treats an empty listing as a failure and\n// keeps its cache, which is right, but there is no reason to send one.\nmsg.payload = JSON.stringify(names);\nmsg.filename = dir + '/index.json';\nnode.status({fill: 'green', shape: 'dot', text: names.length + ' route(s)'});\nreturn msg;\n",
+  "outputs": 1,
+  "timeout": 0,
+  "noerr": 0,
+  "initialize": "",
+  "finalize": "",
+  "libs": [
+   {
+    "var": "fs",
+    "module": "fs"
+   }
+  ],
+  "x": 400,
+  "y": 100,
+  "wires": [
+   [
+    "out-http"
+   ]
+  ]
+ },
+ {
+  "id": "out-http",
+  "type": "http response",
+  "z": "stride-routes-tab",
+  "name": "",
+  "statusCode": "200",
+  "headers": {
+   "content-type": "application/json"
+  },
+  "x": 610,
+  "y": 100,
+  "wires": []
+ },
+ {
+  "id": "in-tick",
+  "type": "inject",
+  "z": "stride-routes-tab",
+  "name": "on start, then every 5 min",
+  "props": [
+   {
+    "p": "payload"
+   }
+  ],
+  "repeat": "300",
+  "crontab": "",
+  "once": true,
+  "onceDelay": "10",
+  "topic": "",
+  "payload": "",
+  "payloadType": "date",
+  "x": 200,
+  "y": 200,
+  "wires": [
+   [
+    "fn-file"
+   ]
+  ]
+ },
+ {
+  "id": "fn-file",
+  "type": "function",
+  "z": "stride-routes-tab",
+  "name": "list .gpx",
+  "func": "// Which .gpx files are in the route folder, newest answer every time.\n//\n// The add-on's view of Home Assistant's config directory moved: older ones\n// mount it at /config, current ones at /homeassistant. Rather than hard-code\n// the guess and fail obscurely, try both and say which was used.\nconst dirs = ['/homeassistant/www/treadmill/routes',\n              '/config/www/treadmill/routes'];\nconst dir = dirs.find(function (d) {\n    try { return fs.statSync(d).isDirectory(); } catch (e) { return false; }\n});\nif (!dir) {\n    node.error('none of these are a directory: ' + dirs.join(' '), msg);\n    node.status({fill: 'red', shape: 'dot', text: 'no route folder'});\n    return null;\n}\nconst names = fs.readdirSync(dir)\n    .filter(function (f) { return /\\.gpx$/i.test(f); })\n    .sort();\n// A bare JSON array of filenames, which is what the console reads. Never an\n// empty array on error: the console treats an empty listing as a failure and\n// keeps its cache, which is right, but there is no reason to send one.\nmsg.payload = JSON.stringify(names);\nmsg.filename = dir + '/index.json';\nnode.status({fill: 'green', shape: 'dot', text: names.length + ' route(s)'});\nreturn msg;\n",
+  "outputs": 1,
+  "timeout": 0,
+  "noerr": 0,
+  "initialize": "",
+  "finalize": "",
+  "libs": [
+   {
+    "var": "fs",
+    "module": "fs"
+   }
+  ],
+  "x": 440,
+  "y": 200,
+  "wires": [
+   [
+    "out-file"
+   ]
+  ]
+ },
+ {
+  "id": "out-file",
+  "type": "file",
+  "z": "stride-routes-tab",
+  "name": "index.json (overwrite)",
+  "filename": "filename",
+  "filenameType": "msg",
+  "appendNewline": false,
+  "createDir": false,
+  "overwriteFile": "true",
+  "encoding": "utf8",
+  "x": 670,
+  "y": 200,
+  "wires": [
+   []
+  ]
+ }
+]

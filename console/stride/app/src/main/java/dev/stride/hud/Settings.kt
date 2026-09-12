@@ -433,15 +433,22 @@ class Settings(context: Context) {
      *
      *     ["rolling-loop-5k.gpx", "the-hill.gpx"]
      *
-     * The trade this makes is worth saying out loud: it costs no credential and
-     * it costs a line per route. Forgetting that line is the same shape of
-     * failure as forgetting to run the sync script was — a route that exists
-     * and does not appear, with nothing saying why. The settings screen names
-     * what it found for that reason.
+     * It does not have to be a file. See [RouteSync.listingUrl]: a bare name
+     * sits beside the `.gpx` files, but a path or a whole URL is taken as
+     * given — which is what lets this be something that answers *live*, a Home
+     * Assistant webhook or a Node-RED endpoint, rather than a file somebody has
+     * to remember to regenerate.
+     *
+     * That distinction is the whole trade. A hand-written list costs no
+     * credential and costs a line per route, and forgetting that line is the
+     * same shape of failure as forgetting to run the sync script was — a route
+     * that exists and does not appear, with nothing saying why. Something that
+     * answers live cannot be stale at all. The settings screen names what it
+     * found either way.
      */
     fun haIndex(): String =
         (prefs.getString(HA_INDEX, "index.json") ?: "index.json")
-            .trim().trim('/').ifBlank { "index.json" }
+            .trim().trimEnd('/').ifBlank { "index.json" }
 
     /** Where the files are under `www/`, matching `ha_gpx_path` in stride.conf. */
     fun haGpxPath(): String =

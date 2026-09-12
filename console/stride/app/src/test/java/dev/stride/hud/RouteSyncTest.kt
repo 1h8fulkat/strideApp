@@ -83,6 +83,34 @@ class RouteSyncTest {
     }
 
     @Test
+    fun `a listing can be a file, a path on home assistant, or a whole url`() {
+        val base = "http://ha.local:8123"
+        val folder = "treadmill/routes"
+
+        // A bare name sits beside the .gpx files.
+        assertEquals("$base/local/treadmill/routes/index.json",
+                     RouteSync.listingUrl(base, "index.json", folder))
+        // A space in a filename is legal on a filesystem and illegal in a URL.
+        assertEquals("$base/local/treadmill/routes/my%20routes.json",
+                     RouteSync.listingUrl(base, "my routes.json", folder))
+
+        // A path is on the same Home Assistant — which is how a webhook that
+        // answers live gets used instead of a file that can go stale.
+        assertEquals("$base/api/webhook/stride-routes",
+                     RouteSync.listingUrl(base, "/api/webhook/stride-routes", folder))
+
+        // A whole URL is taken exactly as given: Node-RED on its own port, or
+        // anything else already serving a list.
+        assertEquals("http://ha.local:1880/routes",
+                     RouteSync.listingUrl(base, "http://ha.local:1880/routes", folder))
+        assertEquals("https://elsewhere/list.json",
+                     RouteSync.listingUrl(base, "https://elsewhere/list.json", folder))
+        // Scheme case is not something to be strict about.
+        assertEquals("HTTP://ha.local/x.json",
+                     RouteSync.listingUrl(base, "HTTP://ha.local/x.json", folder))
+    }
+
+    @Test
     fun `a broken index is an error rather than an empty list`() {
         // The distinction matters: "no routes" and "I could not read the file"
         // both keep the cache, but only one of them is worth putting in front
