@@ -1010,7 +1010,7 @@ window.render = function(raw){
     $('pausedKicker').textContent = 'TAKING A BREATHER';
     $('pausedAt').textContent = mmss(s.session.elapsed) + ' in';
     const left = guided ? s.segment.count - s.segment.index : 0;
-    $('pausedWhere').textContent = guided && s.segment.count
+    $('pausedWhere').textContent = guided && s.segment.started
       ? (s.segment.index - 1) + ' down, ' + (left + 1) + ' waiting. No rush.'
       : STRIDE.dist(s.session.distance) + ' ' + STRIDE.distUnit() + ' banked. No rush.';
   }

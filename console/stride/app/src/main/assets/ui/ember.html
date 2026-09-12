@@ -1045,7 +1045,7 @@ window.render = function(raw){
     $('paused').classList.add('on');
     $('pausedAt').textContent = 'Paused at ' + mmss(s.session.elapsed);
     $('endLab').textContent = 'END WORKOUT';
-    $('pausedWhere').textContent = guided && s.segment.count
+    $('pausedWhere').textContent = guided && s.segment.started
       ? s.segment.name + ' · ' + s.segment.index + ' of ' + s.segment.count +
         ' · the belt has stopped. Nothing is lost.'
       : 'The belt has stopped. Nothing is lost.';

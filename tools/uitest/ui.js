@@ -439,6 +439,31 @@ JSDOM.fromFile(path, {
       ? w.document.getElementById('pausedWhere').textContent
       : '!reads "' + w.document.getElementById('pausedWhere').textContent + '"');
 
+  /* A pause during the warm-up now goes back to the warm-up rather than
+     skipping it, which makes "a walk with a plan, paused, with no stretch
+     started yet" reachable. Kotlin sends segment 0 for that, and the overlay
+     used to read it as a stretch: "Beacon Hill · 0 of 14" on this interface,
+     "SEG 0/14" and "-1 down, 15 waiting" on the others. */
+  w.render({ ...frame(80, 48), mode: 'paused', segment: 0 });
+  check('paused mid-warm-up: no stretch is claimed', () => {
+    const t = w.document.getElementById('pausedWhere').textContent;
+    return /\b0 of\b|\bsegment 0\b|-1 /.test(t) ? '!overlay reads "' + t + '"' : t;
+  });
+  check('and a stretch under way is still reported', () => {
+    w.render({ ...frame(600, 360), mode: 'paused', segment: 3 });
+    const t = w.document.getElementById('pausedWhere').textContent;
+    return t.indexOf('3 of ' + steps.length) >= 0 ? t : '!overlay reads "' + t + '"';
+  });
+  /* The same rule, through the shared state the other four interfaces read —
+     they guard on segment.started, so it has to tell them apart. */
+  check('stride-core marks whether a stretch has started', () => {
+    const none = w.STRIDE.adapt({ ...frame(80, 48), segment: 0 }).segment;
+    const some = w.STRIDE.adapt({ ...frame(600, 360), segment: 3 }).segment;
+    return !none.started && some.started && none.count === steps.length
+      ? 'started false at 0, true at 3, count kept at ' + none.count
+      : '!started=' + none.started + '/' + some.started + ' count=' + none.count;
+  });
+
   /* A paused walk has to be finishable without starting the belt again.
      It was not: COOL DOWN refuses while paused — correctly, the belt has
      already stopped — and the panel that offers END WORKOUT was never raised,

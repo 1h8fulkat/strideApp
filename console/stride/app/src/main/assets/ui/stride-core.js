@@ -696,6 +696,15 @@ function adapt(raw) {
                 elapsed: raw.planElapsed == null ? (raw.elapsed || 0) : raw.planElapsed },
 
     segment:  { index: raw.segment || 0, count: segments,
+                /* Whether the walk is standing on one of them yet. A route
+                   warms up before it starts, so "a walk with a plan" and "a
+                   walk that has begun walking it" came apart: the plan is
+                   fourteen stretches long and the walker is on none of them,
+                   which Kotlin sends as segment 0. Anything reporting the
+                   stretch you are on wants this rather than `count` — a paused
+                   warm-up read "SEG 0/14", and one interface managed
+                   "-1 down, 15 waiting". */
+                started: (raw.segment || 0) > 0,
                 name: raw.segmentLabel || '',
                 secondsLeft: raw.segmentLeft || 0,
                 leftIsDistance: !!raw.segmentLeftIsDistance,

@@ -2055,7 +2055,10 @@ window.render = function(s){
   } else if (mode === 'paused'){
     $('confirmTitle').textContent = 'Workout paused';
     const where = [mmss(s.elapsed == null ? 0 : s.elapsed) + ' in'];
-    if (s.segments) where.push(`${s.segmentLabel || 'segment ' + s.segment} · ${s.segment} of ${s.segments}`);
+    /* `segment`, not `segments`: a route warms up before it starts, so a plan
+       fourteen stretches long can have the walker on none of them — Kotlin
+       sends segment 0 for that, and this read "Beacon Hill · 0 of 14". */
+    if (s.segments && s.segment > 0) where.push(`${s.segmentLabel || 'segment ' + s.segment} · ${s.segment} of ${s.segments}`);
     else where.push(displayDistance(s.distance == null ? 0 : s.distance, imperial) +
                     (imperial ? ' mi' : ' m'));
     where.push('the belt has stopped');

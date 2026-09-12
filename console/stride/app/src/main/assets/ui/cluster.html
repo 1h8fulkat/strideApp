@@ -1005,7 +1005,7 @@ window.render = function(raw){
     $('paused').classList.add('on');
     $('pausedKicker').textContent = 'BELT STOPPED \u00b7 SESSION HELD';
     $('pausedAt').textContent = mmss(s.session.elapsed);
-    $('pausedWhere').textContent = guided && s.segment.count
+    $('pausedWhere').textContent = guided && s.segment.started
       ? 'SEG ' + s.segment.index + '/' + s.segment.count + ' · ' +
         STRIDE.dist(s.session.distance) + ' ' + STRIDE.distUnit(true)
       : STRIDE.dist(s.session.distance) + ' ' + STRIDE.distUnit(true);

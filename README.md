@@ -27,13 +27,22 @@
 >   path-ahead view this console has always drawn; the elevation strip is there
 >   either way. The console fetches and caches its own tiles, so a route walked
 >   twice only costs the network once. See [docs/ROUTE_MAP.md](docs/ROUTE_MAP.md).
-> * **A route is warmed up to and cooled down from.** Picking one off My routes
->   starts the same warm-up a manual walk gets — same length, same pace, SKIP
->   when you are ready — and the route itself starts from zero metres when that
->   ends, so it is walked in full. Reaching the end eases down through the same
->   cool-down COOL DOWN gives, instead of dropping from route pace to a stop.
->   Guided templates still skip both: they open with a settle segment of their
->   own, where a route opens on whatever the trailhead happens to be.
+> * **A route is warmed up to, and every guided walk is cooled down from.**
+>   Picking a route off My routes starts the same warm-up a manual walk gets —
+>   same length, same pace, SKIP when you are ready — and the route itself
+>   starts from zero metres when that ends, so it is walked in full. Reaching
+>   the end of a route *or* of a template now eases down through the same
+>   cool-down COOL DOWN gives, instead of dropping from working pace to a stop
+>   with the summary already up; a guided walk therefore runs `cooldown_min`
+>   past the duration on the selector. Templates still skip the warm-up, since
+>   they open with a settle segment of their own, where a route opens on
+>   whatever the trailhead happens to be.
+> * **A pause during the warm-up goes back to the warm-up.** STOP used to end
+>   it, and RESUME dropped you into the workout with the warm-up's minutes and
+>   metres counted against it — the re-zeroing that "Carry warm-up into the
+>   workout" turns off happens when the warm-up *ends*, and one ended at STOP
+>   never reached it. On a route those metres were route already walked. Pulling
+>   the safety key holds the warm-up the same way.
 > * **[docs/DOCKER.md](docs/DOCKER.md)** — build and deploy with nothing
 >   installed but Docker.
 

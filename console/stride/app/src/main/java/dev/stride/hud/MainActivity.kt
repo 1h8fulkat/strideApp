@@ -481,6 +481,23 @@ class MainActivity : Activity() {
     /** Pace at the moment of pausing, and the speed the resume ramp is climbing
      *  towards. Zero means there is no pace to go back to. */
     @Volatile private var pausedKph = 0.0
+
+    /**
+     * The warm-up a pause interrupted, held until RESUME hands it back.
+     *
+     * A pause in the middle of the warm-up is a pause in the middle of the
+     * warm-up, not the end of one — see [holdWarmup], which is where the
+     * reasoning lives, and [Bridge.resume], which spends these.
+     *
+     * The total is remembered as well as the remainder because the progress
+     * bar needs the denominator the phase actually started with. Reading
+     * [Settings.warmupMs] again on the way back out would take whatever the
+     * stepper says now, and settings are live on this console.
+     */
+    @Volatile private var pausedInWarmup = false
+    @Volatile private var pausedWarmupLeftMs = 0L
+    @Volatile private var pausedWarmupTotalMs = 0L
+
     /**
      * Reaches the page as `ramping`, and "cooldown" is the only value left.
      *
@@ -555,16 +572,20 @@ class MainActivity : Activity() {
     @Volatile private var routeLooped = false
 
     /**
-     * Whether the route has been walked to its end.
+     * Whether the plan — a route's ground or a template's timetable — has been
+     * walked all the way through.
      *
      * Reaching the end starts the cool-down rather than the summary, and a
      * cool-down is a phase RESUME can come back out of — which lands back in
-     * [routeTick] with the route still finished. Without this the walker gets a
-     * fresh countdown for pressing RESUME, which is the opposite of what they
-     * asked for. Once the route is done it stays done, and whatever is walked
-     * past it is an ordinary walk that ends on END.
+     * [routeTick] or [planTick] with the plan still finished. Without this the
+     * walker gets a brand-new countdown for pressing RESUME, which is the
+     * opposite of what they asked for. Once the plan is done it stays done,
+     * and whatever is walked past it is an ordinary walk that ends on END.
+     *
+     * Never set on an open circuit: nothing ends one of those but STOP — see
+     * [planLoops].
      */
-    @Volatile private var routeFinished = false
+    @Volatile private var planFinished = false
 
     @Volatile private var planSteps: List<Plan.Step> = emptyList()
     @Volatile private var stepIndex = -1
@@ -871,9 +892,17 @@ class MainActivity : Activity() {
          *
          * Goes straight to ACTIVE rather than through the two-minute WARMUP
          * phase: every template opens with its own flat settle segment, and
-         * having both would mean warming up twice. The plan's stated duration is
-         * therefore the whole walk, closing segment included, which is what a
-         * duration selector implies.
+         * having both would mean warming up twice. A route has no such segment
+         * and does warm up — see [chooseRoute].
+         *
+         * The plan's stated duration is therefore the whole walk at this end,
+         * closing segment included, which is what a duration selector implies.
+         * Not at the other end: running the timetable out now eases down
+         * through the cool-down rather than stopping dead, so the walk is
+         * `cooldown_min` longer than the number on the selector. That is the
+         * same arithmetic COOL DOWN has always added to a walk ended by hand,
+         * and the closing segment is a settle rather than a cool-down — it
+         * takes the hill off and leaves the pace where it was.
          */
         /**
          * @param minutes  the walk's length, or **0 for an open-ended route** —
@@ -900,6 +929,7 @@ class MainActivity : Activity() {
             lastInclineMoveAt = 0L
 
             workout = WORKOUT
+            planFinished = false
             resetSession()
             session = Session.ACTIVE
             activeSince = SystemClock.elapsedRealtime()
@@ -973,7 +1003,7 @@ class MainActivity : Activity() {
             lastInclineMoveAt = 0L
 
             workout = WORKOUT
-            routeFinished = false
+            planFinished = false
             resetSession()
             // A route gets the warm-up a manual walk gets, and the same one:
             // same length, same pace, same SKIP, and [beginWorkout] asking the
@@ -1022,6 +1052,9 @@ class MainActivity : Activity() {
         @JavascriptInterface fun pause() {
             if (Session.isMoving(session)) {
                 accumulatedMs += SystemClock.elapsedRealtime() - activeSince
+                // Before the phase is torn down, because it is the phase that
+                // is being remembered — see holdWarmup.
+                holdWarmup()
                 session = Session.PAUSED
                 phaseEndsAt = 0L
                 phaseTotalMs = 0L
@@ -1054,10 +1087,24 @@ class MainActivity : Activity() {
             // already handles both.
             if (session != Session.PAUSED && session != Session.COOLDOWN) return
             val fromCooldown = session == Session.COOLDOWN
-            session = Session.ACTIVE
-            activeSince = SystemClock.elapsedRealtime()
-            phaseEndsAt = 0L
-            phaseTotalMs = 0L
+            val now = SystemClock.elapsedRealtime()
+            /*
+             * Back into the warm-up, with what was left of it, if that is what
+             * the pause interrupted — see [holdWarmup].
+             *
+             * Only ever out of a PAUSED. RESUME pressed inside a *cool-down*
+             * means "I have changed my mind about finishing", and what that
+             * goes back to is the workout; a walk cannot be paused out of a
+             * cool-down anyway, since the cool-down's own overlay is what is
+             * on screen and it offers RESUME and END rather than STOP.
+             */
+            val toWarmup = session == Session.PAUSED && pausedInWarmup
+            val warmLeftMs = pausedWarmupLeftMs
+            session = if (toWarmup) Session.WARMUP else Session.ACTIVE
+            activeSince = now
+            phaseEndsAt = if (toWarmup) now + warmLeftMs else 0L
+            phaseTotalMs = if (toWarmup) pausedWarmupTotalMs else 0L
+            forgetHeldWarmup()
             rampReason = ""
             targetKph = paceKph(if (pausedKph > 0.0) pausedKph else cfg.warmupKph())
             // Mode first, speed behind it — the board ignores a KPH write from
@@ -1069,7 +1116,11 @@ class MainActivity : Activity() {
                 FitPro.Field.KPH to targetKph,
             )
             Log.i(TAG, "resuming at ${"%.1f".format(targetKph)} km/h" +
-                    if (fromCooldown) " (out of the cool-down)" else "")
+                    when {
+                        toWarmup -> " (back into the warm-up, ${warmLeftMs / 1000}s left)"
+                        fromCooldown -> " (out of the cool-down)"
+                        else -> ""
+                    })
             repaint()
         }
 
@@ -1735,9 +1786,13 @@ class MainActivity : Activity() {
     /**
      * Finish now, and let the belt catch up.
      *
-     * Every automatic route to the summary comes through here — the plan
-     * expiring, the cool-down expiring, SKIP — so none of them can drop the belt
-     * out from under someone.
+     * Every automatic route to the summary comes through here — the cool-down
+     * expiring and SKIP — so neither can drop the belt out from under someone.
+     *
+     * A plan running out used to be a third way in. It is not any more: a
+     * finished route or template starts the cool-down instead, and arrives here
+     * when *that* expires. Which means everything on this path now comes from a
+     * belt already down at [Settings.cooldownKph].
      *
      * The summary goes up at the moment of ending, and the belt is commanded
      * to stop in the same breath — see [finishWorkout], which does both.
@@ -1980,7 +2035,7 @@ class MainActivity : Activity() {
     private fun clearPlan() {
         route = null
         routeLooped = false
-        routeFinished = false
+        planFinished = false
         planName = ""
         planSteps = emptyList()
         stepIndex = -1
@@ -2032,8 +2087,8 @@ class MainActivity : Activity() {
         planElapsed = metres.coerceAtMost(r.distanceM)
 
         if (metres >= r.distanceM) {
-            if (!routeFinished) {
-                routeFinished = true
+            if (!planFinished) {
+                planFinished = true
                 Log.i(TAG, "route: ${r.name} complete at ${"%.0f".format(metres)} m")
                 // The route is *not* cleared here, for the same reason a
                 // template is not — see planTick. Clearing it dropped the guided
@@ -2082,17 +2137,30 @@ class MainActivity : Activity() {
                 if (planLap != was) Log.i(TAG, "guided: lap $planLap of the circuit")
             }
         } else {
-            planElapsed = elapsed
-            // The whole plan is done: stop here rather than running the belt on.
+            // Clamped at the end of the plan, for the reason routeTick clamps
+            // at the finish line: the walk no longer stops there, so an
+            // unclamped position runs the marker off the end of the path.
+            planElapsed = elapsed.coerceAtMost(lap)
+            // The whole plan is done: ease down here rather than running the
+            // belt on.
             if (elapsed >= lap) {
-                if (session != Session.SUMMARY) {
-                    Log.i(TAG, "guided: plan complete — stopping the belt")
+                if (!planFinished) {
+                    planFinished = true
+                    Log.i(TAG, "guided: plan complete")
                     // The plan is deliberately *not* cleared here. Clearing it
                     // drops the guided view and the console falls back to the
                     // casual oval; it is also what the summary reads its name
                     // off, so a guided walk would be recapped as a manual one.
                     // It is cleared on the way out of the summary instead.
-                    requestFinish()
+                    //
+                    // Nor does it go straight to the summary any more. A
+                    // template's closing segment is a settle, not a cool-down:
+                    // it eases the *hill* off and leaves the pace alone, so the
+                    // belt still went from plan pace to a stop with the summary
+                    // already up. It gets the cool-down COOL DOWN gives, out of
+                    // the same function — which does mean a plan now runs
+                    // `cooldown_min` past its stated duration.
+                    beginCooldown("plan complete")
                 }
                 return
             }
@@ -2168,17 +2236,65 @@ class MainActivity : Activity() {
         phaseTotalMs = cfg.warmupMs()
         targetKph = startKph()
         rampReason = ""
+        forgetHeldWarmup()
+    }
+
+    /**
+     * Hold the warm-up over a pause, so RESUME comes back to it rather than
+     * skipping it — see [Bridge.resume].
+     *
+     * Stopping mid-warm-up used to end the warm-up, and the countdown was the
+     * smaller half of what that cost. The warm-up ends at [beginWorkout], and
+     * [beginWorkout] is what re-zeroes the session — so a warm-up abandoned at
+     * a pause never reached it, and its time and its metres were counted
+     * against the workout even with `carry_warmup` off. On a route those
+     * metres are route already walked: the walk resumed some way past the
+     * trailhead and finished that far short of the far end.
+     *
+     * Called from both things that can stop a walk that is moving — STOP and
+     * the safety key. The warm-up is equally unfinished either way. The key
+     * pull deliberately forgets the *pace*, which is a different question and
+     * answers itself: [Bridge.resume] falls back to [Settings.warmupKph] when
+     * there is no pace to return to, and in a warm-up that is the right pace
+     * anyway.
+     */
+    private fun holdWarmup() {
+        if (session == Session.WARMUP) {
+            pausedInWarmup = true
+            pausedWarmupLeftMs =
+                (phaseEndsAt - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+            pausedWarmupTotalMs = phaseTotalMs
+        } else {
+            forgetHeldWarmup()
+        }
+    }
+
+    /**
+     * There is no warm-up to come back to.
+     *
+     * Said by everything that starts a warm-up, ends one, or starts a walk —
+     * four places, which is why it is a function. A stale remainder is not a
+     * harmless leftover: it would put the *next* walk back into a warm-up on
+     * its first RESUME.
+     */
+    private fun forgetHeldWarmup() {
+        pausedInWarmup = false
+        pausedWarmupLeftMs = 0L
+        pausedWarmupTotalMs = 0L
     }
 
     /**
      * Ease down: belt to [Settings.cooldownKph], deck to level, and the
      * configured cool-down counting away to the summary through [advancePhase].
      *
-     * Two ways in and one implementation, for the same reason as [beginWarmup]:
-     * COOL DOWN pressed on a walk in progress, and a route reaching its end —
-     * see [routeTick]. Walking the last metre of a route used to go straight to
-     * the summary with the belt dropping from route pace to a stop, which is
-     * the one thing a cool-down is for.
+     * Three ways in and one implementation, for the same reason as
+     * [beginWarmup]: COOL DOWN pressed on a walk in progress, a route reaching
+     * its end (see [routeTick]) and a template running out of timetable (see
+     * [planTick]). Only the first of those went anywhere near a cool-down
+     * before. The other two dropped the belt from working pace to a stop with
+     * the summary already up, which is the one thing a cool-down is for — and
+     * they are the endings a guided walk is *most* likely to have, since
+     * walking the thing to its end is the point of choosing it.
      */
     private fun beginCooldown(why: String) {
         val now = SystemClock.elapsedRealtime()
@@ -2275,6 +2391,7 @@ class MainActivity : Activity() {
     }
 
     private fun resetSession() {
+        forgetHeldWarmup()
         accumulatedMs = 0L
         activeSince = SystemClock.elapsedRealtime()
         armBaseline = true
@@ -2822,13 +2939,17 @@ class MainActivity : Activity() {
         dmk = dmkLatched
         if (keyOut && Session.isMoving(session)) {
             accumulatedMs += SystemClock.elapsedRealtime() - activeSince
+            // The warm-up *is* remembered: a key pulled during it leaves it as
+            // unfinished as STOP does, and RESUME owes the walker the rest of
+            // it. See holdWarmup.
+            holdWarmup()
             session = Session.PAUSED
             phaseEndsAt = 0L
             phaseTotalMs = 0L
             targetKph = 0.0
-            // Deliberately *not* remembered for RESUME. Someone pulled the
-            // safety key; whatever happens next should start from a standstill
-            // and be asked for explicitly.
+            // The pace, by contrast, is deliberately *not* remembered. Someone
+            // pulled the safety key; whatever happens next should start from a
+            // standstill and be asked for explicitly.
             pausedKph = 0.0
             rampReason = ""
         }

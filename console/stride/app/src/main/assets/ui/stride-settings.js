@@ -911,9 +911,18 @@
     var spdMax  = imperial ? 4.0 : 6.5;
     var spdStep = imperial ? 0.1 : 0.5;
     var g2 = group('Starting and stopping');
-    g2.appendChild(row('Warm-up', 'Skippable. Zero starts every walk at your chosen pace.',
+    // Not guided templates: those open with a flat settle segment of their
+    // own, so a warm-up as well would be warming up twice. A route has no such
+    // segment — its first stretch is the trailhead — so it does warm up.
+    g2.appendChild(row('Warm-up',
+      'Skippable, and paused rather than lost if you stop partway through. ' +
+      'Manual walks and routes; guided templates start on their own settle ' +
+      'stretch instead. Zero starts at your chosen pace.',
       stepper('warmup_min', S.warmup_min || 0, 0, 10, 1, 'min')));
-    g2.appendChild(row('Cool-down', '',
+    g2.appendChild(row('Cool-down',
+      'Runs when you press COOL DOWN, and when a route or a guided plan ' +
+      'reaches its end — so a plan lasts this much longer than its stated ' +
+      'length.',
       stepper('cooldown_min', S.cooldown_min || 0, 0, 10, 1, 'min')));
     g2.appendChild(row('Warm-up speed', 'Where a walk starts before the pace is yours.',
       stepper('warmup_kph', (S.warmup_kph || 2) * speedScale,
@@ -928,8 +937,9 @@
        this console behaved before the switch existed. */
     g2.appendChild(row('Carry warm-up into the workout',
       'Off, the workout starts again from 0:00 and zero distance the moment the warm-up ' +
-      'ends, and a guided plan gets its full length from there. On, the numbers run ' +
-      'straight through from the first step you took.',
+      'ends, and a guided plan gets its full length — or a route its full distance — ' +
+      'from there. On, the numbers run straight through from the first step you took, ' +
+      'so a route begins however far the warm-up got.',
       toggle('carry_warmup', !!S.carry_warmup)));
     sc.appendChild(g2);
 
