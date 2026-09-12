@@ -382,7 +382,7 @@ class MainActivity : Activity() {
             // recognised by name — see HeartRate.wantedName. Writing the new
             // address down means the next hunt has a current lead, and a
             // console that restarts does not have to fall back to the name.
-            onAddressChanged = { addr -> cfg.saveStrap(addr, cfg.hrName()) }
+            onAddressChanged = { name, addr -> cfg.noteStrapAddress(name, addr) }
         }
     }
     /** The treadmill as a standard Bluetooth fitness machine, for Zwift and
@@ -1474,17 +1474,34 @@ class MainActivity : Activity() {
             }
         }.toString()
 
+        /**
+         * Remember one more monitor and go and look for it.
+         *
+         * Adds rather than replaces: two people walk on this machine, and with
+         * one slot the second has to delete the first's monitor to pair their
+         * own. Nothing records whose is whose — only one of them is worn at a
+         * time, so the console hunts for all of them and takes whichever is
+         * advertising.
+         */
         @JavascriptInterface fun hrPair(address: String, name: String) {
             strap.stopScan()
-            cfg.saveStrap(address, name)
-            strap.connect(address, name)
-            Log.i(TAG, "hr: pairing with $name")
+            cfg.addStrap(address, name)
+            Log.i(TAG, "hr: pairing with $name — " +
+                    "${cfg.knownStraps().size} monitor(s) known")
+            applyStrap()
         }
 
-        @JavascriptInterface fun hrForget() {
+        /** Forget one monitor, leaving everybody else's alone. */
+        @JavascriptInterface fun hrForget(address: String, name: String) {
+            cfg.forgetStrap(address, name)
+            Log.i(TAG, "hr: forgot ${name.ifBlank { address }} — " +
+                    "${cfg.knownStraps().size} left")
+            // Reconnect against what is left rather than simply dropping the
+            // link: forgetting hers while he is mid-walk should leave his
+            // pulse alone, and the one being forgotten may not be the one
+            // currently connected.
             strap.disconnect()
-            cfg.forgetStrap()
-            Log.i(TAG, "hr: strap forgotten")
+            applyStrap()
         }
 
         @JavascriptInterface fun hrStatus(): String = JSONObject()
@@ -1493,6 +1510,16 @@ class MainActivity : Activity() {
             .put("connected", strap.connected)
             .put("bpm", strap.bpm())
             .put("battery", strap.battery)
+            // Every monitor known, and which one is live. The screen lists them
+            // all so that forgetting is per monitor rather than all-or-nothing.
+            .put("straps", JSONArray().apply {
+                cfg.knownStraps().forEach {
+                    put(JSONObject()
+                        .put("address", it.addr)
+                        .put("name", it.name)
+                        .put("live", strap.connected && strap.currentName == it.name))
+                }
+            })
             .put("name", cfg.hrName())
             .put("address", cfg.hrAddr())
             .toString()
@@ -1712,8 +1739,9 @@ class MainActivity : Activity() {
 
     /** Hold a connection only when a strap could actually be used. */
     private fun applyStrap() {
-        if (cfg.hrSource() == "grips" || cfg.hrAddr().isBlank()) strap.disconnect()
-        else strap.connect(cfg.hrAddr(), cfg.hrName())
+        val known = cfg.knownStraps()
+        if (cfg.hrSource() == "grips" || known.isEmpty()) strap.disconnect()
+        else strap.connect(known)
     }
 
     /**

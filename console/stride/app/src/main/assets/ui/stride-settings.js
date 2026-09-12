@@ -367,6 +367,18 @@
     return s;
   }
 
+  /* Escaping, for the handful of strings here that come from outside the
+     console. A Bluetooth device names itself, that name goes into innerHTML on
+     the heart rate screen, and "outside the console" means "whatever is
+     advertising in radio range". Cheap insurance against a device called
+     `<img onerror=…>`, and against a name with an ampersand in it simply
+     rendering wrong. */
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
   /* What a stored password looks like from here. The console does not send
      the password itself — Settings.json() sends `mqtt_pass_set` instead — so
      this is a statement that one exists, never the thing itself. */
@@ -764,7 +776,7 @@
         S.hr_source || 'auto')));
     sc.appendChild(g);
 
-    var g2 = group('Paired strap');
+    var g2 = group('Paired monitors');
     var pairedBox = el('div');
     g2.appendChild(pairedBox);
     sc.appendChild(g2);
@@ -777,9 +789,11 @@
       try { bridge().hrScan(); } catch (e) {}
       setTimeout(drawFound, 9000);
     });
-    g3.appendChild(row('Scan for straps',
-      'Any strap using the standard Bluetooth heart rate service — Polar, Garmin, ' +
-      'Wahoo, Coospo and most others.', scanBtn));
+    g3.appendChild(row('Scan for monitors',
+      'Any monitor using the standard Bluetooth heart rate service — Polar, Garmin, ' +
+      'Wahoo, Coospo, a Galaxy Watch sharing its pulse, and most others. Pairing adds ' +
+      'to the list above rather than replacing it, so two people can keep one each.',
+      scanBtn));
     var foundBox = el('div');
     g3.appendChild(foundBox);
     sc.appendChild(g3);
@@ -796,9 +810,9 @@
       }
       list.forEach(function (d) {
         var r = el('div', 'sx-dev');
-        r.innerHTML = '<div class="sx-dn"><div class="sx-n">' + d.name + ' · ' +
-          d.address.slice(0, 8) + '</div><div class="sx-d">Heart rate service · ' +
-          d.rssi + ' dBm</div></div>';
+        r.innerHTML = '<div class="sx-dn"><div class="sx-n">' + esc(d.name) + ' · ' +
+          esc(d.address.slice(0, 8)) + '</div><div class="sx-d">Heart rate service · ' +
+          esc(d.rssi) + ' dBm</div></div>';
         r.appendChild(press(el('button', 'sx-pill sx-go', 'PAIR'), function () {
           try { bridge().hrPair(d.address, d.name); } catch (e) {}
           foundBox.innerHTML = '';
@@ -809,6 +823,15 @@
       });
     }
 
+    /* Every monitor the console knows, not just the last one paired.
+
+       Two people walk on this machine and only one of them is wearing a
+       monitor at a time, so there is nothing to choose between and nothing to
+       ask: the console hunts for all of them and takes whichever is
+       advertising. Which is why no row here says whose it is — it does not
+       need to know, and asking would be a question with no good place to put
+       it, since this screen opens from the welcome screen before anybody has
+       said who is walking. */
     function drawPaired() {
       var st = {};
       try { st = JSON.parse(bridge().hrStatus()); } catch (e) {}
@@ -816,26 +839,41 @@
 
       if (!st.available) {
         pairedBox.appendChild(el('div', 'sx-empty',
-          'Bluetooth is off, or this console has none.<br>Without a strap there is no pulse unless your machine has grips.'));
+          'Bluetooth is off, or this console has none.<br>Without a monitor there is no pulse unless your machine has grips.'));
         return;
       }
-      if (!st.address) {
+      var list = st.straps || [];
+      if (!list.length) {
         pairedBox.appendChild(el('div', 'sx-empty',
-          'No strap paired.<br>Put yours on and scan.'));
+          'No monitors paired.<br>Put yours on and scan. You can add one each — ' +
+          'whichever is switched on is the one that gets used.'));
         return;
       }
-      var r = el('div', 'sx-dev' + (st.connected ? ' sx-on' : ''));
-      var bits = [st.connected ? 'Connected' : 'Not in range'];
-      if (st.battery >= 0) bits.push('battery ' + st.battery + '%');
-      r.innerHTML = '<div class="sx-dn"><div class="sx-n">' + (st.name || 'Strap') +
-        ' · ' + st.address.slice(0, 8) + '</div><div class="sx-d">' + bits.join(' · ') +
-        '</div></div><div class="sx-bpm">' + (st.bpm > 0 ? st.bpm : '—') +
-        ' <small>bpm</small></div>';
-      r.appendChild(press(el('button', 'sx-pill sx-warn', 'FORGET'), function () {
-        try { bridge().hrForget(); } catch (e) {}
-        load(); drawPaired();
-      }));
-      pairedBox.appendChild(r);
+
+      list.forEach(function (d) {
+        var r = el('div', 'sx-dev' + (d.live && st.connected ? ' sx-on' : ''));
+        /* "Not in range" for a monitor nobody is wearing is not a fault, and
+           saying so stopped people pairing a second one: the ones that are not
+           live simply say they are waiting. */
+        var bits;
+        if (d.live && st.connected) {
+          bits = ['Connected'];
+          if (st.battery >= 0) bits.push('battery ' + st.battery + '%');
+        } else {
+          bits = ['Waiting — switch it on to use it'];
+        }
+        var addr = (d.address || '').slice(0, 8);
+        r.innerHTML = '<div class="sx-dn"><div class="sx-n">' +
+          esc(d.name || 'Monitor') + ' · ' + esc(addr) +
+          '</div><div class="sx-d">' + bits.join(' · ') +
+          '</div></div><div class="sx-bpm">' +
+          (d.live && st.bpm > 0 ? st.bpm : '—') + ' <small>bpm</small></div>';
+        r.appendChild(press(el('button', 'sx-pill sx-warn', 'FORGET'), function () {
+          try { bridge().hrForget(d.address, d.name); } catch (e) {}
+          load(); drawPaired();
+        }));
+        pairedBox.appendChild(r);
+      });
     }
 
     drawPaired();

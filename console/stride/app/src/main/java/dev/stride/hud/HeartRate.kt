@@ -211,10 +211,26 @@ class HeartRate(
     @Volatile private var wantedName = ""
 
     /**
+     * Every monitor the console would accept, not just the one it saw last.
+     *
+     * Two people walk on this machine and only one of them is wearing a monitor
+     * at any moment, so there is nothing to choose between: the hunt looks for
+     * all of them and takes whichever is actually advertising. Whose it is does
+     * not have to be recorded anywhere, which is the thing that makes this
+     * small — pairing never has to ask, and the settings screen never has to
+     * know who is walking.
+     *
+     * [wanted] and [wantedName] stay as the *current* monitor — the one being
+     * connected to or already connected — because a connection is singular
+     * even when the list is not.
+     */
+    @Volatile private var known: List<Settings.Strap> = emptyList()
+
+    /**
      * Told when the strap turns up at an address other than the stored one, so
      * the caller can write the new one down. See [wantedName].
      */
-    var onAddressChanged: ((String) -> Unit)? = null
+    var onAddressChanged: ((name: String, address: String) -> Unit)? = null
 
     /** True while hunting for [wanted] to advertise — see [seek]. */
     @Volatile private var seeking = false
@@ -283,6 +299,14 @@ class HeartRate(
     }
 
     /** The current pulse, or 0 if there has not been one recently. */
+    /**
+     * Which of the known monitors is connected, or being connected to.
+     *
+     * The settings screen shows every monitor it knows and marks the live one,
+     * so that forgetting is per monitor rather than all or nothing.
+     */
+    val currentName: String get() = wantedName
+
     fun bpm(): Int =
         if (lastBpm > 0 && SystemClock.elapsedRealtime() - lastAt < STALE_MS) lastBpm else 0
 
@@ -379,12 +403,28 @@ class HeartRate(
      * button should not have to wait for it.
      */
     @SuppressLint("MissingPermission")
-    fun connect(address: String, name: String = "") {
-        if (address.isBlank()) return
-        if (address == wanted && name == wantedName && (delivering() || seeking)) return
+    fun connect(address: String, name: String = "") =
+        connect(listOf(Settings.Strap(address, name)))
+
+    /**
+     * Hold a connection to whichever of [straps] turns up.
+     *
+     * Asking again for the same set while one of them is delivering is a no-op,
+     * for the reason above: settings re-apply on changes that have nothing to
+     * do with heart rate, and dropping a working link to rebuild the same one
+     * costs a minute of readings.
+     */
+    fun connect(straps: List<Settings.Strap>) {
+        val wantedSet = straps.filter { it.addr.isNotBlank() }
+        if (wantedSet.isEmpty()) return
+        // Still hunting for, or holding, one of the monitors we would accept.
+        if (wantedSet == known && (delivering() || seeking)) return
         disconnect()
-        wanted = address
-        wantedName = name
+        known = wantedSet
+        // The most recently paired is the first lead; the rest are found by
+        // name in the same scan — see seekCallback.
+        wanted = wantedSet[0].addr
+        wantedName = wantedSet[0].name
         seek()
     }
 
@@ -442,7 +482,7 @@ class HeartRate(
          */
         val filters = ArrayList<ScanFilter>(2)
         filters.add(ScanFilter.Builder().setDeviceAddress(address).build())
-        if (wantedName.isNotBlank()) {
+        if (known.any { it.name.isNotBlank() }) {
             filters.add(ScanFilter.Builder().setServiceUuid(ParcelUuid(SERVICE)).build())
         }
         val settings = ScanSettings.Builder()
@@ -495,20 +535,29 @@ class HeartRate(
             // The address if we recognise it, otherwise the name. The scan is
             // filtered on "any heart rate service" as well as on the address,
             // so this is where somebody else's strap is turned away.
-            val byAddress = dev.address == wanted
-            val byName = wantedName.isNotBlank() && nameOf(dev, result) == wantedName
-            if (!byAddress && !byName) return
+            // Any monitor we know, by address if we recognise it and by name
+            // otherwise. The scan is filtered on "any heart rate service" as
+            // well as on one address, so this is where a stranger's strap is
+            // turned away.
+            val advertised = nameOf(dev, result)
+            val match = known.firstOrNull { it.addr == dev.address }
+                ?: known.firstOrNull { it.name.isNotBlank() && it.name == advertised }
+                ?: return
 
-            if (!byAddress) {
-                // Write it down: the next hunt then starts with a lead that is
-                // current, and a direct connect to a known address is much the
-                // faster path when it happens to still be valid.
+            if (match.addr != dev.address) {
+                // Write it down: the next hunt starts with a current lead, and
+                // a direct connect to a known address is much the faster path
+                // while it lasts.
                 Log.i(FitProConnection.TAG,
-                    "hr: $wantedName is at ${dev.address} now, not $wanted — " +
+                    "hr: ${match.name} is at ${dev.address} now, not ${match.addr} — " +
                             "its address rotates")
-                wanted = dev.address
-                onAddressChanged?.invoke(dev.address)
+                onAddressChanged?.invoke(match.name, dev.address)
+            } else if (match.addr != wanted) {
+                Log.i(FitProConnection.TAG, "hr: found ${match.name}")
             }
+            // The connection is to this one, whichever of the known it is.
+            wanted = dev.address
+            wantedName = match.name
             stopSeek()
             open(dev, autoConnect = false)
         }
@@ -638,6 +687,7 @@ class HeartRate(
     fun disconnect() {
         wanted = ""
         wantedName = ""
+        known = emptyList()
         stopSeek()
         try {
             gatt?.close()

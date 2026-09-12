@@ -97,6 +97,28 @@ class Settings(context: Context) {
         const val HR_ADDR = "hr_addr"
         const val HR_NAME = "hr_name"
 
+        /**
+         * Every monitor this console knows, as a JSON array of
+         * `{"addr":…,"name":…}`.
+         *
+         * A list rather than one, because two people walk on this machine and
+         * with a single slot the second one has to delete the first one's
+         * monitor to pair their own — every time, in both directions.
+         *
+         * Deliberately *not* attached to a person. Whose monitor it is need not
+         * be recorded, because only one of them is ever switched on and worn at
+         * a time: the console hunts for all of them at once and takes whichever
+         * is actually advertising. That is a smaller idea than a monitor per
+         * walker and it answers the same need — and it means pairing never has
+         * to ask "for whom", which matters because the settings screen is
+         * reachable from the welcome screen, before anybody has said who is
+         * walking.
+         *
+         * [HR_ADDR] and [HR_NAME] are kept as the one-monitor console's
+         * storage, and seed this list once — see [knownStraps].
+         */
+        const val HR_STRAPS = "hr_straps"
+
         // --- routes and the map ---
         /**
          * What the hero draws while a recorded route is being walked:
@@ -607,6 +629,88 @@ class Settings(context: Context) {
     fun hrAddr(): String = prefs.getString(HR_ADDR, "") ?: ""
     fun hrName(): String = prefs.getString(HR_NAME, "") ?: ""
 
+    /** One monitor the console knows about. */
+    data class Strap(val addr: String, val name: String) {
+        fun json(): JSONObject = JSONObject().put("addr", addr).put("name", name)
+    }
+
+    /**
+     * Every monitor this console knows, most recently paired first.
+     *
+     * Seeds itself from the single-monitor keys the first time it is read, so a
+     * console that has been happily paired for months does not come back from
+     * an update having forgotten the strap. Nothing is removed by that: the old
+     * keys stay where they are and simply stop being the source of truth.
+     */
+    fun knownStraps(): List<Strap> {
+        val raw = prefs.getString(HR_STRAPS, null)
+        if (raw == null) {
+            val addr = hrAddr()
+            val seeded = if (addr.isBlank()) emptyList()
+                         else listOf(Strap(addr, hrName()))
+            saveStraps(seeded)
+            return seeded
+        }
+        return try {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).mapNotNull { i ->
+                val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                val a = o.optString("addr")
+                if (a.isBlank()) null else Strap(a, o.optString("name"))
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun saveStraps(list: List<Strap>) {
+        prefs.edit().putString(
+            HR_STRAPS, JSONArray().apply { list.forEach { put(it.json()) } }.toString()
+        ).apply()
+    }
+
+    /**
+     * Remember a monitor, or move it to the front if it is already known.
+     *
+     * Keyed on the **name** and not the address, because the address is not an
+     * identity: some monitors change theirs on every use — a Galaxy Watch used
+     * eight inside fifteen minutes on 2026-09-12. Keying on the address would
+     * fill this list with eight copies of one watch, and then the console would
+     * be hunting for seven ghosts.
+     *
+     * A monitor with no name to key on falls back to the address, which is the
+     * best available and is what a static-address strap has anyway.
+     */
+    fun addStrap(addr: String, name: String) {
+        val keep = knownStraps().filterNot {
+            if (name.isNotBlank()) it.name == name else it.addr == addr
+        }
+        saveStraps(listOf(Strap(addr, name)) + keep)
+        // The single-monitor keys follow the most recent pairing, so anything
+        // still reading them — and a downgrade to an older build — sees
+        // something sensible rather than nothing.
+        saveStrap(addr, name)
+    }
+
+    /** Update where a monitor was last seen, leaving the list order alone. */
+    fun noteStrapAddress(name: String, addr: String) {
+        if (name.isBlank()) return
+        val list = knownStraps()
+        if (list.none { it.name == name }) return
+        saveStraps(list.map { if (it.name == name) it.copy(addr = addr) else it })
+        if (hrName() == name) saveStrap(addr, name)
+    }
+
+    fun forgetStrap(addr: String, name: String) {
+        saveStraps(knownStraps().filterNot {
+            if (name.isNotBlank()) it.name == name else it.addr == addr
+        })
+        if (hrAddr() == addr || (name.isNotBlank() && hrName() == name)) {
+            val next = knownStraps().firstOrNull()
+            if (next == null) forgetStrap() else saveStrap(next.addr, next.name)
+        }
+    }
+
     fun saveStrap(addr: String, name: String) {
         prefs.edit().putString(HR_ADDR, addr).putString(HR_NAME, name).apply()
     }
@@ -684,6 +788,7 @@ class Settings(context: Context) {
         .put(COACH_MILESTONES, coachMilestones())
         .put(HR_SOURCE, hrSource())
         .put(HR_ADDR, hrAddr())
+        .put(HR_STRAPS, JSONArray().apply { knownStraps().forEach { put(it.json()) } })
         .put(HR_NAME, hrName())
         .put(SLEEP_MIN, prefs.getInt(SLEEP_MIN, 5))
         .put(CLOCK_24, clock24())
