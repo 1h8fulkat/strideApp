@@ -61,6 +61,20 @@ class Settings(context: Context) {
         const val MQTT_TLS = "mqtt_tls"
         const val MQTT_PREFIX = "mqtt_prefix"
 
+        // --- routes, read straight off home assistant ---
+        //
+        // Separate from the MQTT block above and deliberately not gated on it.
+        // Routes used to arrive on the retained `stride/routes` topic, which
+        // meant a script on a third machine had to be run by hand every time a
+        // .gpx changed — and when it was not, the console went on offering a
+        // list from before the change. These four let it ask instead. See
+        // [RouteSync].
+        const val HA_URL = "ha_url"
+        const val HA_TOKEN = "ha_token"
+        const val HA_ROUTES_SENSOR = "ha_routes_sensor"
+        const val HA_GPX_PATH = "ha_gpx_path"
+        const val ROUTE_FETCH = "route_fetch"
+
         // --- deck ---
         const val WARMUP_MIN = "warmup_min"
         const val COOLDOWN_MIN = "cooldown_min"
@@ -376,6 +390,45 @@ class Settings(context: Context) {
     fun mqttPrefix(): String = (prefs.getString(MQTT_PREFIX, "stride") ?: "stride")
         .trim().trim('/').ifBlank { "stride" }
 
+    /**
+     * Home Assistant's base URL, with any trailing slash taken off so callers
+     * can concatenate without thinking about it.
+     */
+    fun haUrl(): String =
+        (prefs.getString(HA_URL, "") ?: "").trim().trimEnd('/')
+
+    /**
+     * A long-lived access token.
+     *
+     * Only the folder listing needs it. The `.gpx` files themselves sit under
+     * `/local/`, which Home Assistant serves unauthenticated — so a console
+     * that loses this can still be told which files to fetch by hand, and one
+     * that has it needs nothing else.
+     */
+    fun haToken(): String = (prefs.getString(HA_TOKEN, "") ?: "").trim()
+
+    /** The `folder` sensor whose `file_list` is the route folder. */
+    fun haRoutesSensor(): String =
+        (prefs.getString(HA_ROUTES_SENSOR, "sensor.routes") ?: "sensor.routes")
+            .trim().ifBlank { "sensor.routes" }
+
+    /** Where the files are under `www/`, matching `ha_gpx_path` in stride.conf. */
+    fun haGpxPath(): String =
+        (prefs.getString(HA_GPX_PATH, "treadmill/routes") ?: "treadmill/routes")
+            .trim().trim('/').ifBlank { "treadmill/routes" }
+
+    /**
+     * Whether to go and look on start-up.
+     *
+     * On by default, but [routeFetchReady] is what actually decides: with no
+     * URL and no token there is nothing to ask, and a console that has never
+     * been told about Home Assistant should not spend its boot timing out.
+     */
+    fun routeFetch(): Boolean = prefs.getBoolean(ROUTE_FETCH, true)
+
+    fun routeFetchReady(): Boolean =
+        routeFetch() && haUrl().isNotEmpty() && haToken().isNotEmpty()
+
     fun brokerUri(): String =
         "${if (mqttTls()) "ssl" else "tcp"}://${mqttHost()}:${mqttPort()}"
 
@@ -420,6 +473,31 @@ class Settings(context: Context) {
             .putBoolean(MQTT_TLS, uri.startsWith("ssl"))
             .putBoolean(HA_ENABLED, true)
             .apply()
+    }
+
+    /**
+     * The same idea for the route folder, on a marker of its own.
+     *
+     * Its own marker and not `"seeded"`, which is the part worth reading. That
+     * flag was set the first time this console ever started, so anything added
+     * to [seedFromBuildConfig] afterwards would be skipped forever on exactly
+     * the consoles that are already running — the ones that would most like a
+     * new field filled in for them. A new seed needs a new marker, or it is not
+     * a seed, it is a thing that works only on a fresh install.
+     *
+     * The URL alone is enough to be worth adopting: the `.gpx` files are served
+     * unauthenticated, so a console with the address and no token can still be
+     * pointed at a folder by hand. Both are adopted when both are there.
+     */
+    fun seedRoutesFromBuildConfig() {
+        if (prefs.getBoolean("seeded_ha_routes", false)) return
+        prefs.edit().putBoolean("seeded_ha_routes", true).apply()
+
+        val url = BuildConfig.HA_URL.trim().trimEnd('/')
+        if (url.isBlank()) return
+        val e = prefs.edit().putString(HA_URL, url)
+        if (BuildConfig.HA_TOKEN.isNotBlank()) e.putString(HA_TOKEN, BuildConfig.HA_TOKEN)
+        e.apply()
     }
 
     // --- deck -----------------------------------------------------------------
@@ -539,6 +617,15 @@ class Settings(context: Context) {
         .put("mqtt_pass_set", mqttPass().isNotEmpty())
         .put(MQTT_TLS, mqttTls())
         .put(MQTT_PREFIX, mqttPrefix())
+        .put(HA_URL, haUrl())
+        // Not the token, for the reason the password is not here either — it
+        // is the same secret in the same place. `ha_token_set` is all the
+        // screen ever needed, and the key for the token itself is absent
+        // rather than empty so a reader that wants it fails loudly.
+        .put("ha_token_set", haToken().isNotEmpty())
+        .put(HA_ROUTES_SENSOR, haRoutesSensor())
+        .put(HA_GPX_PATH, haGpxPath())
+        .put(ROUTE_FETCH, routeFetch())
         .put(WARMUP_MIN, prefs.getInt(WARMUP_MIN, 2))
         .put(COOLDOWN_MIN, prefs.getInt(COOLDOWN_MIN, 2))
         .put(WARMUP_KPH, prefs.getFloat(WARMUP_KPH, 2.0f).toDouble())
@@ -569,7 +656,8 @@ class Settings(context: Context) {
         val e = prefs.edit()
         when (key) {
             ALLOW_GUEST, HA_ENABLED, MQTT_TLS, COACH_ON, COACH_REMOTE,
-            COACH_MILESTONES, CLOCK_24, KEEP_AWAKE, CARRY_WARMUP ->
+            COACH_MILESTONES, CLOCK_24, KEEP_AWAKE, CARRY_WARMUP,
+            ROUTE_FETCH ->
                 e.putBoolean(key, value == "true" || value == "1")
 
             MQTT_PORT, WARMUP_MIN, COOLDOWN_MIN, OPEN_LAP_MIN, SLEEP_MIN,

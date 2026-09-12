@@ -11,6 +11,22 @@ Put a GPX on Home Assistant under `www/treadmill/routes/` — reachable at
 `/local/treadmill/routes/<name>.gpx` — and it appears on the console. Delete
 it and it goes away.
 
+YOU MAY NOT NEED THIS SCRIPT ANY MORE
+
+The console reads that folder itself at start-up now and converts what it
+finds — see `Settings -> Home Assistant -> Routes` on the console and
+`docs/ROUTE_MAP.md`. Where that is configured, `sync` is redundant and the
+retained topic it publishes to is deliberately ignored.
+
+This stays for two jobs it is still the best tool for: `preview`, which shows
+what a file will become and what the deck cannot give you before you walk it,
+and `sync`, for a console that has not been told Home Assistant's address.
+
+If you are editing the conversion below, it is no longer the only copy of it.
+`console/.../hud/Gpx.kt` is a port of everything from `trackpoints` to
+`convert`, and `GpxTest` fails if the two stop agreeing. Change both, run
+`tools/gpx-golden.py`, and read the diff.
+
 WHAT A ROUTE CARRIES
 
 Two unrelated things, and it is worth keeping them apart:

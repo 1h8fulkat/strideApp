@@ -43,6 +43,16 @@
 >   workout" turns off happens when the warm-up *ends*, and one ended at STOP
 >   never reached it. On a route those metres were route already walked. Pulling
 >   the safety key holds the warm-up the same way.
+> * **The console fetches its own routes.** At start-up it asks Home Assistant
+>   which `.gpx` files are in `www/treadmill/routes/`, fetches them over
+>   `/local/` and converts them on the console — so adding a route is putting a
+>   file in a folder, and no script has to be run on a third machine. It used to
+>   arrive on a *retained* MQTT topic, which holds its last payload forever:
+>   this folder had three files and the console was offering two routes, one of
+>   them a file renamed weeks earlier, with nothing anywhere saying so. A
+>   failure never costs you a route — the cached list stays. The conversion is a
+>   port of `stride_gpx.py`'s, held to the original's own output on three real
+>   routes by `tools/docker-build.sh test`.
 > * **[docs/DOCKER.md](docs/DOCKER.md)** — build and deploy with nothing
 >   installed but Docker.
 

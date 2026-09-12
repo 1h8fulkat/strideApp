@@ -37,6 +37,19 @@ android {
         buildConfigField("String", "MQTT_BROKER", secret("mqtt.broker", ""))
         buildConfigField("String", "MQTT_USER", secret("mqtt.user"))
         buildConfigField("String", "MQTT_PASS", secret("mqtt.pass"))
+
+        // Where the console reads its routes from, for the same reason and
+        // with the same caveat as the three above: a seed for first run, not
+        // the source — see Settings.seedRoutesFromBuildConfig.
+        //
+        // `ha.token` deserves more care than the broker password, not less. A
+        // long-lived access token is the whole Home Assistant API, not one
+        // topic on one broker, and an APK carrying one hands that to whoever
+        // has the APK. It is here because the alternative is typing 180
+        // characters on a treadmill's on-screen keyboard, and the release
+        // workflow refuses to build with either key present.
+        buildConfigField("String", "HA_URL", secret("ha.url"))
+        buildConfigField("String", "HA_TOKEN", secret("ha.token"))
     }
     /*
      * A release build is what belongs on a treadmill.
@@ -111,4 +124,12 @@ dependencies {
     // Plain Java Paho client — the Android "service" variant needs AndroidX,
     // which this app deliberately avoids.
     implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
+
+    // JVM unit tests only — never packaged. There is exactly one thing here
+    // worth testing off the device: Gpx, which is a port of the conversion
+    // half of homeassistant/stride_gpx.py and has to agree with it about what
+    // gradient the deck drives. GpxTest checks that against three real routes
+    // and the script's own output. Everything else in this app needs a board,
+    // a belt or a WebView, and is checked by tools/ui-test.sh or by walking.
+    testImplementation("junit:junit:4.13.2")
 }

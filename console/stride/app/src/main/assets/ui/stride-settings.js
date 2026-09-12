@@ -879,6 +879,50 @@
       'Connects, publishes discovery, and reports back. Changes nothing else.', testWrap));
     sc.appendChild(g);
 
+    /* Routes, read straight off Home Assistant.
+
+       Its own group and not under the toggle above, because it does not use
+       the broker at all: the listing comes from Home Assistant's API and the
+       files from /local/. A console publishing nothing can still fetch its
+       routes, and one publishing everything can still have this switched off. */
+    var gr = group('Routes');
+    gr.appendChild(row('Read routes from Home Assistant',
+      'On start-up, the console asks Home Assistant which .gpx files are in the folder ' +
+      'and converts them itself. Adding a route becomes putting a file in a folder. ' +
+      'Off, routes only arrive if something publishes them to the broker.',
+      toggle('route_fetch', S.route_fetch !== false)));
+    gr.appendChild(row('Home Assistant address',
+      'With the scheme and port, as you would type it in a browser — ' +
+      'http://homeassistant.local:8123.',
+      field('ha_url', S.ha_url)));
+    gr.appendChild(row('Access token',
+      'A long-lived access token, from your Home Assistant profile page. Only the ' +
+      'folder listing needs it; the .gpx files themselves are served without one.',
+      field('ha_token', S.ha_token_set ? SECRET_MASK : '', false, 'password')));
+    gr.appendChild(row('Folder sensor',
+      'The sensor whose file_list is the route folder. Needs a `folder` platform ' +
+      'sensor in Home Assistant, and the folder on its allowlist_external_dirs.',
+      field('ha_routes_sensor', S.ha_routes_sensor)));
+    gr.appendChild(row('Folder under www/',
+      'Where the files sit, so they can be fetched over /local/. The default matches ' +
+      'config/www/treadmill/routes.',
+      field('ha_gpx_path', S.ha_gpx_path)));
+
+    var routeEl = el('span', 'sx-state', '<i class="sx-dot"></i>Not tried');
+    var routeWrap = el('div');
+    routeWrap.style.cssText = 'display:flex;align-items:center';
+    routeEl.style.marginRight = '18px';
+    routeWrap.appendChild(routeEl);
+    routeWrap.appendChild(press(el('button', 'sx-pill', 'FETCH'), function () {
+      routeEl.innerHTML = '<i class="sx-dot sx-busy"></i>Reading…';
+      try { bridge().syncRoutes(); } catch (e) {}
+      setTimeout(drawRoutes, 2500);
+    }));
+    gr.appendChild(row('Fetch them now',
+      'Reads the folder and replaces the route list. A failure changes nothing — ' +
+      'the routes already on the console stay exactly as they are.', routeWrap));
+    sc.appendChild(gr);
+
     function drawState() {
       var st = {};
       try { st = JSON.parse(bridge().mqttStatus()); } catch (e) {}
@@ -886,8 +930,28 @@
       else if (st.connected) stateEl.innerHTML = '<i class="sx-dot sx-ok"></i>Connected';
       else stateEl.innerHTML = '<i class="sx-dot sx-bad"></i>Could not connect';
     }
+
+    /* The count and the outcome, not just the outcome. "3 route(s)" after a
+       fetch that failed would be a lie by omission, and "failed" without the
+       count hides the fact that you still have yesterday's three to walk. */
+    function drawRoutes() {
+      var st = {};
+      try { st = JSON.parse(bridge().routeSyncStatus()); } catch (e) {}
+      var have = (st.count || 0) + ' on the console';
+      var said = st.status || 'not tried yet';
+      var dot = said.indexOf('failed') === 0 || said.indexOf('kept') >= 0 ? 'sx-bad'
+              : said.indexOf('route(s)') >= 0 ? 'sx-ok' : '';
+      if (!st.ready) { dot = ''; said = 'not set up'; }
+      /* The dot as markup, the words as a text node. `status` carries filenames
+         straight from a folder on another machine, and a name with a < in it
+         has no business being parsed as HTML on the way to a status line. */
+      routeEl.innerHTML = '<i class="sx-dot ' + dot + '"></i>';
+      routeEl.appendChild(document.createTextNode(said + ' \u00b7 ' + have));
+    }
+
     drawState();
-    pane.sxTick = drawState;
+    drawRoutes();
+    pane.sxTick = function () { drawState(); drawRoutes(); };
   }
 
   // --- treadmill ---

@@ -12,8 +12,11 @@
 ## uses BuildConfig as the *seed* for its stored preferences, so whoever
 ## installs this configures their own broker on the console and never sees ours.
 ##
-## The `no local mqtt credentials` step below enforces that rather than trusting
-## it, because the failure is silent and unrecoverable once published.
+## The `Refuse to build with local credentials` step below enforces that rather
+## than trusting it, because the failure is silent and unrecoverable once
+## published. It covers `ha.*` as well as `mqtt.*`: a long-lived Home Assistant
+## token is the whole API rather than one topic on one broker, so it is the
+## worse of the two to publish by accident.
 name: release
 
 on:
@@ -75,13 +78,13 @@ jobs:
           stride.key.password=$KEY_PASSWORD
           EOF
 
-      - name: Refuse to build with local mqtt credentials
+      - name: Refuse to build with local credentials
         run: |
-          if grep -qE '^\s*mqtt\.' console/stride/local.properties; then
-            echo "::error::local.properties carries mqtt.* keys — those would be compiled into the APK and published. Refusing."
+          if grep -qE '^\s*(mqtt|ha)\.' console/stride/local.properties; then
+            echo "::error::local.properties carries mqtt.* or ha.* keys — those are compiled into the APK and would be published. Refusing."
             exit 1
           fi
-          echo "ok: no broker credentials in this build"
+          echo "ok: no broker or Home Assistant credentials in this build"
 
       - name: Build
         working-directory: console/stride

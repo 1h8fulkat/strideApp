@@ -962,6 +962,24 @@ class MainActivity : Activity() {
         @JavascriptInterface fun routes(): String = routes.json()
 
         /**
+         * Go and read the route folder now.
+         *
+         * Returns immediately; the fetch is on its own thread and the picker
+         * re-reads [routes] the next time it is opened. The settings screen
+         * polls [routeSyncStatus] to say how it went.
+         */
+        @JavascriptInterface fun syncRoutes() {
+            routeSync.refresh("routes: asked for on the settings screen")
+        }
+
+        /** What the last fetch did, in words, for the settings screen. */
+        @JavascriptInterface fun routeSyncStatus(): String = JSONObject()
+            .put("status", routeSync.status)
+            .put("count", routes.count())
+            .put("ready", cfg.routeFetchReady())
+            .toString()
+
+        /**
          * Start a walk on a recorded route.
          *
          * No `minutes`, unlike [chooseGuided], and that is deliberate rather
@@ -1588,7 +1606,7 @@ class MainActivity : Activity() {
         mqtt.onMessage(mqtt.coachTopic, ::onCoachLine)
         mqtt.onMessage(mqtt.uiTopic, ::onUiCommand)
         mqtt.onMessage(mqtt.personsTopic, ::onPersons)
-        mqtt.onMessage(mqtt.routesTopic, routes::accept)
+        mqtt.onMessage(mqtt.routesTopic, ::onRoutesTopic)
         val err = mqtt.connect()
         if (err == null) {
             if (mqtt.connected) mqtt.publishUi(chosenUi())
@@ -1720,6 +1738,30 @@ class MainActivity : Activity() {
 
     private fun assetFor(name: String) = "file:///android_asset/ui/$name.html"
 
+    /**
+     * A route list published to `stride/routes`.
+     *
+     * Ignored outright once this console fetches its own — and that is the
+     * point of the check rather than tidiness. The topic is *retained*, so the
+     * broker hands over its last payload the moment the console connects, every
+     * time. Without this, a console that had just read three current routes off
+     * Home Assistant would have them replaced seconds later by whatever
+     * `stride_gpx.py` last published, which on this machine was a list from
+     * before a file was renamed. The fresher answer would lose the race on
+     * every boot, and the symptom would be "it works until it doesn't".
+     *
+     * Still honoured when route fetching is off or unconfigured, because that
+     * is the older path and it is somebody's only path.
+     */
+    private fun onRoutesTopic(payload: String) {
+        if (cfg.routeFetchReady()) {
+            Log.i(TAG, "mqtt: ignoring a retained ${mqtt.routesTopic} payload — " +
+                    "this console reads its routes from Home Assistant itself")
+            return
+        }
+        routes.accept(payload)
+    }
+
     /** Both routes in — a tap on the settings screen and a publish from HA —
      *  land here, so neither can switch under conditions the other refuses. */
     private fun switchUi(name: String) {
@@ -1752,6 +1794,14 @@ class MainActivity : Activity() {
      * fetched at the moment somebody is standing on the belt choosing it.
      */
     private val routes by lazy { Routes(this) }
+
+    /**
+     * Reads the route folder off Home Assistant and converts it here.
+     *
+     * The deck limits go in as a lambda rather than a pair because this is
+     * constructed before the board has said what they are — see [RouteSync].
+     */
+    private val routeSync by lazy { RouteSync(cfg, routes) { Pair(minGrade, maxGrade) } }
 
     /** Answers the map's tile requests. Idle unless a route view asks. */
     private val tiles by lazy { Tiles(this, cfg) }
@@ -2513,6 +2563,7 @@ class MainActivity : Activity() {
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
 
         cfg.seedFromBuildConfig()
+        cfg.seedRoutesFromBuildConfig()
         walker = cfg.defaultWalker()
         refreshWalkerHrMax()
         applyBrightness()
@@ -2744,10 +2795,20 @@ class MainActivity : Activity() {
         unlockWithRetries()
         readLimits()
         readSleepConfig()
+        // Here, and not in onCreate, because readLimits() is what turns
+        // minGrade/maxGrade from the conservative defaults into what this deck
+        // actually does. A sync racing ahead of it would clamp a route's
+        // profile to 12% on a board that gives 15, and would do it only
+        // sometimes — a route whose hills depended on who won a race at boot.
+        //
+        // It does mean a board that never answers never syncs. That is the
+        // right way round: nothing can be walked in that state anyway, and the
+        // settings screen still has a button.
+        if (cfg.routeFetch()) routeSync.refresh("routes: boot")
         mqtt.onMessage(mqtt.coachTopic, ::onCoachLine)
         mqtt.onMessage(mqtt.uiTopic, ::onUiCommand)
         mqtt.onMessage(mqtt.personsTopic, ::onPersons)
-        mqtt.onMessage(mqtt.routesTopic, routes::accept)
+        mqtt.onMessage(mqtt.routesTopic, ::onRoutesTopic)
         applyMqttSettings()
         mqtt.publishUi(chosenUi())
 

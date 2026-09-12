@@ -1,0 +1,1592 @@
+flat-rail-trail-5k.gpx id gpx-flat-rail-trail-5k
+flat-rail-trail-5k.gpx name Flat rail trail 5k
+flat-rail-trail-5k.gpx distance_m 4301.6
+flat-rail-trail-5k.gpx climb_m 37.5
+flat-rail-trail-5k.gpx segments 21
+flat-rail-trail-5k.gpx seg 0 0.0 150.0 1.5
+flat-rail-trail-5k.gpx seg 1 150.0 300.0 0.0
+flat-rail-trail-5k.gpx seg 2 300.0 450.0 1.0
+flat-rail-trail-5k.gpx seg 3 450.0 1050.0 0.5
+flat-rail-trail-5k.gpx seg 4 1050.0 1200.0 1.0
+flat-rail-trail-5k.gpx seg 5 1200.0 1350.0 0.0
+flat-rail-trail-5k.gpx seg 6 1350.0 1500.0 1.5
+flat-rail-trail-5k.gpx seg 7 1500.0 1650.0 0.5
+flat-rail-trail-5k.gpx seg 8 1650.0 1800.0 3.0
+flat-rail-trail-5k.gpx seg 9 1800.0 1950.0 0.5
+flat-rail-trail-5k.gpx seg 10 1950.0 2400.0 0.0
+flat-rail-trail-5k.gpx seg 11 2400.0 2700.0 0.5
+flat-rail-trail-5k.gpx seg 12 2700.0 3000.0 1.5
+flat-rail-trail-5k.gpx seg 13 3000.0 3150.0 0.5
+flat-rail-trail-5k.gpx seg 14 3150.0 3300.0 2.5
+flat-rail-trail-5k.gpx seg 15 3300.0 3450.0 2.0
+flat-rail-trail-5k.gpx seg 16 3450.0 3600.0 -1.5
+flat-rail-trail-5k.gpx seg 17 3600.0 3750.0 1.5
+flat-rail-trail-5k.gpx seg 18 3750.0 3900.0 1.0
+flat-rail-trail-5k.gpx seg 19 3900.0 4050.0 0.0
+flat-rail-trail-5k.gpx seg 20 4050.0 4301.6 1.5
+flat-rail-trail-5k.gpx track 31
+flat-rail-trail-5k.gpx tk 0 51.242868 -0.595450 0.0
+flat-rail-trail-5k.gpx tk 1 51.242754 -0.596078 45.8
+flat-rail-trail-5k.gpx tk 2 51.242632 -0.597657 156.6
+flat-rail-trail-5k.gpx tk 3 51.242725 -0.598706 230.6
+flat-rail-trail-5k.gpx tk 4 51.242984 -0.599692 305.2
+flat-rail-trail-5k.gpx tk 5 51.243427 -0.600487 379.4
+flat-rail-trail-5k.gpx tk 6 51.244461 -0.601839 528.1
+flat-rail-trail-5k.gpx tk 7 51.244888 -0.602710 605.4
+flat-rail-trail-5k.gpx tk 8 51.245039 -0.603218 644.6
+flat-rail-trail-5k.gpx tk 9 51.245166 -0.603992 700.3
+flat-rail-trail-5k.gpx tk 10 51.245179 -0.605970 838.2
+flat-rail-trail-5k.gpx tk 11 51.245535 -0.607220 934.1
+flat-rail-trail-5k.gpx tk 12 51.245759 -0.607633 972.2
+flat-rail-trail-5k.gpx tk 13 51.247555 -0.609891 1226.3
+flat-rail-trail-5k.gpx tk 14 51.247886 -0.610444 1279.6
+flat-rail-trail-5k.gpx tk 15 51.248109 -0.611053 1328.8
+flat-rail-trail-5k.gpx tk 16 51.249917 -0.620807 2036.9
+flat-rail-trail-5k.gpx tk 17 51.249922 -0.621838 2108.9
+flat-rail-trail-5k.gpx tk 18 51.249704 -0.622835 2182.8
+flat-rail-trail-5k.gpx tk 19 51.249336 -0.623594 2249.7
+flat-rail-trail-5k.gpx tk 20 51.245720 -0.629771 2838.5
+flat-rail-trail-5k.gpx tk 21 51.244265 -0.631590 3044.1
+flat-rail-trail-5k.gpx tk 22 51.243842 -0.632429 3119.2
+flat-rail-trail-5k.gpx tk 23 51.242464 -0.636327 3430.9
+flat-rail-trail-5k.gpx tk 24 51.241473 -0.639377 3670.1
+flat-rail-trail-5k.gpx tk 25 51.241342 -0.640098 3722.4
+flat-rail-trail-5k.gpx tk 26 51.241195 -0.644974 4062.3
+flat-rail-trail-5k.gpx tk 27 51.241130 -0.645698 4113.3
+flat-rail-trail-5k.gpx tk 28 51.240816 -0.646755 4195.1
+flat-rail-trail-5k.gpx tk 29 51.240603 -0.647195 4233.8
+flat-rail-trail-5k.gpx tk 30 51.240156 -0.647858 4301.6
+flat-rail-trail-5k.gpx elev 432
+flat-rail-trail-5k.gpx el 0 0.0 268.0
+flat-rail-trail-5k.gpx el 1 10.0 267.9
+flat-rail-trail-5k.gpx el 2 20.0 267.9
+flat-rail-trail-5k.gpx el 3 30.0 268.2
+flat-rail-trail-5k.gpx el 4 40.0 268.5
+flat-rail-trail-5k.gpx el 5 50.0 268.9
+flat-rail-trail-5k.gpx el 6 60.0 269.1
+flat-rail-trail-5k.gpx el 7 70.0 269.3
+flat-rail-trail-5k.gpx el 8 80.0 269.4
+flat-rail-trail-5k.gpx el 9 90.0 269.6
+flat-rail-trail-5k.gpx el 10 100.0 269.8
+flat-rail-trail-5k.gpx el 11 110.0 269.9
+flat-rail-trail-5k.gpx el 12 120.0 270.1
+flat-rail-trail-5k.gpx el 13 130.0 270.1
+flat-rail-trail-5k.gpx el 14 140.0 270.2
+flat-rail-trail-5k.gpx el 15 150.0 270.2
+flat-rail-trail-5k.gpx el 16 160.0 270.1
+flat-rail-trail-5k.gpx el 17 170.0 270.0
+flat-rail-trail-5k.gpx el 18 180.0 269.9
+flat-rail-trail-5k.gpx el 19 190.0 269.7
+flat-rail-trail-5k.gpx el 20 200.0 269.5
+flat-rail-trail-5k.gpx el 21 210.0 269.4
+flat-rail-trail-5k.gpx el 22 220.0 269.2
+flat-rail-trail-5k.gpx el 23 230.0 269.1
+flat-rail-trail-5k.gpx el 24 240.0 269.1
+flat-rail-trail-5k.gpx el 25 250.0 269.1
+flat-rail-trail-5k.gpx el 26 260.0 269.2
+flat-rail-trail-5k.gpx el 27 270.0 269.3
+flat-rail-trail-5k.gpx el 28 280.0 269.4
+flat-rail-trail-5k.gpx el 29 290.0 269.6
+flat-rail-trail-5k.gpx el 30 300.0 269.8
+flat-rail-trail-5k.gpx el 31 310.0 270.0
+flat-rail-trail-5k.gpx el 32 320.0 270.2
+flat-rail-trail-5k.gpx el 33 330.0 270.6
+flat-rail-trail-5k.gpx el 34 340.0 270.9
+flat-rail-trail-5k.gpx el 35 350.0 271.2
+flat-rail-trail-5k.gpx el 36 360.0 271.3
+flat-rail-trail-5k.gpx el 37 370.0 271.3
+flat-rail-trail-5k.gpx el 38 380.0 271.4
+flat-rail-trail-5k.gpx el 39 390.0 271.4
+flat-rail-trail-5k.gpx el 40 400.0 271.4
+flat-rail-trail-5k.gpx el 41 410.0 271.5
+flat-rail-trail-5k.gpx el 42 420.0 271.5
+flat-rail-trail-5k.gpx el 43 430.0 271.5
+flat-rail-trail-5k.gpx el 44 440.0 271.6
+flat-rail-trail-5k.gpx el 45 450.0 271.6
+flat-rail-trail-5k.gpx el 46 460.0 271.7
+flat-rail-trail-5k.gpx el 47 470.0 271.7
+flat-rail-trail-5k.gpx el 48 480.0 271.7
+flat-rail-trail-5k.gpx el 49 490.0 271.8
+flat-rail-trail-5k.gpx el 50 500.0 271.8
+flat-rail-trail-5k.gpx el 51 510.0 271.9
+flat-rail-trail-5k.gpx el 52 520.0 271.9
+flat-rail-trail-5k.gpx el 53 530.0 271.9
+flat-rail-trail-5k.gpx el 54 540.0 272.0
+flat-rail-trail-5k.gpx el 55 550.0 272.0
+flat-rail-trail-5k.gpx el 56 560.0 272.1
+flat-rail-trail-5k.gpx el 57 570.0 272.1
+flat-rail-trail-5k.gpx el 58 580.0 272.1
+flat-rail-trail-5k.gpx el 59 590.0 272.2
+flat-rail-trail-5k.gpx el 60 600.0 272.2
+flat-rail-trail-5k.gpx el 61 610.0 272.3
+flat-rail-trail-5k.gpx el 62 620.0 272.3
+flat-rail-trail-5k.gpx el 63 630.0 272.4
+flat-rail-trail-5k.gpx el 64 640.0 272.4
+flat-rail-trail-5k.gpx el 65 650.0 272.5
+flat-rail-trail-5k.gpx el 66 660.0 272.5
+flat-rail-trail-5k.gpx el 67 670.0 272.5
+flat-rail-trail-5k.gpx el 68 680.0 272.6
+flat-rail-trail-5k.gpx el 69 690.0 272.6
+flat-rail-trail-5k.gpx el 70 700.0 272.7
+flat-rail-trail-5k.gpx el 71 710.0 272.7
+flat-rail-trail-5k.gpx el 72 720.0 272.8
+flat-rail-trail-5k.gpx el 73 730.0 272.8
+flat-rail-trail-5k.gpx el 74 740.0 272.9
+flat-rail-trail-5k.gpx el 75 750.0 272.9
+flat-rail-trail-5k.gpx el 76 760.0 273.0
+flat-rail-trail-5k.gpx el 77 770.0 273.0
+flat-rail-trail-5k.gpx el 78 780.0 273.1
+flat-rail-trail-5k.gpx el 79 790.0 273.1
+flat-rail-trail-5k.gpx el 80 800.0 273.1
+flat-rail-trail-5k.gpx el 81 810.0 273.2
+flat-rail-trail-5k.gpx el 82 820.0 273.2
+flat-rail-trail-5k.gpx el 83 830.0 273.3
+flat-rail-trail-5k.gpx el 84 840.0 273.3
+flat-rail-trail-5k.gpx el 85 850.0 273.4
+flat-rail-trail-5k.gpx el 86 860.0 273.4
+flat-rail-trail-5k.gpx el 87 870.0 273.5
+flat-rail-trail-5k.gpx el 88 880.0 273.5
+flat-rail-trail-5k.gpx el 89 890.0 273.6
+flat-rail-trail-5k.gpx el 90 900.0 273.6
+flat-rail-trail-5k.gpx el 91 910.0 273.7
+flat-rail-trail-5k.gpx el 92 920.0 273.7
+flat-rail-trail-5k.gpx el 93 930.0 273.7
+flat-rail-trail-5k.gpx el 94 940.0 273.8
+flat-rail-trail-5k.gpx el 95 950.0 273.8
+flat-rail-trail-5k.gpx el 96 960.0 273.9
+flat-rail-trail-5k.gpx el 97 970.0 273.9
+flat-rail-trail-5k.gpx el 98 980.0 273.9
+flat-rail-trail-5k.gpx el 99 990.0 274.0
+flat-rail-trail-5k.gpx el 100 1000.0 274.0
+flat-rail-trail-5k.gpx el 101 1010.0 274.1
+flat-rail-trail-5k.gpx el 102 1020.0 274.1
+flat-rail-trail-5k.gpx el 103 1030.0 274.1
+flat-rail-trail-5k.gpx el 104 1040.0 274.2
+flat-rail-trail-5k.gpx el 105 1050.0 274.2
+flat-rail-trail-5k.gpx el 106 1060.0 274.3
+flat-rail-trail-5k.gpx el 107 1070.0 274.3
+flat-rail-trail-5k.gpx el 108 1080.0 274.3
+flat-rail-trail-5k.gpx el 109 1090.0 274.4
+flat-rail-trail-5k.gpx el 110 1100.0 274.6
+flat-rail-trail-5k.gpx el 111 1110.0 274.8
+flat-rail-trail-5k.gpx el 112 1120.0 274.9
+flat-rail-trail-5k.gpx el 113 1130.0 275.0
+flat-rail-trail-5k.gpx el 114 1140.0 275.2
+flat-rail-trail-5k.gpx el 115 1150.0 275.3
+flat-rail-trail-5k.gpx el 116 1160.0 275.4
+flat-rail-trail-5k.gpx el 117 1170.0 275.5
+flat-rail-trail-5k.gpx el 118 1180.0 275.7
+flat-rail-trail-5k.gpx el 119 1190.0 275.8
+flat-rail-trail-5k.gpx el 120 1200.0 275.9
+flat-rail-trail-5k.gpx el 121 1210.0 276.0
+flat-rail-trail-5k.gpx el 122 1220.0 276.2
+flat-rail-trail-5k.gpx el 123 1230.0 276.3
+flat-rail-trail-5k.gpx el 124 1240.0 276.4
+flat-rail-trail-5k.gpx el 125 1250.0 276.5
+flat-rail-trail-5k.gpx el 126 1260.0 276.7
+flat-rail-trail-5k.gpx el 127 1270.0 276.8
+flat-rail-trail-5k.gpx el 128 1280.0 277.0
+flat-rail-trail-5k.gpx el 129 1290.0 277.1
+flat-rail-trail-5k.gpx el 130 1300.0 277.2
+flat-rail-trail-5k.gpx el 131 1310.0 277.2
+flat-rail-trail-5k.gpx el 132 1320.0 276.5
+flat-rail-trail-5k.gpx el 133 1330.0 275.8
+flat-rail-trail-5k.gpx el 134 1340.0 275.5
+flat-rail-trail-5k.gpx el 135 1350.0 275.9
+flat-rail-trail-5k.gpx el 136 1360.0 276.4
+flat-rail-trail-5k.gpx el 137 1370.0 276.8
+flat-rail-trail-5k.gpx el 138 1380.0 277.2
+flat-rail-trail-5k.gpx el 139 1390.0 277.7
+flat-rail-trail-5k.gpx el 140 1400.0 278.1
+flat-rail-trail-5k.gpx el 141 1410.0 278.5
+flat-rail-trail-5k.gpx el 142 1420.0 278.9
+flat-rail-trail-5k.gpx el 143 1430.0 279.4
+flat-rail-trail-5k.gpx el 144 1440.0 279.8
+flat-rail-trail-5k.gpx el 145 1450.0 280.2
+flat-rail-trail-5k.gpx el 146 1460.0 280.7
+flat-rail-trail-5k.gpx el 147 1470.0 281.1
+flat-rail-trail-5k.gpx el 148 1480.0 280.7
+flat-rail-trail-5k.gpx el 149 1490.0 279.8
+flat-rail-trail-5k.gpx el 150 1500.0 278.7
+flat-rail-trail-5k.gpx el 151 1510.0 278.4
+flat-rail-trail-5k.gpx el 152 1520.0 278.4
+flat-rail-trail-5k.gpx el 153 1530.0 278.5
+flat-rail-trail-5k.gpx el 154 1540.0 278.5
+flat-rail-trail-5k.gpx el 155 1550.0 278.6
+flat-rail-trail-5k.gpx el 156 1560.0 278.6
+flat-rail-trail-5k.gpx el 157 1570.0 278.7
+flat-rail-trail-5k.gpx el 158 1580.0 278.7
+flat-rail-trail-5k.gpx el 159 1590.0 278.8
+flat-rail-trail-5k.gpx el 160 1600.0 278.8
+flat-rail-trail-5k.gpx el 161 1610.0 278.9
+flat-rail-trail-5k.gpx el 162 1620.0 279.0
+flat-rail-trail-5k.gpx el 163 1630.0 279.0
+flat-rail-trail-5k.gpx el 164 1640.0 279.1
+flat-rail-trail-5k.gpx el 165 1650.0 279.1
+flat-rail-trail-5k.gpx el 166 1660.0 279.2
+flat-rail-trail-5k.gpx el 167 1670.0 279.2
+flat-rail-trail-5k.gpx el 168 1680.0 279.3
+flat-rail-trail-5k.gpx el 169 1690.0 279.3
+flat-rail-trail-5k.gpx el 170 1700.0 279.4
+flat-rail-trail-5k.gpx el 171 1710.0 279.4
+flat-rail-trail-5k.gpx el 172 1720.0 279.5
+flat-rail-trail-5k.gpx el 173 1730.0 279.6
+flat-rail-trail-5k.gpx el 174 1740.0 279.6
+flat-rail-trail-5k.gpx el 175 1750.0 279.7
+flat-rail-trail-5k.gpx el 176 1760.0 279.5
+flat-rail-trail-5k.gpx el 177 1770.0 279.2
+flat-rail-trail-5k.gpx el 178 1780.0 279.6
+flat-rail-trail-5k.gpx el 179 1790.0 281.0
+flat-rail-trail-5k.gpx el 180 1800.0 282.8
+flat-rail-trail-5k.gpx el 181 1810.0 283.8
+flat-rail-trail-5k.gpx el 182 1820.0 284.0
+flat-rail-trail-5k.gpx el 183 1830.0 284.0
+flat-rail-trail-5k.gpx el 184 1840.0 284.1
+flat-rail-trail-5k.gpx el 185 1850.0 284.1
+flat-rail-trail-5k.gpx el 186 1860.0 284.1
+flat-rail-trail-5k.gpx el 187 1870.0 284.1
+flat-rail-trail-5k.gpx el 188 1880.0 284.2
+flat-rail-trail-5k.gpx el 189 1890.0 284.2
+flat-rail-trail-5k.gpx el 190 1900.0 284.2
+flat-rail-trail-5k.gpx el 191 1910.0 284.2
+flat-rail-trail-5k.gpx el 192 1920.0 284.2
+flat-rail-trail-5k.gpx el 193 1930.0 284.3
+flat-rail-trail-5k.gpx el 194 1940.0 284.3
+flat-rail-trail-5k.gpx el 195 1950.0 284.3
+flat-rail-trail-5k.gpx el 196 1960.0 284.3
+flat-rail-trail-5k.gpx el 197 1970.0 284.4
+flat-rail-trail-5k.gpx el 198 1980.0 284.4
+flat-rail-trail-5k.gpx el 199 1990.0 284.4
+flat-rail-trail-5k.gpx el 200 2000.0 284.4
+flat-rail-trail-5k.gpx el 201 2010.0 284.4
+flat-rail-trail-5k.gpx el 202 2020.0 284.5
+flat-rail-trail-5k.gpx el 203 2030.0 284.5
+flat-rail-trail-5k.gpx el 204 2040.0 284.5
+flat-rail-trail-5k.gpx el 205 2050.0 284.5
+flat-rail-trail-5k.gpx el 206 2060.0 284.6
+flat-rail-trail-5k.gpx el 207 2070.0 284.6
+flat-rail-trail-5k.gpx el 208 2080.0 284.6
+flat-rail-trail-5k.gpx el 209 2090.0 284.6
+flat-rail-trail-5k.gpx el 210 2100.0 284.6
+flat-rail-trail-5k.gpx el 211 2110.0 284.7
+flat-rail-trail-5k.gpx el 212 2120.0 284.7
+flat-rail-trail-5k.gpx el 213 2130.0 284.7
+flat-rail-trail-5k.gpx el 214 2140.0 284.7
+flat-rail-trail-5k.gpx el 215 2150.0 284.8
+flat-rail-trail-5k.gpx el 216 2160.0 284.8
+flat-rail-trail-5k.gpx el 217 2170.0 284.8
+flat-rail-trail-5k.gpx el 218 2180.0 284.8
+flat-rail-trail-5k.gpx el 219 2190.0 284.8
+flat-rail-trail-5k.gpx el 220 2200.0 284.9
+flat-rail-trail-5k.gpx el 221 2210.0 284.9
+flat-rail-trail-5k.gpx el 222 2220.0 284.9
+flat-rail-trail-5k.gpx el 223 2230.0 284.9
+flat-rail-trail-5k.gpx el 224 2240.0 284.9
+flat-rail-trail-5k.gpx el 225 2250.0 284.9
+flat-rail-trail-5k.gpx el 226 2260.0 285.0
+flat-rail-trail-5k.gpx el 227 2270.0 285.0
+flat-rail-trail-5k.gpx el 228 2280.0 285.0
+flat-rail-trail-5k.gpx el 229 2290.0 285.0
+flat-rail-trail-5k.gpx el 230 2300.0 285.0
+flat-rail-trail-5k.gpx el 231 2310.0 285.1
+flat-rail-trail-5k.gpx el 232 2320.0 285.1
+flat-rail-trail-5k.gpx el 233 2330.0 285.1
+flat-rail-trail-5k.gpx el 234 2340.0 285.1
+flat-rail-trail-5k.gpx el 235 2350.0 285.1
+flat-rail-trail-5k.gpx el 236 2360.0 285.2
+flat-rail-trail-5k.gpx el 237 2370.0 285.2
+flat-rail-trail-5k.gpx el 238 2380.0 285.2
+flat-rail-trail-5k.gpx el 239 2390.0 285.2
+flat-rail-trail-5k.gpx el 240 2400.0 285.2
+flat-rail-trail-5k.gpx el 241 2410.0 285.2
+flat-rail-trail-5k.gpx el 242 2420.0 285.3
+flat-rail-trail-5k.gpx el 243 2430.0 285.3
+flat-rail-trail-5k.gpx el 244 2440.0 285.3
+flat-rail-trail-5k.gpx el 245 2450.0 285.4
+flat-rail-trail-5k.gpx el 246 2460.0 285.4
+flat-rail-trail-5k.gpx el 247 2470.0 285.4
+flat-rail-trail-5k.gpx el 248 2480.0 285.4
+flat-rail-trail-5k.gpx el 249 2490.0 285.5
+flat-rail-trail-5k.gpx el 250 2500.0 285.5
+flat-rail-trail-5k.gpx el 251 2510.0 285.5
+flat-rail-trail-5k.gpx el 252 2520.0 285.6
+flat-rail-trail-5k.gpx el 253 2530.0 285.6
+flat-rail-trail-5k.gpx el 254 2540.0 285.6
+flat-rail-trail-5k.gpx el 255 2550.0 285.7
+flat-rail-trail-5k.gpx el 256 2560.0 285.7
+flat-rail-trail-5k.gpx el 257 2570.0 285.7
+flat-rail-trail-5k.gpx el 258 2580.0 285.8
+flat-rail-trail-5k.gpx el 259 2590.0 285.8
+flat-rail-trail-5k.gpx el 260 2600.0 285.8
+flat-rail-trail-5k.gpx el 261 2610.0 285.9
+flat-rail-trail-5k.gpx el 262 2620.0 285.9
+flat-rail-trail-5k.gpx el 263 2630.0 285.9
+flat-rail-trail-5k.gpx el 264 2640.0 286.0
+flat-rail-trail-5k.gpx el 265 2650.0 286.0
+flat-rail-trail-5k.gpx el 266 2660.0 286.0
+flat-rail-trail-5k.gpx el 267 2670.0 286.0
+flat-rail-trail-5k.gpx el 268 2680.0 286.1
+flat-rail-trail-5k.gpx el 269 2690.0 286.1
+flat-rail-trail-5k.gpx el 270 2700.0 286.1
+flat-rail-trail-5k.gpx el 271 2710.0 286.1
+flat-rail-trail-5k.gpx el 272 2720.0 286.1
+flat-rail-trail-5k.gpx el 273 2730.0 286.1
+flat-rail-trail-5k.gpx el 274 2740.0 286.1
+flat-rail-trail-5k.gpx el 275 2750.0 286.2
+flat-rail-trail-5k.gpx el 276 2760.0 286.5
+flat-rail-trail-5k.gpx el 277 2770.0 286.9
+flat-rail-trail-5k.gpx el 278 2780.0 287.3
+flat-rail-trail-5k.gpx el 279 2790.0 287.7
+flat-rail-trail-5k.gpx el 280 2800.0 287.9
+flat-rail-trail-5k.gpx el 281 2810.0 288.0
+flat-rail-trail-5k.gpx el 282 2820.0 288.0
+flat-rail-trail-5k.gpx el 283 2830.0 288.0
+flat-rail-trail-5k.gpx el 284 2840.0 288.0
+flat-rail-trail-5k.gpx el 285 2850.0 288.0
+flat-rail-trail-5k.gpx el 286 2860.0 288.0
+flat-rail-trail-5k.gpx el 287 2870.0 288.0
+flat-rail-trail-5k.gpx el 288 2880.0 288.0
+flat-rail-trail-5k.gpx el 289 2890.0 288.0
+flat-rail-trail-5k.gpx el 290 2900.0 288.1
+flat-rail-trail-5k.gpx el 291 2910.0 288.2
+flat-rail-trail-5k.gpx el 292 2920.0 288.5
+flat-rail-trail-5k.gpx el 293 2930.0 288.7
+flat-rail-trail-5k.gpx el 294 2940.0 288.9
+flat-rail-trail-5k.gpx el 295 2950.0 289.1
+flat-rail-trail-5k.gpx el 296 2960.0 289.3
+flat-rail-trail-5k.gpx el 297 2970.0 289.5
+flat-rail-trail-5k.gpx el 298 2980.0 289.7
+flat-rail-trail-5k.gpx el 299 2990.0 289.9
+flat-rail-trail-5k.gpx el 300 3000.0 290.1
+flat-rail-trail-5k.gpx el 301 3010.0 290.3
+flat-rail-trail-5k.gpx el 302 3020.0 290.4
+flat-rail-trail-5k.gpx el 303 3030.0 290.4
+flat-rail-trail-5k.gpx el 304 3040.0 290.5
+flat-rail-trail-5k.gpx el 305 3050.0 290.6
+flat-rail-trail-5k.gpx el 306 3060.0 290.7
+flat-rail-trail-5k.gpx el 307 3070.0 290.8
+flat-rail-trail-5k.gpx el 308 3080.0 290.9
+flat-rail-trail-5k.gpx el 309 3090.0 290.9
+flat-rail-trail-5k.gpx el 310 3100.0 290.7
+flat-rail-trail-5k.gpx el 311 3110.0 290.5
+flat-rail-trail-5k.gpx el 312 3120.0 290.3
+flat-rail-trail-5k.gpx el 313 3130.0 290.4
+flat-rail-trail-5k.gpx el 314 3140.0 290.7
+flat-rail-trail-5k.gpx el 315 3150.0 290.8
+flat-rail-trail-5k.gpx el 316 3160.0 290.9
+flat-rail-trail-5k.gpx el 317 3170.0 290.9
+flat-rail-trail-5k.gpx el 318 3180.0 290.9
+flat-rail-trail-5k.gpx el 319 3190.0 290.9
+flat-rail-trail-5k.gpx el 320 3200.0 290.8
+flat-rail-trail-5k.gpx el 321 3210.0 290.7
+flat-rail-trail-5k.gpx el 322 3220.0 290.8
+flat-rail-trail-5k.gpx el 323 3230.0 291.1
+flat-rail-trail-5k.gpx el 324 3240.0 291.5
+flat-rail-trail-5k.gpx el 325 3250.0 292.0
+flat-rail-trail-5k.gpx el 326 3260.0 292.5
+flat-rail-trail-5k.gpx el 327 3270.0 293.0
+flat-rail-trail-5k.gpx el 328 3280.0 293.5
+flat-rail-trail-5k.gpx el 329 3290.0 293.9
+flat-rail-trail-5k.gpx el 330 3300.0 294.4
+flat-rail-trail-5k.gpx el 331 3310.0 294.9
+flat-rail-trail-5k.gpx el 332 3320.0 295.1
+flat-rail-trail-5k.gpx el 333 3330.0 295.1
+flat-rail-trail-5k.gpx el 334 3340.0 294.8
+flat-rail-trail-5k.gpx el 335 3350.0 294.6
+flat-rail-trail-5k.gpx el 336 3360.0 294.6
+flat-rail-trail-5k.gpx el 337 3370.0 294.9
+flat-rail-trail-5k.gpx el 338 3380.0 295.1
+flat-rail-trail-5k.gpx el 339 3390.0 295.3
+flat-rail-trail-5k.gpx el 340 3400.0 295.6
+flat-rail-trail-5k.gpx el 341 3410.0 295.8
+flat-rail-trail-5k.gpx el 342 3420.0 296.0
+flat-rail-trail-5k.gpx el 343 3430.0 296.4
+flat-rail-trail-5k.gpx el 344 3440.0 296.8
+flat-rail-trail-5k.gpx el 345 3450.0 297.3
+flat-rail-trail-5k.gpx el 346 3460.0 297.4
+flat-rail-trail-5k.gpx el 347 3470.0 297.2
+flat-rail-trail-5k.gpx el 348 3480.0 296.8
+flat-rail-trail-5k.gpx el 349 3490.0 296.4
+flat-rail-trail-5k.gpx el 350 3500.0 296.0
+flat-rail-trail-5k.gpx el 351 3510.0 295.6
+flat-rail-trail-5k.gpx el 352 3520.0 295.2
+flat-rail-trail-5k.gpx el 353 3530.0 294.9
+flat-rail-trail-5k.gpx el 354 3540.0 294.8
+flat-rail-trail-5k.gpx el 355 3550.0 294.9
+flat-rail-trail-5k.gpx el 356 3560.0 294.9
+flat-rail-trail-5k.gpx el 357 3570.0 294.9
+flat-rail-trail-5k.gpx el 358 3580.0 295.0
+flat-rail-trail-5k.gpx el 359 3590.0 295.0
+flat-rail-trail-5k.gpx el 360 3600.0 295.0
+flat-rail-trail-5k.gpx el 361 3610.0 295.0
+flat-rail-trail-5k.gpx el 362 3620.0 295.0
+flat-rail-trail-5k.gpx el 363 3630.0 294.9
+flat-rail-trail-5k.gpx el 364 3640.0 294.8
+flat-rail-trail-5k.gpx el 365 3650.0 294.7
+flat-rail-trail-5k.gpx el 366 3660.0 294.6
+flat-rail-trail-5k.gpx el 367 3670.0 294.5
+flat-rail-trail-5k.gpx el 368 3680.0 294.5
+flat-rail-trail-5k.gpx el 369 3690.0 294.6
+flat-rail-trail-5k.gpx el 370 3700.0 294.9
+flat-rail-trail-5k.gpx el 371 3710.0 295.2
+flat-rail-trail-5k.gpx el 372 3720.0 295.7
+flat-rail-trail-5k.gpx el 373 3730.0 296.1
+flat-rail-trail-5k.gpx el 374 3740.0 296.7
+flat-rail-trail-5k.gpx el 375 3750.0 297.3
+flat-rail-trail-5k.gpx el 376 3760.0 297.7
+flat-rail-trail-5k.gpx el 377 3770.0 298.0
+flat-rail-trail-5k.gpx el 378 3780.0 298.1
+flat-rail-trail-5k.gpx el 379 3790.0 298.2
+flat-rail-trail-5k.gpx el 380 3800.0 298.4
+flat-rail-trail-5k.gpx el 381 3810.0 298.5
+flat-rail-trail-5k.gpx el 382 3820.0 298.7
+flat-rail-trail-5k.gpx el 383 3830.0 298.8
+flat-rail-trail-5k.gpx el 384 3840.0 298.8
+flat-rail-trail-5k.gpx el 385 3850.0 298.8
+flat-rail-trail-5k.gpx el 386 3860.0 298.8
+flat-rail-trail-5k.gpx el 387 3870.0 298.8
+flat-rail-trail-5k.gpx el 388 3880.0 298.8
+flat-rail-trail-5k.gpx el 389 3890.0 298.7
+flat-rail-trail-5k.gpx el 390 3900.0 298.7
+flat-rail-trail-5k.gpx el 391 3910.0 298.7
+flat-rail-trail-5k.gpx el 392 3920.0 298.7
+flat-rail-trail-5k.gpx el 393 3930.0 298.7
+flat-rail-trail-5k.gpx el 394 3940.0 298.7
+flat-rail-trail-5k.gpx el 395 3950.0 298.7
+flat-rail-trail-5k.gpx el 396 3960.0 298.7
+flat-rail-trail-5k.gpx el 397 3970.0 298.6
+flat-rail-trail-5k.gpx el 398 3980.0 298.6
+flat-rail-trail-5k.gpx el 399 3990.0 298.6
+flat-rail-trail-5k.gpx el 400 4000.0 298.6
+flat-rail-trail-5k.gpx el 401 4010.0 298.6
+flat-rail-trail-5k.gpx el 402 4020.0 298.6
+flat-rail-trail-5k.gpx el 403 4030.0 298.6
+flat-rail-trail-5k.gpx el 404 4040.0 298.5
+flat-rail-trail-5k.gpx el 405 4050.0 298.5
+flat-rail-trail-5k.gpx el 406 4060.0 298.5
+flat-rail-trail-5k.gpx el 407 4070.0 298.5
+flat-rail-trail-5k.gpx el 408 4080.0 298.5
+flat-rail-trail-5k.gpx el 409 4090.0 298.7
+flat-rail-trail-5k.gpx el 410 4100.0 299.0
+flat-rail-trail-5k.gpx el 411 4110.0 299.4
+flat-rail-trail-5k.gpx el 412 4120.0 299.7
+flat-rail-trail-5k.gpx el 413 4130.0 299.9
+flat-rail-trail-5k.gpx el 414 4140.0 300.1
+flat-rail-trail-5k.gpx el 415 4150.0 300.3
+flat-rail-trail-5k.gpx el 416 4160.0 300.4
+flat-rail-trail-5k.gpx el 417 4170.0 300.6
+flat-rail-trail-5k.gpx el 418 4180.0 300.8
+flat-rail-trail-5k.gpx el 419 4190.0 300.9
+flat-rail-trail-5k.gpx el 420 4200.0 301.1
+flat-rail-trail-5k.gpx el 421 4210.0 301.2
+flat-rail-trail-5k.gpx el 422 4220.0 301.4
+flat-rail-trail-5k.gpx el 423 4230.0 301.5
+flat-rail-trail-5k.gpx el 424 4240.0 301.7
+flat-rail-trail-5k.gpx el 425 4250.0 301.8
+flat-rail-trail-5k.gpx el 426 4260.0 302.0
+flat-rail-trail-5k.gpx el 427 4270.0 302.1
+flat-rail-trail-5k.gpx el 428 4280.0 302.3
+flat-rail-trail-5k.gpx el 429 4290.0 302.4
+flat-rail-trail-5k.gpx el 430 4300.0 302.5
+flat-rail-trail-5k.gpx el 431 4301.6 302.6
+flat-rail-trail-5k.gpx bounds 51.240156 -0.647858 51.249922 -0.595450
+rolling-loop-5k.gpx id gpx-rolling-loop-5k
+rolling-loop-5k.gpx name Rolling loop 5k
+rolling-loop-5k.gpx distance_m 4679.3
+rolling-loop-5k.gpx climb_m 27.7
+rolling-loop-5k.gpx segments 26
+rolling-loop-5k.gpx seg 0 0.0 150.0 2.0
+rolling-loop-5k.gpx seg 1 150.0 300.0 0.0
+rolling-loop-5k.gpx seg 2 300.0 450.0 -1.0
+rolling-loop-5k.gpx seg 3 450.0 750.0 -2.5
+rolling-loop-5k.gpx seg 4 750.0 1050.0 0.0
+rolling-loop-5k.gpx seg 5 1050.0 1200.0 1.0
+rolling-loop-5k.gpx seg 6 1200.0 1350.0 0.5
+rolling-loop-5k.gpx seg 7 1350.0 1650.0 -0.5
+rolling-loop-5k.gpx seg 8 1650.0 1800.0 0.5
+rolling-loop-5k.gpx seg 9 1800.0 1950.0 1.5
+rolling-loop-5k.gpx seg 10 1950.0 2100.0 -1.0
+rolling-loop-5k.gpx seg 11 2100.0 2250.0 2.0
+rolling-loop-5k.gpx seg 12 2250.0 2400.0 -2.0
+rolling-loop-5k.gpx seg 13 2400.0 2550.0 1.0
+rolling-loop-5k.gpx seg 14 2550.0 2700.0 4.0
+rolling-loop-5k.gpx seg 15 2700.0 2850.0 0.0
+rolling-loop-5k.gpx seg 16 2850.0 3000.0 -3.0
+rolling-loop-5k.gpx seg 17 3000.0 3150.0 -1.0
+rolling-loop-5k.gpx seg 18 3150.0 3300.0 2.0
+rolling-loop-5k.gpx seg 19 3300.0 3450.0 -0.5
+rolling-loop-5k.gpx seg 20 3450.0 3600.0 -3.0
+rolling-loop-5k.gpx seg 21 3600.0 3900.0 0.5
+rolling-loop-5k.gpx seg 22 3900.0 4050.0 -0.5
+rolling-loop-5k.gpx seg 23 4050.0 4200.0 -1.0
+rolling-loop-5k.gpx seg 24 4200.0 4500.0 0.0
+rolling-loop-5k.gpx seg 25 4500.0 4679.3 2.5
+rolling-loop-5k.gpx track 60
+rolling-loop-5k.gpx tk 0 51.480935 -0.437968 0.0
+rolling-loop-5k.gpx tk 1 51.481370 -0.437554 59.7
+rolling-loop-5k.gpx tk 2 51.481571 -0.437507 83.8
+rolling-loop-5k.gpx tk 3 51.482244 -0.438364 179.3
+rolling-loop-5k.gpx tk 4 51.482832 -0.438641 247.9
+rolling-loop-5k.gpx tk 5 51.482915 -0.438592 258.0
+rolling-loop-5k.gpx tk 6 51.482899 -0.438432 270.2
+rolling-loop-5k.gpx tk 7 51.482565 -0.438482 308.5
+rolling-loop-5k.gpx tk 8 51.482244 -0.438364 345.4
+rolling-loop-5k.gpx tk 9 51.481571 -0.437507 440.9
+rolling-loop-5k.gpx tk 10 51.481370 -0.437554 464.9
+rolling-loop-5k.gpx tk 11 51.480926 -0.437988 523.0
+rolling-loop-5k.gpx tk 12 51.481992 -0.439604 686.0
+rolling-loop-5k.gpx tk 13 51.482193 -0.440076 725.6
+rolling-loop-5k.gpx tk 14 51.483194 -0.439453 845.0
+rolling-loop-5k.gpx tk 15 51.483882 -0.438871 931.6
+rolling-loop-5k.gpx tk 16 51.483194 -0.439453 1018.2
+rolling-loop-5k.gpx tk 17 51.479897 -0.441583 1413.4
+rolling-loop-5k.gpx tk 18 51.478980 -0.442551 1535.6
+rolling-loop-5k.gpx tk 19 51.477808 -0.443388 1678.2
+rolling-loop-5k.gpx tk 20 51.477387 -0.443445 1725.7
+rolling-loop-5k.gpx tk 21 51.477161 -0.444853 1826.9
+rolling-loop-5k.gpx tk 22 51.477215 -0.445366 1863.0
+rolling-loop-5k.gpx tk 23 51.477552 -0.446582 1955.1
+rolling-loop-5k.gpx tk 24 51.476857 -0.446913 2035.9
+rolling-loop-5k.gpx tk 25 51.475984 -0.446787 2133.7
+rolling-loop-5k.gpx tk 26 51.475190 -0.447063 2224.1
+rolling-loop-5k.gpx tk 27 51.474910 -0.447079 2255.3
+rolling-loop-5k.gpx tk 28 51.474580 -0.446940 2293.3
+rolling-loop-5k.gpx tk 29 51.474070 -0.446374 2362.4
+rolling-loop-5k.gpx tk 30 51.473820 -0.446199 2392.7
+rolling-loop-5k.gpx tk 31 51.473111 -0.446082 2472.1
+rolling-loop-5k.gpx tk 32 51.473209 -0.444633 2573.2
+rolling-loop-5k.gpx tk 33 51.473562 -0.443257 2676.4
+rolling-loop-5k.gpx tk 34 51.473527 -0.442814 2707.7
+rolling-loop-5k.gpx tk 35 51.474105 -0.442614 2773.5
+rolling-loop-5k.gpx tk 36 51.474419 -0.442755 2810.4
+rolling-loop-5k.gpx tk 37 51.474151 -0.443603 2876.2
+rolling-loop-5k.gpx tk 38 51.474066 -0.444080 2910.6
+rolling-loop-5k.gpx tk 39 51.474100 -0.444491 2939.7
+rolling-loop-5k.gpx tk 40 51.474236 -0.444686 2960.5
+rolling-loop-5k.gpx tk 41 51.474847 -0.444670 3028.8
+rolling-loop-5k.gpx tk 42 51.475786 -0.444418 3134.6
+rolling-loop-5k.gpx tk 43 51.476289 -0.443799 3206.1
+rolling-loop-5k.gpx tk 44 51.476244 -0.443345 3238.3
+rolling-loop-5k.gpx tk 45 51.476399 -0.442761 3282.5
+rolling-loop-5k.gpx tk 46 51.476512 -0.441806 3349.8
+rolling-loop-5k.gpx tk 47 51.476984 -0.442053 3405.4
+rolling-loop-5k.gpx tk 48 51.477246 -0.442429 3444.6
+rolling-loop-5k.gpx tk 49 51.477376 -0.442860 3477.8
+rolling-loop-5k.gpx tk 50 51.477387 -0.443445 3518.7
+rolling-loop-5k.gpx tk 51 51.477721 -0.443437 3555.9
+rolling-loop-5k.gpx tk 52 51.478980 -0.442551 3708.8
+rolling-loop-5k.gpx tk 53 51.479897 -0.441583 3830.9
+rolling-loop-5k.gpx tk 54 51.483194 -0.439453 4226.2
+rolling-loop-5k.gpx tk 55 51.483912 -0.438826 4317.3
+rolling-loop-5k.gpx tk 56 51.483194 -0.439453 4408.5
+rolling-loop-5k.gpx tk 57 51.482193 -0.440076 4527.9
+rolling-loop-5k.gpx tk 58 51.481992 -0.439604 4567.5
+rolling-loop-5k.gpx tk 59 51.481261 -0.438495 4679.3
+rolling-loop-5k.gpx elev 469
+rolling-loop-5k.gpx el 0 0.0 326.1
+rolling-loop-5k.gpx el 1 10.0 326.1
+rolling-loop-5k.gpx el 2 20.0 326.2
+rolling-loop-5k.gpx el 3 30.0 326.5
+rolling-loop-5k.gpx el 4 40.0 326.9
+rolling-loop-5k.gpx el 5 50.0 327.2
+rolling-loop-5k.gpx el 6 60.0 327.5
+rolling-loop-5k.gpx el 7 70.0 327.7
+rolling-loop-5k.gpx el 8 80.0 327.8
+rolling-loop-5k.gpx el 9 90.0 327.9
+rolling-loop-5k.gpx el 10 100.0 328.0
+rolling-loop-5k.gpx el 11 110.0 328.2
+rolling-loop-5k.gpx el 12 120.0 328.4
+rolling-loop-5k.gpx el 13 130.0 328.6
+rolling-loop-5k.gpx el 14 140.0 328.8
+rolling-loop-5k.gpx el 15 150.0 329.0
+rolling-loop-5k.gpx el 16 160.0 329.3
+rolling-loop-5k.gpx el 17 170.0 329.6
+rolling-loop-5k.gpx el 18 180.0 329.9
+rolling-loop-5k.gpx el 19 190.0 329.9
+rolling-loop-5k.gpx el 20 200.0 329.8
+rolling-loop-5k.gpx el 21 210.0 329.5
+rolling-loop-5k.gpx el 22 220.0 329.3
+rolling-loop-5k.gpx el 23 230.0 329.0
+rolling-loop-5k.gpx el 24 240.0 328.7
+rolling-loop-5k.gpx el 25 250.0 328.4
+rolling-loop-5k.gpx el 26 260.0 328.4
+rolling-loop-5k.gpx el 27 270.0 328.4
+rolling-loop-5k.gpx el 28 280.0 328.5
+rolling-loop-5k.gpx el 29 290.0 328.8
+rolling-loop-5k.gpx el 30 300.0 329.1
+rolling-loop-5k.gpx el 31 310.0 329.4
+rolling-loop-5k.gpx el 32 320.0 329.7
+rolling-loop-5k.gpx el 33 330.0 329.9
+rolling-loop-5k.gpx el 34 340.0 329.9
+rolling-loop-5k.gpx el 35 350.0 329.7
+rolling-loop-5k.gpx el 36 360.0 329.4
+rolling-loop-5k.gpx el 37 370.0 329.1
+rolling-loop-5k.gpx el 38 380.0 328.9
+rolling-loop-5k.gpx el 39 390.0 328.7
+rolling-loop-5k.gpx el 40 400.0 328.5
+rolling-loop-5k.gpx el 41 410.0 328.3
+rolling-loop-5k.gpx el 42 420.0 328.1
+rolling-loop-5k.gpx el 43 430.0 327.9
+rolling-loop-5k.gpx el 44 440.0 327.8
+rolling-loop-5k.gpx el 45 450.0 327.7
+rolling-loop-5k.gpx el 46 460.0 327.6
+rolling-loop-5k.gpx el 47 470.0 327.3
+rolling-loop-5k.gpx el 48 480.0 327.0
+rolling-loop-5k.gpx el 49 490.0 326.7
+rolling-loop-5k.gpx el 50 500.0 326.3
+rolling-loop-5k.gpx el 51 510.0 326.1
+rolling-loop-5k.gpx el 52 520.0 326.0
+rolling-loop-5k.gpx el 53 530.0 325.9
+rolling-loop-5k.gpx el 54 540.0 325.7
+rolling-loop-5k.gpx el 55 550.0 325.5
+rolling-loop-5k.gpx el 56 560.0 325.2
+rolling-loop-5k.gpx el 57 570.0 325.0
+rolling-loop-5k.gpx el 58 580.0 324.7
+rolling-loop-5k.gpx el 59 590.0 324.5
+rolling-loop-5k.gpx el 60 600.0 324.2
+rolling-loop-5k.gpx el 61 610.0 324.0
+rolling-loop-5k.gpx el 62 620.0 323.8
+rolling-loop-5k.gpx el 63 630.0 323.5
+rolling-loop-5k.gpx el 64 640.0 323.3
+rolling-loop-5k.gpx el 65 650.0 323.0
+rolling-loop-5k.gpx el 66 660.0 322.8
+rolling-loop-5k.gpx el 67 670.0 322.4
+rolling-loop-5k.gpx el 68 680.0 322.1
+rolling-loop-5k.gpx el 69 690.0 321.7
+rolling-loop-5k.gpx el 70 700.0 321.4
+rolling-loop-5k.gpx el 71 710.0 321.0
+rolling-loop-5k.gpx el 72 720.0 320.6
+rolling-loop-5k.gpx el 73 730.0 320.3
+rolling-loop-5k.gpx el 74 740.0 320.2
+rolling-loop-5k.gpx el 75 750.0 320.2
+rolling-loop-5k.gpx el 76 760.0 320.3
+rolling-loop-5k.gpx el 77 770.0 320.3
+rolling-loop-5k.gpx el 78 780.0 320.3
+rolling-loop-5k.gpx el 79 790.0 320.2
+rolling-loop-5k.gpx el 80 800.0 320.2
+rolling-loop-5k.gpx el 81 810.0 320.2
+rolling-loop-5k.gpx el 82 820.0 320.1
+rolling-loop-5k.gpx el 83 830.0 320.1
+rolling-loop-5k.gpx el 84 840.0 320.0
+rolling-loop-5k.gpx el 85 850.0 320.1
+rolling-loop-5k.gpx el 86 860.0 320.1
+rolling-loop-5k.gpx el 87 870.0 320.2
+rolling-loop-5k.gpx el 88 880.0 320.3
+rolling-loop-5k.gpx el 89 890.0 320.3
+rolling-loop-5k.gpx el 90 900.0 320.3
+rolling-loop-5k.gpx el 91 910.0 320.4
+rolling-loop-5k.gpx el 92 920.0 320.6
+rolling-loop-5k.gpx el 93 930.0 320.7
+rolling-loop-5k.gpx el 94 940.0 320.7
+rolling-loop-5k.gpx el 95 950.0 320.5
+rolling-loop-5k.gpx el 96 960.0 320.3
+rolling-loop-5k.gpx el 97 970.0 320.3
+rolling-loop-5k.gpx el 98 980.0 320.3
+rolling-loop-5k.gpx el 99 990.0 320.2
+rolling-loop-5k.gpx el 100 1000.0 320.1
+rolling-loop-5k.gpx el 101 1010.0 320.1
+rolling-loop-5k.gpx el 102 1020.0 320.0
+rolling-loop-5k.gpx el 103 1030.0 320.1
+rolling-loop-5k.gpx el 104 1040.0 320.1
+rolling-loop-5k.gpx el 105 1050.0 320.1
+rolling-loop-5k.gpx el 106 1060.0 320.2
+rolling-loop-5k.gpx el 107 1070.0 320.2
+rolling-loop-5k.gpx el 108 1080.0 320.3
+rolling-loop-5k.gpx el 109 1090.0 320.3
+rolling-loop-5k.gpx el 110 1100.0 320.3
+rolling-loop-5k.gpx el 111 1110.0 320.2
+rolling-loop-5k.gpx el 112 1120.0 320.2
+rolling-loop-5k.gpx el 113 1130.0 320.2
+rolling-loop-5k.gpx el 114 1140.0 320.3
+rolling-loop-5k.gpx el 115 1150.0 320.5
+rolling-loop-5k.gpx el 116 1160.0 320.7
+rolling-loop-5k.gpx el 117 1170.0 321.0
+rolling-loop-5k.gpx el 118 1180.0 321.3
+rolling-loop-5k.gpx el 119 1190.0 321.5
+rolling-loop-5k.gpx el 120 1200.0 321.7
+rolling-loop-5k.gpx el 121 1210.0 321.8
+rolling-loop-5k.gpx el 122 1220.0 321.9
+rolling-loop-5k.gpx el 123 1230.0 322.0
+rolling-loop-5k.gpx el 124 1240.0 322.0
+rolling-loop-5k.gpx el 125 1250.0 322.1
+rolling-loop-5k.gpx el 126 1260.0 322.2
+rolling-loop-5k.gpx el 127 1270.0 322.2
+rolling-loop-5k.gpx el 128 1280.0 322.3
+rolling-loop-5k.gpx el 129 1290.0 322.4
+rolling-loop-5k.gpx el 130 1300.0 322.4
+rolling-loop-5k.gpx el 131 1310.0 322.5
+rolling-loop-5k.gpx el 132 1320.0 322.6
+rolling-loop-5k.gpx el 133 1330.0 322.7
+rolling-loop-5k.gpx el 134 1340.0 322.7
+rolling-loop-5k.gpx el 135 1350.0 322.8
+rolling-loop-5k.gpx el 136 1360.0 322.9
+rolling-loop-5k.gpx el 137 1370.0 322.9
+rolling-loop-5k.gpx el 138 1380.0 323.0
+rolling-loop-5k.gpx el 139 1390.0 323.1
+rolling-loop-5k.gpx el 140 1400.0 323.2
+rolling-loop-5k.gpx el 141 1410.0 323.2
+rolling-loop-5k.gpx el 142 1420.0 323.3
+rolling-loop-5k.gpx el 143 1430.0 323.3
+rolling-loop-5k.gpx el 144 1440.0 323.1
+rolling-loop-5k.gpx el 145 1450.0 322.8
+rolling-loop-5k.gpx el 146 1460.0 322.6
+rolling-loop-5k.gpx el 147 1470.0 322.3
+rolling-loop-5k.gpx el 148 1480.0 322.1
+rolling-loop-5k.gpx el 149 1490.0 321.9
+rolling-loop-5k.gpx el 150 1500.0 321.7
+rolling-loop-5k.gpx el 151 1510.0 321.6
+rolling-loop-5k.gpx el 152 1520.0 321.3
+rolling-loop-5k.gpx el 153 1530.0 321.0
+rolling-loop-5k.gpx el 154 1540.0 320.8
+rolling-loop-5k.gpx el 155 1550.0 320.5
+rolling-loop-5k.gpx el 156 1560.0 320.4
+rolling-loop-5k.gpx el 157 1570.0 320.2
+rolling-loop-5k.gpx el 158 1580.0 320.0
+rolling-loop-5k.gpx el 159 1590.0 319.9
+rolling-loop-5k.gpx el 160 1600.0 319.9
+rolling-loop-5k.gpx el 161 1610.0 320.1
+rolling-loop-5k.gpx el 162 1620.0 320.3
+rolling-loop-5k.gpx el 163 1630.0 320.5
+rolling-loop-5k.gpx el 164 1640.0 320.7
+rolling-loop-5k.gpx el 165 1650.0 320.9
+rolling-loop-5k.gpx el 166 1660.0 321.1
+rolling-loop-5k.gpx el 167 1670.0 321.4
+rolling-loop-5k.gpx el 168 1680.0 321.7
+rolling-loop-5k.gpx el 169 1690.0 322.2
+rolling-loop-5k.gpx el 170 1700.0 322.7
+rolling-loop-5k.gpx el 171 1710.0 323.0
+rolling-loop-5k.gpx el 172 1720.0 323.1
+rolling-loop-5k.gpx el 173 1730.0 323.2
+rolling-loop-5k.gpx el 174 1740.0 323.0
+rolling-loop-5k.gpx el 175 1750.0 322.6
+rolling-loop-5k.gpx el 176 1760.0 322.1
+rolling-loop-5k.gpx el 177 1770.0 321.8
+rolling-loop-5k.gpx el 178 1780.0 321.7
+rolling-loop-5k.gpx el 179 1790.0 321.7
+rolling-loop-5k.gpx el 180 1800.0 321.5
+rolling-loop-5k.gpx el 181 1810.0 321.2
+rolling-loop-5k.gpx el 182 1820.0 321.0
+rolling-loop-5k.gpx el 183 1830.0 321.0
+rolling-loop-5k.gpx el 184 1840.0 321.1
+rolling-loop-5k.gpx el 185 1850.0 321.1
+rolling-loop-5k.gpx el 186 1860.0 321.1
+rolling-loop-5k.gpx el 187 1870.0 321.2
+rolling-loop-5k.gpx el 188 1880.0 321.4
+rolling-loop-5k.gpx el 189 1890.0 321.7
+rolling-loop-5k.gpx el 190 1900.0 322.0
+rolling-loop-5k.gpx el 191 1910.0 322.3
+rolling-loop-5k.gpx el 192 1920.0 322.7
+rolling-loop-5k.gpx el 193 1930.0 323.0
+rolling-loop-5k.gpx el 194 1940.0 323.4
+rolling-loop-5k.gpx el 195 1950.0 323.7
+rolling-loop-5k.gpx el 196 1960.0 323.7
+rolling-loop-5k.gpx el 197 1970.0 323.5
+rolling-loop-5k.gpx el 198 1980.0 323.1
+rolling-loop-5k.gpx el 199 1990.0 322.7
+rolling-loop-5k.gpx el 200 2000.0 322.4
+rolling-loop-5k.gpx el 201 2010.0 322.2
+rolling-loop-5k.gpx el 202 2020.0 322.1
+rolling-loop-5k.gpx el 203 2030.0 322.0
+rolling-loop-5k.gpx el 204 2040.0 321.9
+rolling-loop-5k.gpx el 205 2050.0 321.7
+rolling-loop-5k.gpx el 206 2060.0 321.5
+rolling-loop-5k.gpx el 207 2070.0 321.6
+rolling-loop-5k.gpx el 208 2080.0 321.8
+rolling-loop-5k.gpx el 209 2090.0 322.1
+rolling-loop-5k.gpx el 210 2100.0 322.4
+rolling-loop-5k.gpx el 211 2110.0 322.7
+rolling-loop-5k.gpx el 212 2120.0 323.1
+rolling-loop-5k.gpx el 213 2130.0 323.3
+rolling-loop-5k.gpx el 214 2140.0 323.6
+rolling-loop-5k.gpx el 215 2150.0 323.8
+rolling-loop-5k.gpx el 216 2160.0 324.0
+rolling-loop-5k.gpx el 217 2170.0 324.1
+rolling-loop-5k.gpx el 218 2180.0 324.3
+rolling-loop-5k.gpx el 219 2190.0 324.5
+rolling-loop-5k.gpx el 220 2200.0 324.7
+rolling-loop-5k.gpx el 221 2210.0 324.9
+rolling-loop-5k.gpx el 222 2220.0 325.1
+rolling-loop-5k.gpx el 223 2230.0 325.3
+rolling-loop-5k.gpx el 224 2240.0 325.5
+rolling-loop-5k.gpx el 225 2250.0 325.7
+rolling-loop-5k.gpx el 226 2260.0 326.0
+rolling-loop-5k.gpx el 227 2270.0 326.3
+rolling-loop-5k.gpx el 228 2280.0 326.5
+rolling-loop-5k.gpx el 229 2290.0 326.6
+rolling-loop-5k.gpx el 230 2300.0 326.4
+rolling-loop-5k.gpx el 231 2310.0 326.1
+rolling-loop-5k.gpx el 232 2320.0 325.7
+rolling-loop-5k.gpx el 233 2330.0 325.3
+rolling-loop-5k.gpx el 234 2340.0 324.9
+rolling-loop-5k.gpx el 235 2350.0 324.5
+rolling-loop-5k.gpx el 236 2360.0 324.0
+rolling-loop-5k.gpx el 237 2370.0 323.5
+rolling-loop-5k.gpx el 238 2380.0 323.0
+rolling-loop-5k.gpx el 239 2390.0 322.8
+rolling-loop-5k.gpx el 240 2400.0 322.8
+rolling-loop-5k.gpx el 241 2410.0 322.9
+rolling-loop-5k.gpx el 242 2420.0 323.1
+rolling-loop-5k.gpx el 243 2430.0 323.2
+rolling-loop-5k.gpx el 244 2440.0 323.4
+rolling-loop-5k.gpx el 245 2450.0 323.6
+rolling-loop-5k.gpx el 246 2460.0 323.8
+rolling-loop-5k.gpx el 247 2470.0 323.9
+rolling-loop-5k.gpx el 248 2480.0 324.0
+rolling-loop-5k.gpx el 249 2490.0 323.9
+rolling-loop-5k.gpx el 250 2500.0 323.9
+rolling-loop-5k.gpx el 251 2510.0 323.9
+rolling-loop-5k.gpx el 252 2520.0 323.8
+rolling-loop-5k.gpx el 253 2530.0 323.8
+rolling-loop-5k.gpx el 254 2540.0 324.0
+rolling-loop-5k.gpx el 255 2550.0 324.3
+rolling-loop-5k.gpx el 256 2560.0 324.6
+rolling-loop-5k.gpx el 257 2570.0 324.9
+rolling-loop-5k.gpx el 258 2580.0 325.2
+rolling-loop-5k.gpx el 259 2590.0 325.5
+rolling-loop-5k.gpx el 260 2600.0 325.9
+rolling-loop-5k.gpx el 261 2610.0 326.3
+rolling-loop-5k.gpx el 262 2620.0 326.6
+rolling-loop-5k.gpx el 263 2630.0 327.0
+rolling-loop-5k.gpx el 264 2640.0 327.4
+rolling-loop-5k.gpx el 265 2650.0 327.8
+rolling-loop-5k.gpx el 266 2660.0 328.1
+rolling-loop-5k.gpx el 267 2670.0 328.5
+rolling-loop-5k.gpx el 268 2680.0 329.0
+rolling-loop-5k.gpx el 269 2690.0 329.6
+rolling-loop-5k.gpx el 270 2700.0 330.2
+rolling-loop-5k.gpx el 271 2710.0 330.5
+rolling-loop-5k.gpx el 272 2720.0 330.6
+rolling-loop-5k.gpx el 273 2730.0 330.5
+rolling-loop-5k.gpx el 274 2740.0 330.4
+rolling-loop-5k.gpx el 275 2750.0 330.3
+rolling-loop-5k.gpx el 276 2760.0 330.2
+rolling-loop-5k.gpx el 277 2770.0 330.2
+rolling-loop-5k.gpx el 278 2780.0 330.3
+rolling-loop-5k.gpx el 279 2790.0 330.5
+rolling-loop-5k.gpx el 280 2800.0 330.8
+rolling-loop-5k.gpx el 281 2810.0 331.0
+rolling-loop-5k.gpx el 282 2820.0 331.0
+rolling-loop-5k.gpx el 283 2830.0 330.9
+rolling-loop-5k.gpx el 284 2840.0 330.7
+rolling-loop-5k.gpx el 285 2850.0 330.5
+rolling-loop-5k.gpx el 286 2860.0 330.3
+rolling-loop-5k.gpx el 287 2870.0 330.1
+rolling-loop-5k.gpx el 288 2880.0 330.0
+rolling-loop-5k.gpx el 289 2890.0 329.8
+rolling-loop-5k.gpx el 290 2900.0 329.4
+rolling-loop-5k.gpx el 291 2910.0 329.1
+rolling-loop-5k.gpx el 292 2920.0 328.7
+rolling-loop-5k.gpx el 293 2930.0 328.1
+rolling-loop-5k.gpx el 294 2940.0 327.6
+rolling-loop-5k.gpx el 295 2950.0 327.3
+rolling-loop-5k.gpx el 296 2960.0 327.0
+rolling-loop-5k.gpx el 297 2970.0 326.5
+rolling-loop-5k.gpx el 298 2980.0 326.2
+rolling-loop-5k.gpx el 299 2990.0 326.1
+rolling-loop-5k.gpx el 300 3000.0 326.1
+rolling-loop-5k.gpx el 301 3010.0 326.0
+rolling-loop-5k.gpx el 302 3020.0 325.8
+rolling-loop-5k.gpx el 303 3030.0 325.7
+rolling-loop-5k.gpx el 304 3040.0 325.6
+rolling-loop-5k.gpx el 305 3050.0 325.5
+rolling-loop-5k.gpx el 306 3060.0 325.4
+rolling-loop-5k.gpx el 307 3070.0 325.3
+rolling-loop-5k.gpx el 308 3080.0 325.2
+rolling-loop-5k.gpx el 309 3090.0 325.2
+rolling-loop-5k.gpx el 310 3100.0 325.1
+rolling-loop-5k.gpx el 311 3110.0 325.0
+rolling-loop-5k.gpx el 312 3120.0 324.9
+rolling-loop-5k.gpx el 313 3130.0 324.8
+rolling-loop-5k.gpx el 314 3140.0 324.7
+rolling-loop-5k.gpx el 315 3150.0 324.7
+rolling-loop-5k.gpx el 316 3160.0 324.9
+rolling-loop-5k.gpx el 317 3170.0 325.1
+rolling-loop-5k.gpx el 318 3180.0 325.3
+rolling-loop-5k.gpx el 319 3190.0 325.5
+rolling-loop-5k.gpx el 320 3200.0 325.5
+rolling-loop-5k.gpx el 321 3210.0 325.4
+rolling-loop-5k.gpx el 322 3220.0 325.5
+rolling-loop-5k.gpx el 323 3230.0 325.7
+rolling-loop-5k.gpx el 324 3240.0 325.7
+rolling-loop-5k.gpx el 325 3250.0 325.6
+rolling-loop-5k.gpx el 326 3260.0 325.6
+rolling-loop-5k.gpx el 327 3270.0 325.9
+rolling-loop-5k.gpx el 328 3280.0 326.4
+rolling-loop-5k.gpx el 329 3290.0 327.0
+rolling-loop-5k.gpx el 330 3300.0 327.5
+rolling-loop-5k.gpx el 331 3310.0 328.1
+rolling-loop-5k.gpx el 332 3320.0 328.7
+rolling-loop-5k.gpx el 333 3330.0 329.3
+rolling-loop-5k.gpx el 334 3340.0 329.8
+rolling-loop-5k.gpx el 335 3350.0 330.1
+rolling-loop-5k.gpx el 336 3360.0 330.1
+rolling-loop-5k.gpx el 337 3370.0 329.8
+rolling-loop-5k.gpx el 338 3380.0 329.5
+rolling-loop-5k.gpx el 339 3390.0 329.2
+rolling-loop-5k.gpx el 340 3400.0 328.8
+rolling-loop-5k.gpx el 341 3410.0 328.3
+rolling-loop-5k.gpx el 342 3420.0 327.9
+rolling-loop-5k.gpx el 343 3430.0 327.6
+rolling-loop-5k.gpx el 344 3440.0 327.3
+rolling-loop-5k.gpx el 345 3450.0 326.9
+rolling-loop-5k.gpx el 346 3460.0 326.2
+rolling-loop-5k.gpx el 347 3470.0 325.5
+rolling-loop-5k.gpx el 348 3480.0 324.9
+rolling-loop-5k.gpx el 349 3490.0 324.4
+rolling-loop-5k.gpx el 350 3500.0 324.0
+rolling-loop-5k.gpx el 351 3510.0 323.6
+rolling-loop-5k.gpx el 352 3520.0 323.3
+rolling-loop-5k.gpx el 353 3530.0 323.1
+rolling-loop-5k.gpx el 354 3540.0 322.8
+rolling-loop-5k.gpx el 355 3550.0 322.4
+rolling-loop-5k.gpx el 356 3560.0 322.0
+rolling-loop-5k.gpx el 357 3570.0 321.5
+rolling-loop-5k.gpx el 358 3580.0 321.2
+rolling-loop-5k.gpx el 359 3590.0 321.0
+rolling-loop-5k.gpx el 360 3600.0 320.8
+rolling-loop-5k.gpx el 361 3610.0 320.6
+rolling-loop-5k.gpx el 362 3620.0 320.4
+rolling-loop-5k.gpx el 363 3630.0 320.2
+rolling-loop-5k.gpx el 364 3640.0 320.0
+rolling-loop-5k.gpx el 365 3650.0 319.9
+rolling-loop-5k.gpx el 366 3660.0 319.9
+rolling-loop-5k.gpx el 367 3670.0 320.1
+rolling-loop-5k.gpx el 368 3680.0 320.3
+rolling-loop-5k.gpx el 369 3690.0 320.5
+rolling-loop-5k.gpx el 370 3700.0 320.7
+rolling-loop-5k.gpx el 371 3710.0 320.9
+rolling-loop-5k.gpx el 372 3720.0 321.2
+rolling-loop-5k.gpx el 373 3730.0 321.5
+rolling-loop-5k.gpx el 374 3740.0 321.7
+rolling-loop-5k.gpx el 375 3750.0 321.8
+rolling-loop-5k.gpx el 376 3760.0 322.0
+rolling-loop-5k.gpx el 377 3770.0 322.2
+rolling-loop-5k.gpx el 378 3780.0 322.5
+rolling-loop-5k.gpx el 379 3790.0 322.7
+rolling-loop-5k.gpx el 380 3800.0 323.0
+rolling-loop-5k.gpx el 381 3810.0 323.2
+rolling-loop-5k.gpx el 382 3820.0 323.3
+rolling-loop-5k.gpx el 383 3830.0 323.3
+rolling-loop-5k.gpx el 384 3840.0 323.2
+rolling-loop-5k.gpx el 385 3850.0 323.1
+rolling-loop-5k.gpx el 386 3860.0 323.0
+rolling-loop-5k.gpx el 387 3870.0 323.0
+rolling-loop-5k.gpx el 388 3880.0 322.9
+rolling-loop-5k.gpx el 389 3890.0 322.8
+rolling-loop-5k.gpx el 390 3900.0 322.8
+rolling-loop-5k.gpx el 391 3910.0 322.7
+rolling-loop-5k.gpx el 392 3920.0 322.6
+rolling-loop-5k.gpx el 393 3930.0 322.5
+rolling-loop-5k.gpx el 394 3940.0 322.5
+rolling-loop-5k.gpx el 395 3950.0 322.4
+rolling-loop-5k.gpx el 396 3960.0 322.3
+rolling-loop-5k.gpx el 397 3970.0 322.3
+rolling-loop-5k.gpx el 398 3980.0 322.2
+rolling-loop-5k.gpx el 399 3990.0 322.1
+rolling-loop-5k.gpx el 400 4000.0 322.1
+rolling-loop-5k.gpx el 401 4010.0 322.0
+rolling-loop-5k.gpx el 402 4020.0 321.9
+rolling-loop-5k.gpx el 403 4030.0 321.9
+rolling-loop-5k.gpx el 404 4040.0 321.8
+rolling-loop-5k.gpx el 405 4050.0 321.6
+rolling-loop-5k.gpx el 406 4060.0 321.4
+rolling-loop-5k.gpx el 407 4070.0 321.1
+rolling-loop-5k.gpx el 408 4080.0 320.9
+rolling-loop-5k.gpx el 409 4090.0 320.6
+rolling-loop-5k.gpx el 410 4100.0 320.4
+rolling-loop-5k.gpx el 411 4110.0 320.2
+rolling-loop-5k.gpx el 412 4120.0 320.2
+rolling-loop-5k.gpx el 413 4130.0 320.2
+rolling-loop-5k.gpx el 414 4140.0 320.3
+rolling-loop-5k.gpx el 415 4150.0 320.3
+rolling-loop-5k.gpx el 416 4160.0 320.3
+rolling-loop-5k.gpx el 417 4170.0 320.2
+rolling-loop-5k.gpx el 418 4180.0 320.2
+rolling-loop-5k.gpx el 419 4190.0 320.2
+rolling-loop-5k.gpx el 420 4200.0 320.1
+rolling-loop-5k.gpx el 421 4210.0 320.1
+rolling-loop-5k.gpx el 422 4220.0 320.0
+rolling-loop-5k.gpx el 423 4230.0 320.1
+rolling-loop-5k.gpx el 424 4240.0 320.1
+rolling-loop-5k.gpx el 425 4250.0 320.2
+rolling-loop-5k.gpx el 426 4260.0 320.2
+rolling-loop-5k.gpx el 427 4270.0 320.3
+rolling-loop-5k.gpx el 428 4280.0 320.3
+rolling-loop-5k.gpx el 429 4290.0 320.4
+rolling-loop-5k.gpx el 430 4300.0 320.6
+rolling-loop-5k.gpx el 431 4310.0 320.8
+rolling-loop-5k.gpx el 432 4320.0 320.9
+rolling-loop-5k.gpx el 433 4330.0 320.7
+rolling-loop-5k.gpx el 434 4340.0 320.5
+rolling-loop-5k.gpx el 435 4350.0 320.3
+rolling-loop-5k.gpx el 436 4360.0 320.3
+rolling-loop-5k.gpx el 437 4370.0 320.3
+rolling-loop-5k.gpx el 438 4380.0 320.2
+rolling-loop-5k.gpx el 439 4390.0 320.1
+rolling-loop-5k.gpx el 440 4400.0 320.1
+rolling-loop-5k.gpx el 441 4410.0 320.0
+rolling-loop-5k.gpx el 442 4420.0 320.1
+rolling-loop-5k.gpx el 443 4430.0 320.1
+rolling-loop-5k.gpx el 444 4440.0 320.1
+rolling-loop-5k.gpx el 445 4450.0 320.2
+rolling-loop-5k.gpx el 446 4460.0 320.2
+rolling-loop-5k.gpx el 447 4470.0 320.3
+rolling-loop-5k.gpx el 448 4480.0 320.3
+rolling-loop-5k.gpx el 449 4490.0 320.3
+rolling-loop-5k.gpx el 450 4500.0 320.2
+rolling-loop-5k.gpx el 451 4510.0 320.2
+rolling-loop-5k.gpx el 452 4520.0 320.2
+rolling-loop-5k.gpx el 453 4530.0 320.5
+rolling-loop-5k.gpx el 454 4540.0 320.8
+rolling-loop-5k.gpx el 455 4550.0 321.3
+rolling-loop-5k.gpx el 456 4560.0 321.6
+rolling-loop-5k.gpx el 457 4570.0 322.0
+rolling-loop-5k.gpx el 458 4580.0 322.3
+rolling-loop-5k.gpx el 459 4590.0 322.7
+rolling-loop-5k.gpx el 460 4600.0 323.0
+rolling-loop-5k.gpx el 461 4610.0 323.3
+rolling-loop-5k.gpx el 462 4620.0 323.5
+rolling-loop-5k.gpx el 463 4630.0 323.7
+rolling-loop-5k.gpx el 464 4640.0 323.9
+rolling-loop-5k.gpx el 465 4650.0 324.1
+rolling-loop-5k.gpx el 466 4660.0 324.3
+rolling-loop-5k.gpx el 467 4670.0 324.6
+rolling-loop-5k.gpx el 468 4679.3 324.8
+rolling-loop-5k.gpx bounds 51.473111 -0.447079 51.483912 -0.437507
+three-lap-hill.gpx id gpx-three-lap-hill
+three-lap-hill.gpx name Three lap hill
+three-lap-hill.gpx distance_m 4563.0
+three-lap-hill.gpx climb_m 96.8
+three-lap-hill.gpx segments 24
+three-lap-hill.gpx seg 0 0.0 150.0 -2.0
+three-lap-hill.gpx seg 1 150.0 300.0 7.5
+three-lap-hill.gpx seg 2 300.0 450.0 3.5
+three-lap-hill.gpx seg 3 450.0 750.0 -3.0
+three-lap-hill.gpx seg 4 750.0 900.0 -1.0
+three-lap-hill.gpx seg 5 900.0 1050.0 0.5
+three-lap-hill.gpx seg 6 1050.0 1200.0 2.5
+three-lap-hill.gpx seg 7 1200.0 1350.0 6.5
+three-lap-hill.gpx seg 8 1350.0 1500.0 7.5
+three-lap-hill.gpx seg 9 1500.0 1950.0 -3.0
+three-lap-hill.gpx seg 10 1950.0 2100.0 -1.0
+three-lap-hill.gpx seg 11 2100.0 2250.0 2.5
+three-lap-hill.gpx seg 12 2250.0 2400.0 4.0
+three-lap-hill.gpx seg 13 2400.0 2550.0 7.5
+three-lap-hill.gpx seg 14 2550.0 2700.0 2.5
+three-lap-hill.gpx seg 15 2700.0 3000.0 -3.0
+three-lap-hill.gpx seg 16 3000.0 3150.0 -0.5
+three-lap-hill.gpx seg 17 3150.0 3300.0 0.5
+three-lap-hill.gpx seg 18 3300.0 3450.0 2.5
+three-lap-hill.gpx seg 19 3450.0 3600.0 6.5
+three-lap-hill.gpx seg 20 3600.0 3750.0 7.0
+three-lap-hill.gpx seg 21 3750.0 4200.0 -3.0
+three-lap-hill.gpx seg 22 4200.0 4350.0 -1.5
+three-lap-hill.gpx seg 23 4350.0 4563.0 2.5
+three-lap-hill.gpx track 47
+three-lap-hill.gpx tk 0 51.480327 -0.438653 0.0
+three-lap-hill.gpx tk 1 51.480926 -0.437988 81.5
+three-lap-hill.gpx tk 2 51.479972 -0.436562 226.5
+three-lap-hill.gpx tk 3 51.479632 -0.436417 266.4
+three-lap-hill.gpx tk 4 51.479289 -0.436693 309.4
+three-lap-hill.gpx tk 5 51.478880 -0.437278 370.7
+three-lap-hill.gpx tk 6 51.478774 -0.437622 397.4
+three-lap-hill.gpx tk 7 51.478570 -0.438952 492.3
+three-lap-hill.gpx tk 8 51.478643 -0.439347 521.3
+three-lap-hill.gpx tk 9 51.479826 -0.441173 703.8
+three-lap-hill.gpx tk 10 51.479987 -0.441525 734.2
+three-lap-hill.gpx tk 11 51.482193 -0.440076 999.2
+three-lap-hill.gpx tk 12 51.481992 -0.439604 1038.9
+three-lap-hill.gpx tk 13 51.479907 -0.436495 1355.4
+three-lap-hill.gpx tk 14 51.479632 -0.436417 1386.7
+three-lap-hill.gpx tk 15 51.479458 -0.436524 1407.6
+three-lap-hill.gpx tk 16 51.478947 -0.437133 1478.6
+three-lap-hill.gpx tk 17 51.478774 -0.437622 1517.7
+three-lap-hill.gpx tk 18 51.478570 -0.438952 1612.6
+three-lap-hill.gpx tk 19 51.478604 -0.439237 1632.9
+three-lap-hill.gpx tk 20 51.479826 -0.441173 1824.2
+three-lap-hill.gpx tk 21 51.479987 -0.441525 1854.6
+three-lap-hill.gpx tk 22 51.482193 -0.440076 2119.6
+three-lap-hill.gpx tk 23 51.481992 -0.439604 2159.2
+three-lap-hill.gpx tk 24 51.479907 -0.436495 2475.8
+three-lap-hill.gpx tk 25 51.479632 -0.436417 2507.1
+three-lap-hill.gpx tk 26 51.479458 -0.436524 2528.0
+three-lap-hill.gpx tk 27 51.478947 -0.437133 2599.0
+three-lap-hill.gpx tk 28 51.478774 -0.437622 2638.1
+three-lap-hill.gpx tk 29 51.478570 -0.438952 2733.0
+three-lap-hill.gpx tk 30 51.478604 -0.439237 2753.3
+three-lap-hill.gpx tk 31 51.479826 -0.441173 2944.6
+three-lap-hill.gpx tk 32 51.479987 -0.441525 2975.0
+three-lap-hill.gpx tk 33 51.482193 -0.440076 3240.0
+three-lap-hill.gpx tk 34 51.481992 -0.439604 3279.6
+three-lap-hill.gpx tk 35 51.479907 -0.436495 3596.2
+three-lap-hill.gpx tk 36 51.479632 -0.436417 3627.5
+three-lap-hill.gpx tk 37 51.479458 -0.436524 3648.4
+three-lap-hill.gpx tk 38 51.478947 -0.437133 3719.4
+three-lap-hill.gpx tk 39 51.478774 -0.437622 3758.5
+three-lap-hill.gpx tk 40 51.478570 -0.438952 3853.4
+three-lap-hill.gpx tk 41 51.478604 -0.439237 3873.7
+three-lap-hill.gpx tk 42 51.479825 -0.441171 4064.8
+three-lap-hill.gpx tk 43 51.479987 -0.441525 4095.3
+three-lap-hill.gpx tk 44 51.482193 -0.440076 4360.4
+three-lap-hill.gpx tk 45 51.481992 -0.439604 4400.0
+three-lap-hill.gpx tk 46 51.480926 -0.437988 4563.0
+three-lap-hill.gpx elev 458
+three-lap-hill.gpx el 0 0.0 332.2
+three-lap-hill.gpx el 1 10.0 331.5
+three-lap-hill.gpx el 2 20.0 330.8
+three-lap-hill.gpx el 3 30.0 330.1
+three-lap-hill.gpx el 4 40.0 329.3
+three-lap-hill.gpx el 5 50.0 328.6
+three-lap-hill.gpx el 6 60.0 327.8
+three-lap-hill.gpx el 7 70.0 327.0
+three-lap-hill.gpx el 8 80.0 326.6
+three-lap-hill.gpx el 9 90.0 326.6
+three-lap-hill.gpx el 10 100.0 326.9
+three-lap-hill.gpx el 11 110.0 327.4
+three-lap-hill.gpx el 12 120.0 327.9
+three-lap-hill.gpx el 13 130.0 328.3
+three-lap-hill.gpx el 14 140.0 328.9
+three-lap-hill.gpx el 15 150.0 329.5
+three-lap-hill.gpx el 16 160.0 330.3
+three-lap-hill.gpx el 17 170.0 331.0
+three-lap-hill.gpx el 18 180.0 331.7
+three-lap-hill.gpx el 19 190.0 332.5
+three-lap-hill.gpx el 20 200.0 333.2
+three-lap-hill.gpx el 21 210.0 334.0
+three-lap-hill.gpx el 22 220.0 334.8
+three-lap-hill.gpx el 23 230.0 335.5
+three-lap-hill.gpx el 24 240.0 336.1
+three-lap-hill.gpx el 25 250.0 336.7
+three-lap-hill.gpx el 26 260.0 337.4
+three-lap-hill.gpx el 27 270.0 338.2
+three-lap-hill.gpx el 28 280.0 339.0
+three-lap-hill.gpx el 29 290.0 339.8
+three-lap-hill.gpx el 30 300.0 340.6
+three-lap-hill.gpx el 31 310.0 341.3
+three-lap-hill.gpx el 32 320.0 342.1
+three-lap-hill.gpx el 33 330.0 342.9
+three-lap-hill.gpx el 34 340.0 343.7
+three-lap-hill.gpx el 35 350.0 344.3
+three-lap-hill.gpx el 36 360.0 345.1
+three-lap-hill.gpx el 37 370.0 345.8
+three-lap-hill.gpx el 38 380.0 346.5
+three-lap-hill.gpx el 39 390.0 346.9
+three-lap-hill.gpx el 40 400.0 347.0
+three-lap-hill.gpx el 41 410.0 347.0
+three-lap-hill.gpx el 42 420.0 346.9
+three-lap-hill.gpx el 43 430.0 346.8
+three-lap-hill.gpx el 44 440.0 346.5
+three-lap-hill.gpx el 45 450.0 346.0
+three-lap-hill.gpx el 46 460.0 345.1
+three-lap-hill.gpx el 47 470.0 344.1
+three-lap-hill.gpx el 48 480.0 342.9
+three-lap-hill.gpx el 49 490.0 341.7
+three-lap-hill.gpx el 50 500.0 340.6
+three-lap-hill.gpx el 51 510.0 339.3
+three-lap-hill.gpx el 52 520.0 338.1
+three-lap-hill.gpx el 53 530.0 337.1
+three-lap-hill.gpx el 54 540.0 336.2
+three-lap-hill.gpx el 55 550.0 335.5
+three-lap-hill.gpx el 56 560.0 334.7
+three-lap-hill.gpx el 57 570.0 334.1
+three-lap-hill.gpx el 58 580.0 333.6
+three-lap-hill.gpx el 59 590.0 333.2
+three-lap-hill.gpx el 60 600.0 332.9
+three-lap-hill.gpx el 61 610.0 332.5
+three-lap-hill.gpx el 62 620.0 332.1
+three-lap-hill.gpx el 63 630.0 331.7
+three-lap-hill.gpx el 64 640.0 331.3
+three-lap-hill.gpx el 65 650.0 330.7
+three-lap-hill.gpx el 66 660.0 330.0
+three-lap-hill.gpx el 67 670.0 329.0
+three-lap-hill.gpx el 68 680.0 328.0
+three-lap-hill.gpx el 69 690.0 327.0
+three-lap-hill.gpx el 70 700.0 326.1
+three-lap-hill.gpx el 71 710.0 325.3
+three-lap-hill.gpx el 72 720.0 324.4
+three-lap-hill.gpx el 73 730.0 323.7
+three-lap-hill.gpx el 74 740.0 323.2
+three-lap-hill.gpx el 75 750.0 323.0
+three-lap-hill.gpx el 76 760.0 322.9
+three-lap-hill.gpx el 77 770.0 322.8
+three-lap-hill.gpx el 78 780.0 322.8
+three-lap-hill.gpx el 79 790.0 322.7
+three-lap-hill.gpx el 80 800.0 322.7
+three-lap-hill.gpx el 81 810.0 322.6
+three-lap-hill.gpx el 82 820.0 322.5
+three-lap-hill.gpx el 83 830.0 322.5
+three-lap-hill.gpx el 84 840.0 322.4
+three-lap-hill.gpx el 85 850.0 322.3
+three-lap-hill.gpx el 86 860.0 322.3
+three-lap-hill.gpx el 87 870.0 322.2
+three-lap-hill.gpx el 88 880.0 322.0
+three-lap-hill.gpx el 89 890.0 321.9
+three-lap-hill.gpx el 90 900.0 321.8
+three-lap-hill.gpx el 91 910.0 321.6
+three-lap-hill.gpx el 92 920.0 321.5
+three-lap-hill.gpx el 93 930.0 321.3
+three-lap-hill.gpx el 94 940.0 321.2
+three-lap-hill.gpx el 95 950.0 321.1
+three-lap-hill.gpx el 96 960.0 320.9
+three-lap-hill.gpx el 97 970.0 320.8
+three-lap-hill.gpx el 98 980.0 320.6
+three-lap-hill.gpx el 99 990.0 320.4
+three-lap-hill.gpx el 100 1000.0 320.5
+three-lap-hill.gpx el 101 1010.0 320.7
+three-lap-hill.gpx el 102 1020.0 321.2
+three-lap-hill.gpx el 103 1030.0 321.6
+three-lap-hill.gpx el 104 1040.0 321.9
+three-lap-hill.gpx el 105 1050.0 322.3
+three-lap-hill.gpx el 106 1060.0 322.6
+three-lap-hill.gpx el 107 1070.0 323.0
+three-lap-hill.gpx el 108 1080.0 323.2
+three-lap-hill.gpx el 109 1090.0 323.4
+three-lap-hill.gpx el 110 1100.0 323.7
+three-lap-hill.gpx el 111 1110.0 323.9
+three-lap-hill.gpx el 112 1120.0 324.1
+three-lap-hill.gpx el 113 1130.0 324.3
+three-lap-hill.gpx el 114 1140.0 324.5
+three-lap-hill.gpx el 115 1150.0 324.8
+three-lap-hill.gpx el 116 1160.0 325.0
+three-lap-hill.gpx el 117 1170.0 325.2
+three-lap-hill.gpx el 118 1180.0 325.5
+three-lap-hill.gpx el 119 1190.0 325.8
+three-lap-hill.gpx el 120 1200.0 326.1
+three-lap-hill.gpx el 121 1210.0 326.5
+three-lap-hill.gpx el 122 1220.0 326.9
+three-lap-hill.gpx el 123 1230.0 327.4
+three-lap-hill.gpx el 124 1240.0 327.8
+three-lap-hill.gpx el 125 1250.0 328.3
+three-lap-hill.gpx el 126 1260.0 328.9
+three-lap-hill.gpx el 127 1270.0 329.5
+three-lap-hill.gpx el 128 1280.0 330.2
+three-lap-hill.gpx el 129 1290.0 331.0
+three-lap-hill.gpx el 130 1300.0 331.7
+three-lap-hill.gpx el 131 1310.0 332.5
+three-lap-hill.gpx el 132 1320.0 333.2
+three-lap-hill.gpx el 133 1330.0 334.0
+three-lap-hill.gpx el 134 1340.0 334.8
+three-lap-hill.gpx el 135 1350.0 335.5
+three-lap-hill.gpx el 136 1360.0 336.1
+three-lap-hill.gpx el 137 1370.0 336.7
+three-lap-hill.gpx el 138 1380.0 337.4
+three-lap-hill.gpx el 139 1390.0 338.2
+three-lap-hill.gpx el 140 1400.0 339.0
+three-lap-hill.gpx el 141 1410.0 339.8
+three-lap-hill.gpx el 142 1420.0 340.6
+three-lap-hill.gpx el 143 1430.0 341.3
+three-lap-hill.gpx el 144 1440.0 342.1
+three-lap-hill.gpx el 145 1450.0 342.9
+three-lap-hill.gpx el 146 1460.0 343.6
+three-lap-hill.gpx el 147 1470.0 344.3
+three-lap-hill.gpx el 148 1480.0 345.1
+three-lap-hill.gpx el 149 1490.0 345.8
+three-lap-hill.gpx el 150 1500.0 346.5
+three-lap-hill.gpx el 151 1510.0 346.9
+three-lap-hill.gpx el 152 1520.0 347.0
+three-lap-hill.gpx el 153 1530.0 347.0
+three-lap-hill.gpx el 154 1540.0 346.9
+three-lap-hill.gpx el 155 1550.0 346.8
+three-lap-hill.gpx el 156 1560.0 346.5
+three-lap-hill.gpx el 157 1570.0 346.0
+three-lap-hill.gpx el 158 1580.0 345.2
+three-lap-hill.gpx el 159 1590.0 344.2
+three-lap-hill.gpx el 160 1600.0 343.0
+three-lap-hill.gpx el 161 1610.0 341.8
+three-lap-hill.gpx el 162 1620.0 340.6
+three-lap-hill.gpx el 163 1630.0 339.4
+three-lap-hill.gpx el 164 1640.0 338.2
+three-lap-hill.gpx el 165 1650.0 337.1
+three-lap-hill.gpx el 166 1660.0 336.3
+three-lap-hill.gpx el 167 1670.0 335.5
+three-lap-hill.gpx el 168 1680.0 334.8
+three-lap-hill.gpx el 169 1690.0 334.1
+three-lap-hill.gpx el 170 1700.0 333.6
+three-lap-hill.gpx el 171 1710.0 333.3
+three-lap-hill.gpx el 172 1720.0 332.9
+three-lap-hill.gpx el 173 1730.0 332.5
+three-lap-hill.gpx el 174 1740.0 332.1
+three-lap-hill.gpx el 175 1750.0 331.7
+three-lap-hill.gpx el 176 1760.0 331.3
+three-lap-hill.gpx el 177 1770.0 330.8
+three-lap-hill.gpx el 178 1780.0 330.0
+three-lap-hill.gpx el 179 1790.0 329.0
+three-lap-hill.gpx el 180 1800.0 328.0
+three-lap-hill.gpx el 181 1810.0 327.1
+three-lap-hill.gpx el 182 1820.0 326.2
+three-lap-hill.gpx el 183 1830.0 325.3
+three-lap-hill.gpx el 184 1840.0 324.4
+three-lap-hill.gpx el 185 1850.0 323.7
+three-lap-hill.gpx el 186 1860.0 323.2
+three-lap-hill.gpx el 187 1870.0 323.0
+three-lap-hill.gpx el 188 1880.0 322.9
+three-lap-hill.gpx el 189 1890.0 322.9
+three-lap-hill.gpx el 190 1900.0 322.8
+three-lap-hill.gpx el 191 1910.0 322.7
+three-lap-hill.gpx el 192 1920.0 322.7
+three-lap-hill.gpx el 193 1930.0 322.6
+three-lap-hill.gpx el 194 1940.0 322.5
+three-lap-hill.gpx el 195 1950.0 322.5
+three-lap-hill.gpx el 196 1960.0 322.4
+three-lap-hill.gpx el 197 1970.0 322.3
+three-lap-hill.gpx el 198 1980.0 322.3
+three-lap-hill.gpx el 199 1990.0 322.2
+three-lap-hill.gpx el 200 2000.0 322.1
+three-lap-hill.gpx el 201 2010.0 322.1
+three-lap-hill.gpx el 202 2020.0 322.0
+three-lap-hill.gpx el 203 2030.0 321.9
+three-lap-hill.gpx el 204 2040.0 321.9
+three-lap-hill.gpx el 205 2050.0 321.8
+three-lap-hill.gpx el 206 2060.0 321.7
+three-lap-hill.gpx el 207 2070.0 321.5
+three-lap-hill.gpx el 208 2080.0 321.2
+three-lap-hill.gpx el 209 2090.0 320.9
+three-lap-hill.gpx el 210 2100.0 320.7
+three-lap-hill.gpx el 211 2110.0 320.4
+three-lap-hill.gpx el 212 2120.0 320.5
+three-lap-hill.gpx el 213 2130.0 320.7
+three-lap-hill.gpx el 214 2140.0 321.2
+three-lap-hill.gpx el 215 2150.0 321.6
+three-lap-hill.gpx el 216 2160.0 321.9
+three-lap-hill.gpx el 217 2170.0 322.3
+three-lap-hill.gpx el 218 2180.0 322.6
+three-lap-hill.gpx el 219 2190.0 322.9
+three-lap-hill.gpx el 220 2200.0 323.2
+three-lap-hill.gpx el 221 2210.0 323.4
+three-lap-hill.gpx el 222 2220.0 323.7
+three-lap-hill.gpx el 223 2230.0 323.9
+three-lap-hill.gpx el 224 2240.0 324.1
+three-lap-hill.gpx el 225 2250.0 324.3
+three-lap-hill.gpx el 226 2260.0 324.5
+three-lap-hill.gpx el 227 2270.0 324.7
+three-lap-hill.gpx el 228 2280.0 325.0
+three-lap-hill.gpx el 229 2290.0 325.3
+three-lap-hill.gpx el 230 2300.0 325.6
+three-lap-hill.gpx el 231 2310.0 326.0
+three-lap-hill.gpx el 232 2320.0 326.4
+three-lap-hill.gpx el 233 2330.0 326.8
+three-lap-hill.gpx el 234 2340.0 327.2
+three-lap-hill.gpx el 235 2350.0 327.6
+three-lap-hill.gpx el 236 2360.0 328.0
+three-lap-hill.gpx el 237 2370.0 328.4
+three-lap-hill.gpx el 238 2380.0 328.9
+three-lap-hill.gpx el 239 2390.0 329.5
+three-lap-hill.gpx el 240 2400.0 330.2
+three-lap-hill.gpx el 241 2410.0 331.0
+three-lap-hill.gpx el 242 2420.0 331.7
+three-lap-hill.gpx el 243 2430.0 332.4
+three-lap-hill.gpx el 244 2440.0 333.2
+three-lap-hill.gpx el 245 2450.0 334.0
+three-lap-hill.gpx el 246 2460.0 334.8
+three-lap-hill.gpx el 247 2470.0 335.5
+three-lap-hill.gpx el 248 2480.0 336.1
+three-lap-hill.gpx el 249 2490.0 336.7
+three-lap-hill.gpx el 250 2500.0 337.4
+three-lap-hill.gpx el 251 2510.0 338.1
+three-lap-hill.gpx el 252 2520.0 339.0
+three-lap-hill.gpx el 253 2530.0 339.8
+three-lap-hill.gpx el 254 2540.0 340.6
+three-lap-hill.gpx el 255 2550.0 341.3
+three-lap-hill.gpx el 256 2560.0 342.0
+three-lap-hill.gpx el 257 2570.0 342.8
+three-lap-hill.gpx el 258 2580.0 343.6
+three-lap-hill.gpx el 259 2590.0 344.3
+three-lap-hill.gpx el 260 2600.0 345.0
+three-lap-hill.gpx el 261 2610.0 345.8
+three-lap-hill.gpx el 262 2620.0 346.4
+three-lap-hill.gpx el 263 2630.0 346.8
+three-lap-hill.gpx el 264 2640.0 347.0
+three-lap-hill.gpx el 265 2650.0 347.0
+three-lap-hill.gpx el 266 2660.0 346.9
+three-lap-hill.gpx el 267 2670.0 346.8
+three-lap-hill.gpx el 268 2680.0 346.5
+three-lap-hill.gpx el 269 2690.0 346.0
+three-lap-hill.gpx el 270 2700.0 345.2
+three-lap-hill.gpx el 271 2710.0 344.2
+three-lap-hill.gpx el 272 2720.0 343.0
+three-lap-hill.gpx el 273 2730.0 341.8
+three-lap-hill.gpx el 274 2740.0 340.7
+three-lap-hill.gpx el 275 2750.0 339.4
+three-lap-hill.gpx el 276 2760.0 338.2
+three-lap-hill.gpx el 277 2770.0 337.1
+three-lap-hill.gpx el 278 2780.0 336.3
+three-lap-hill.gpx el 279 2790.0 335.5
+three-lap-hill.gpx el 280 2800.0 334.8
+three-lap-hill.gpx el 281 2810.0 334.2
+three-lap-hill.gpx el 282 2820.0 333.7
+three-lap-hill.gpx el 283 2830.0 333.3
+three-lap-hill.gpx el 284 2840.0 332.9
+three-lap-hill.gpx el 285 2850.0 332.5
+three-lap-hill.gpx el 286 2860.0 332.1
+three-lap-hill.gpx el 287 2870.0 331.7
+three-lap-hill.gpx el 288 2880.0 331.3
+three-lap-hill.gpx el 289 2890.0 330.8
+three-lap-hill.gpx el 290 2900.0 330.0
+three-lap-hill.gpx el 291 2910.0 329.1
+three-lap-hill.gpx el 292 2920.0 328.1
+three-lap-hill.gpx el 293 2930.0 327.1
+three-lap-hill.gpx el 294 2940.0 326.2
+three-lap-hill.gpx el 295 2950.0 325.3
+three-lap-hill.gpx el 296 2960.0 324.5
+three-lap-hill.gpx el 297 2970.0 323.7
+three-lap-hill.gpx el 298 2980.0 323.2
+three-lap-hill.gpx el 299 2990.0 323.0
+three-lap-hill.gpx el 300 3000.0 322.9
+three-lap-hill.gpx el 301 3010.0 322.9
+three-lap-hill.gpx el 302 3020.0 322.8
+three-lap-hill.gpx el 303 3030.0 322.7
+three-lap-hill.gpx el 304 3040.0 322.7
+three-lap-hill.gpx el 305 3050.0 322.6
+three-lap-hill.gpx el 306 3060.0 322.5
+three-lap-hill.gpx el 307 3070.0 322.5
+three-lap-hill.gpx el 308 3080.0 322.4
+three-lap-hill.gpx el 309 3090.0 322.3
+three-lap-hill.gpx el 310 3100.0 322.3
+three-lap-hill.gpx el 311 3110.0 322.2
+three-lap-hill.gpx el 312 3120.0 322.1
+three-lap-hill.gpx el 313 3130.0 322.1
+three-lap-hill.gpx el 314 3140.0 322.0
+three-lap-hill.gpx el 315 3150.0 321.9
+three-lap-hill.gpx el 316 3160.0 321.9
+three-lap-hill.gpx el 317 3170.0 321.8
+three-lap-hill.gpx el 318 3180.0 321.7
+three-lap-hill.gpx el 319 3190.0 321.5
+three-lap-hill.gpx el 320 3200.0 321.2
+three-lap-hill.gpx el 321 3210.0 320.9
+three-lap-hill.gpx el 322 3220.0 320.7
+three-lap-hill.gpx el 323 3230.0 320.4
+three-lap-hill.gpx el 324 3240.0 320.4
+three-lap-hill.gpx el 325 3250.0 320.7
+three-lap-hill.gpx el 326 3260.0 321.2
+three-lap-hill.gpx el 327 3270.0 321.5
+three-lap-hill.gpx el 328 3280.0 321.9
+three-lap-hill.gpx el 329 3290.0 322.2
+three-lap-hill.gpx el 330 3300.0 322.6
+three-lap-hill.gpx el 331 3310.0 322.9
+three-lap-hill.gpx el 332 3320.0 323.2
+three-lap-hill.gpx el 333 3330.0 323.4
+three-lap-hill.gpx el 334 3340.0 323.7
+three-lap-hill.gpx el 335 3350.0 323.9
+three-lap-hill.gpx el 336 3360.0 324.1
+three-lap-hill.gpx el 337 3370.0 324.4
+three-lap-hill.gpx el 338 3380.0 324.6
+three-lap-hill.gpx el 339 3390.0 324.8
+three-lap-hill.gpx el 340 3400.0 325.1
+three-lap-hill.gpx el 341 3410.0 325.3
+three-lap-hill.gpx el 342 3420.0 325.5
+three-lap-hill.gpx el 343 3430.0 325.8
+three-lap-hill.gpx el 344 3440.0 326.2
+three-lap-hill.gpx el 345 3450.0 326.6
+three-lap-hill.gpx el 346 3460.0 327.0
+three-lap-hill.gpx el 347 3470.0 327.5
+three-lap-hill.gpx el 348 3480.0 327.9
+three-lap-hill.gpx el 349 3490.0 328.3
+three-lap-hill.gpx el 350 3500.0 328.8
+three-lap-hill.gpx el 351 3510.0 329.4
+three-lap-hill.gpx el 352 3520.0 330.2
+three-lap-hill.gpx el 353 3530.0 330.9
+three-lap-hill.gpx el 354 3540.0 331.7
+three-lap-hill.gpx el 355 3550.0 332.4
+three-lap-hill.gpx el 356 3560.0 333.2
+three-lap-hill.gpx el 357 3570.0 333.9
+three-lap-hill.gpx el 358 3580.0 334.7
+three-lap-hill.gpx el 359 3590.0 335.5
+three-lap-hill.gpx el 360 3600.0 336.1
+three-lap-hill.gpx el 361 3610.0 336.7
+three-lap-hill.gpx el 362 3620.0 337.3
+three-lap-hill.gpx el 363 3630.0 338.1
+three-lap-hill.gpx el 364 3640.0 338.9
+three-lap-hill.gpx el 365 3650.0 339.7
+three-lap-hill.gpx el 366 3660.0 340.5
+three-lap-hill.gpx el 367 3670.0 341.2
+three-lap-hill.gpx el 368 3680.0 342.0
+three-lap-hill.gpx el 369 3690.0 342.8
+three-lap-hill.gpx el 370 3700.0 343.6
+three-lap-hill.gpx el 371 3710.0 344.2
+three-lap-hill.gpx el 372 3720.0 345.0
+three-lap-hill.gpx el 373 3730.0 345.7
+three-lap-hill.gpx el 374 3740.0 346.4
+three-lap-hill.gpx el 375 3750.0 346.8
+three-lap-hill.gpx el 376 3760.0 347.0
+three-lap-hill.gpx el 377 3770.0 347.0
+three-lap-hill.gpx el 378 3780.0 346.9
+three-lap-hill.gpx el 379 3790.0 346.8
+three-lap-hill.gpx el 380 3800.0 346.5
+three-lap-hill.gpx el 381 3810.0 346.0
+three-lap-hill.gpx el 382 3820.0 345.2
+three-lap-hill.gpx el 383 3830.0 344.2
+three-lap-hill.gpx el 384 3840.0 343.1
+three-lap-hill.gpx el 385 3850.0 341.9
+three-lap-hill.gpx el 386 3860.0 340.7
+three-lap-hill.gpx el 387 3870.0 339.5
+three-lap-hill.gpx el 388 3880.0 338.3
+three-lap-hill.gpx el 389 3890.0 337.2
+three-lap-hill.gpx el 390 3900.0 336.3
+three-lap-hill.gpx el 391 3910.0 335.6
+three-lap-hill.gpx el 392 3920.0 334.8
+three-lap-hill.gpx el 393 3930.0 334.2
+three-lap-hill.gpx el 394 3940.0 333.7
+three-lap-hill.gpx el 395 3950.0 333.3
+three-lap-hill.gpx el 396 3960.0 332.9
+three-lap-hill.gpx el 397 3970.0 332.5
+three-lap-hill.gpx el 398 3980.0 332.1
+three-lap-hill.gpx el 399 3990.0 331.7
+three-lap-hill.gpx el 400 4000.0 331.4
+three-lap-hill.gpx el 401 4010.0 330.8
+three-lap-hill.gpx el 402 4020.0 330.0
+three-lap-hill.gpx el 403 4030.0 329.1
+three-lap-hill.gpx el 404 4040.0 328.1
+three-lap-hill.gpx el 405 4050.0 327.1
+three-lap-hill.gpx el 406 4060.0 326.2
+three-lap-hill.gpx el 407 4070.0 325.4
+three-lap-hill.gpx el 408 4080.0 324.5
+three-lap-hill.gpx el 409 4090.0 323.7
+three-lap-hill.gpx el 410 4100.0 323.2
+three-lap-hill.gpx el 411 4110.0 323.0
+three-lap-hill.gpx el 412 4120.0 322.9
+three-lap-hill.gpx el 413 4130.0 322.9
+three-lap-hill.gpx el 414 4140.0 322.8
+three-lap-hill.gpx el 415 4150.0 322.7
+three-lap-hill.gpx el 416 4160.0 322.7
+three-lap-hill.gpx el 417 4170.0 322.6
+three-lap-hill.gpx el 418 4180.0 322.5
+three-lap-hill.gpx el 419 4190.0 322.5
+three-lap-hill.gpx el 420 4200.0 322.4
+three-lap-hill.gpx el 421 4210.0 322.3
+three-lap-hill.gpx el 422 4220.0 322.3
+three-lap-hill.gpx el 423 4230.0 322.2
+three-lap-hill.gpx el 424 4240.0 322.1
+three-lap-hill.gpx el 425 4250.0 322.1
+three-lap-hill.gpx el 426 4260.0 322.0
+three-lap-hill.gpx el 427 4270.0 321.9
+three-lap-hill.gpx el 428 4280.0 321.9
+three-lap-hill.gpx el 429 4290.0 321.8
+three-lap-hill.gpx el 430 4300.0 321.7
+three-lap-hill.gpx el 431 4310.0 321.5
+three-lap-hill.gpx el 432 4320.0 321.2
+three-lap-hill.gpx el 433 4330.0 320.9
+three-lap-hill.gpx el 434 4340.0 320.7
+three-lap-hill.gpx el 435 4350.0 320.4
+three-lap-hill.gpx el 436 4360.0 320.4
+three-lap-hill.gpx el 437 4370.0 320.7
+three-lap-hill.gpx el 438 4380.0 321.2
+three-lap-hill.gpx el 439 4390.0 321.5
+three-lap-hill.gpx el 440 4400.0 321.9
+three-lap-hill.gpx el 441 4410.0 322.2
+three-lap-hill.gpx el 442 4420.0 322.6
+three-lap-hill.gpx el 443 4430.0 322.9
+three-lap-hill.gpx el 444 4440.0 323.2
+three-lap-hill.gpx el 445 4450.0 323.4
+three-lap-hill.gpx el 446 4460.0 323.6
+three-lap-hill.gpx el 447 4470.0 323.9
+three-lap-hill.gpx el 448 4480.0 324.1
+three-lap-hill.gpx el 449 4490.0 324.3
+three-lap-hill.gpx el 450 4500.0 324.5
+three-lap-hill.gpx el 451 4510.0 324.7
+three-lap-hill.gpx el 452 4520.0 325.0
+three-lap-hill.gpx el 453 4530.0 325.2
+three-lap-hill.gpx el 454 4540.0 325.5
+three-lap-hill.gpx el 455 4550.0 325.7
+three-lap-hill.gpx el 456 4560.0 326.0
+three-lap-hill.gpx el 457 4563.0 326.1
+three-lap-hill.gpx bounds 51.478570 -0.441525 51.482193 -0.436417

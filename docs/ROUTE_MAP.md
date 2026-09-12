@@ -32,6 +32,62 @@ can never disagree with each other.
 
 ---
 
+## Where routes come from
+
+**The console reads them off Home Assistant itself, at start-up.** It asks a
+`folder` sensor which `.gpx` files are in `www/treadmill/routes/`, fetches each
+one over `/local/`, and converts them on the console. Adding a route is putting
+a file in that folder; renaming one renames the route; deleting one removes it
+at the next start. `Settings → Home Assistant → Routes` holds the address, the
+token and a FETCH button for when you do not want to wait for a restart.
+
+It needs two things in Home Assistant, both of which are ordinary:
+
+```yaml
+# configuration.yaml
+homeassistant:
+  allowlist_external_dirs:
+    - /config/www/treadmill/routes
+
+sensor:
+  - platform: folder
+    folder: /config/www/treadmill/routes
+    filter: "*.gpx"
+```
+
+and a long-lived access token from your profile page. Only the *listing* uses
+the token — `/local/` is served unauthenticated, which is also why a wrong token
+is the one failure that says so in as many words.
+
+**A failure never costs you a route.** No network, a wrong token, a renamed
+sensor, a corrupt file: the routes already on the console stay exactly where
+they are. The console has to be able to offer a walk with the house network
+down, and that outranks being up to date. A file that will not convert is
+skipped by name and the others still arrive.
+
+### The old way still works, and why it was not enough
+
+`stride_gpx.py sync` publishes the same routes to the retained `stride/routes`
+topic, and a console with no address configured still takes them. But a retained
+topic holds its last payload forever — the property that lets the console boot
+offline is the same property that lets it be months stale. On 2026-09-12 this
+folder held three files and the console was offering two routes, one of them a
+file that had been renamed weeks earlier. Nothing was broken and nothing said
+so, because there was nothing to notice: the script simply had not been run.
+
+So when an address *is* configured, the console ignores that topic outright —
+otherwise the retained payload would arrive seconds after a fresh fetch and win
+every time.
+
+The conversion is the same conversion. `Gpx.kt` is a port of the maths in
+`stride_gpx.py`, and `GpxTest` holds the two to the same answer, fact for fact,
+on three real routes — every segment boundary, every gradient, every kept
+vertex. Run it with `tools/docker-build.sh test`; regenerate the golden with
+`tools/gpx-golden.py` and read the diff, because a change there is a change to
+how every route walks.
+
+---
+
 ## What has to be true for the map to draw
 
 1. **The route was imported with `stride_gpx.py` from this version or later.**

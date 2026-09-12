@@ -2,6 +2,7 @@
 # Build the console APK in a container. Nothing but Docker need be installed.
 #
 #   tools/docker-build.sh            debug APK (default)
+#   tools/docker-build.sh test       the JVM unit tests, no device needed
 #   tools/docker-build.sh release    release APK; needs signing in local.properties
 #   tools/docker-build.sh clean      throw the build outputs away
 #   tools/docker-build.sh image      rebuild the container image and stop
@@ -93,8 +94,16 @@ case "$VARIANT" in
     gradle assembleDebug
     APK="$PROJECT/app/build/outputs/apk/debug/app-debug.apk"
     ;;
+  test)
+    # The JVM unit tests, which is Gpx against stride_gpx.py's own output on
+    # three real routes. Seconds, no device, and the one check that can catch a
+    # route driving the deck differently before it reaches the deck.
+    gradle testDebugUnitTest
+    echo ">>> unit tests passed"
+    exit 0
+    ;;
   *)
-    echo "usage: $(basename "$0") [debug|release|clean|image]" >&2
+    echo "usage: $(basename "$0") [debug|release|test|clean|image]" >&2
     exit 2
     ;;
 esac
