@@ -28,16 +28,6 @@ motor, belt and deck are unchanged.
 hardware cuts the belt, independently of anything STRIDE is doing. STRIDE
 notices and shows a screen, but it isn't what stopped the belt.
 
-**STRIDE drives the incline. It only ever suggests a speed.** A guided walk
-moves the deck, because the deck can't run away underneath you. It will say
-"lift to 6.4 km/h" and leave the belt where it is.
-
-**Automatic stops ramp down** at 2 km/h per second. The first guided walk cut
-the belt from 4.2 km/h to zero the moment the plan ended, which was enough to
-catch someone off guard — at a run it would have put them on the floor. **The
-STOP button is exempt and stops immediately**, because that is a person
-deciding.
-
 **The board's limits win.** Incline and speed ranges are read from the machine
 at startup and every plan is clamped to them. Nothing in Settings can raise
 them.
