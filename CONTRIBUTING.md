@@ -68,8 +68,6 @@ person standing on it.
 
 - **The safety key is the stop of record.** It's hardware and it cuts the
   motor. Nothing in software gets to be the last line.
-- **Incline is driven, speed is only ever suggested.** The user decides when to
-  go faster. Auto start-up is optional and capped at 3 km/h.
 - **Every request is clamped** to the range the board reports for itself, in
   Kotlin, not in the interface. A layout can't outrun the machine, and it
   should stay that way.
