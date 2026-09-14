@@ -153,7 +153,7 @@ Honestly, maybe. It's proven on one machine, mine:
 | Model | NordicTrack C 1750 |
 | Generation | Gen 6, the embedded "CLASSIC" console |
 | Motor board | FitPro, device id `0x04` |
-| Reported ranges | incline −3 to +12 %, speed 1.6 to 20 km/h |
+| Reported ranges | incline −3 to +15 %, speed 1.6 to 20 km/h |
 
 Other Gen 6 NordicTrack and ProForm consoles on the same board are probably
 fine, because the protocol looks like a family rather than a single model, but
