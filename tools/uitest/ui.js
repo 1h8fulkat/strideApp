@@ -381,6 +381,70 @@ JSDOM.fromFile(path, {
       : '!climbed ' + climb.toFixed(1) + ' m, expected 30 (net rise is 0)';
   });
 
+  /* The lap counter and the distance beside it describe the same walk, and on
+     a console set to miles they used to stop agreeing.
+
+     A lap was 400 m in both unit systems while the imperial label read
+     0.25 MI. 400 m is 0.2485 mi, so every lap turned over 2.34 m early and the
+     error stacked: by lap twelve the ring had gone round twelve times with
+     2.98 MI showing next to it. Walked and reported on 21 September 2026, and
+     the twelfth lap is where it first crosses a whole two hundredths — which
+     is to say where the readout finally makes it visible.
+
+     Both directions are checked. A metric console must stay on 400 m exactly,
+     because the fix is unit-aware and a fix that quietly moved the metric lap
+     would be a second bug wearing the first one's clothes. */
+  check('a mile console counts quarter-mile laps', () => {
+    /* 3.00 mi to the metre. Twelve quarters is exactly this, and under the old
+       400 m lap it is lap 12 plus a third of another. */
+    const s = w.STRIDE.adapt({ mode:'running', units:'mi', distance:4828.032,
+                               elapsed:2400 });
+    const dist = w.STRIDE.dist(4828.032);
+    if (s.session.laps !== 12) {
+      return '!' + dist + ' mi showed lap ' + s.session.laps + ', expected 12';
+    }
+    /* The turnover itself: one metre short of three miles is still lap 11, and
+       the distance still reads 2.99. Neither number may run ahead. */
+    const just = w.STRIDE.adapt({ mode:'running', units:'mi', distance:4827.0,
+                                  elapsed:2400 });
+    return just.session.laps === 11
+      ? 'lap 12 lands at ' + dist + ' mi'
+      : '!lap ' + just.session.laps + ' at 2.99 mi, expected 11 — early again';
+  });
+  check('a metric console still counts 400 m laps', () => {
+    const s = w.STRIDE.adapt({ mode:'running', units:'km', distance:4800,
+                               elapsed:2400 });
+    const just = w.STRIDE.adapt({ mode:'running', units:'km', distance:4799,
+                                  elapsed:2400 });
+    return s.session.laps === 12 && just.session.laps === 11
+      ? 'lap 12 lands at 4800 m'
+      : '!lap ' + s.session.laps + ' at 4800 m and ' + just.session.laps +
+        ' at 4799 m, expected 12 and 11';
+  });
+  check('the ring and the counter measure the same lap', () => {
+    /* The fault was never the arithmetic on its own — it was two places doing
+       it. The oval places the walker and the counter counts, and if they take
+       different lap lengths the dot sits at a third of the way round while the
+       number beside it has already ticked. Same frame, both readings. */
+    const s = w.STRIDE.adapt({ mode:'running', units:'mi', distance:4828.032,
+                               elapsed:2400 });
+    const ring = w.TRACK || w.STRIDE.track({});
+    const agree = ring.laps(4828.032) === s.session.laps &&
+                  Math.abs(ring.lapFraction(4828.032) - s.session.lapFraction) < 1e-9;
+    /* And the oval must have followed the setting, not kept the 400 m it was
+       built with before any frame arrived. */
+    return agree && Math.abs(ring.lapMetres() - 402.336) < 0.001
+      ? 'both read lap ' + s.session.laps + ' of ' +
+        ring.lapMetres().toFixed(3) + ' m'
+      : '!ring says ' + ring.laps(4828.032) + ' of ' +
+        ring.lapMetres().toFixed(3) + ' m, counter says ' + s.session.laps;
+  });
+  /* Put the console back where the rest of the file expects it: every check
+     below reads units off the frames it pushes, but `IMPERIAL` is module state
+     and the three above have just left it set to miles. */
+  w.STRIDE.adapt({ mode:'running', units:'km', distance:0, elapsed:0 });
+  w.STRIDE.resetDerived();
+
   // A casual walk: the oval, nothing else.
   w.render({ ...frame(300, 180), segments: 0, control: 'casual' });
   check('casual: oval hero', () => w.document.getElementById('stage').style.display === 'block');
