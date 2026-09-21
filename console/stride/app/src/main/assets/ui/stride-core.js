@@ -84,7 +84,12 @@
  * @param opts.radius    semicircle radius, px (default 158)
  * @param opts.cx,cy     centre of the oval in screen coords
  * @param opts.squash    vertical scale; 1 is face-on, ~0.5 is a shallow oblique
- * @param opts.lapMetres real-world lap, m (default 400)
+ * @param opts.lapMetres real-world lap, m. Omit it — the default follows the
+ *                        console's unit setting (400 m, or a quarter mile on a
+ *                        console set to miles) and is read afresh on every
+ *                        call, because the setting arrives after this is
+ *                        built. Pass a number only for a track that is a fixed
+ *                        length whatever the walker reads.
  * @param opts.samples   resolution of the true→screen length table
  * @param opts.anticlockwise  run it the way a track is actually run — see the
  *                            mirror below. Default false, which is clockwise
@@ -97,7 +102,11 @@ function track(opts) {
   var cx        = opts.cx        == null ? 0   : opts.cx;
   var cy        = opts.cy        == null ? 0   : opts.cy;
   var squash    = opts.squash    == null ? 1   : opts.squash;
-  var lapMetres = opts.lapMetres || 400;
+  /* Deliberately not resolved here. See the parameter note above: this object
+     is constructed at page load and the unit setting does not arrive until the
+     first frame, so the lap length is asked for when it is used. */
+  var fixedLap = opts.lapMetres || 0;
+  function lapLen() { return fixedLap || lapMetres(); }
   var samples   = opts.samples   || 720;
   var anti      = !!opts.anticlockwise;
 
@@ -209,7 +218,9 @@ function track(opts) {
     cx: cx, cy: cy,
     perimeter: perimeter,
     screenLength: screenLength,
-    lapMetres: lapMetres,
+    /** The lap this oval is currently measuring, m — a function, because on a
+     *  console set to miles it changes when the setting does. */
+    lapMetres: lapLen,
 
     /**
      * SVG `d` for the rail. `inset` pulls it inwards, which is how concentric
@@ -251,7 +262,7 @@ function track(opts) {
     atFraction: function (f) { return mirror(toScreen(trueAt(wrap(f) * perimeter))); },
 
     /** Same, from metres run. Laps beyond the first simply wrap. */
-    at: function (metres) { return this.atFraction((metres || 0) / lapMetres); },
+    at: function (metres) { return this.atFraction((metres || 0) / lapLen()); },
 
     /**
      * Dash length for a path carrying `pathLength="1000"`, such that the arc
@@ -264,10 +275,10 @@ function track(opts) {
                            : cum[i] + (cum[i + 1] - cum[i]) * (x - i);
       return 1000 * s / screenLength;
     },
-    dash: function (metres) { return this.dashFraction((metres || 0) / lapMetres); },
+    dash: function (metres) { return this.dashFraction((metres || 0) / lapLen()); },
 
-    laps:        function (metres) { return Math.floor((metres || 0) / lapMetres); },
-    lapFraction: function (metres) { return wrap((metres || 0) / lapMetres); }
+    laps:        function (metres) { return Math.floor((metres || 0) / lapLen()); },
+    lapFraction: function (metres) { return wrap((metres || 0) / lapLen()); }
   };
 }
 
@@ -647,11 +658,19 @@ function adapt(raw) {
   setUnits(raw.units);
 
   var segments = raw.segments || 0;
-  /* Still 400 m in both systems, and the imperial label says 0.25 mi because
-     that is what 400 m is to two decimals — 0.2485. Deriving a real quarter-mile
-     lap would mean 402.336 here *and* in every track() the interfaces build for
-     the oval, or the ring and the counter would disagree about the same walk. */
-  var laps = Math.floor(distance / 400);
+  /* A lap is a unit and follows the setting: 400 m, or a real quarter mile at
+     402.336 m. `setUnits` above has already run, so this is the right one.
+
+     It used to be 400 m in both systems, on the grounds that the imperial
+     label reads 0.25 mi and 400 m is 0.2485 mi — near enough for one lap, and
+     changing it meant changing every track() as well or the ring and the
+     counter would disagree. What that argument missed is that the error does
+     not stay at one lap's worth: it is 2.34 m every time round and it stacks.
+     By lap twelve the counter turned over 28 m early, which the walker saw as
+     a ring reading 12 beside a distance reading 2.98 MI. Both track() and this
+     now take the length from lapMetres(), so they move together. */
+  var lapM = lapMetres();
+  var laps = Math.floor(distance / lapM);
 
   return {
     profile:  raw.who || '',
@@ -728,7 +747,12 @@ function adapt(raw) {
                 calories: raw.calories || 0,
                 climb: climbM,
                 laps: laps,
-                lapFraction: (distance % 400) / 400,
+                lapFraction: (distance % lapM) / lapM,
+                /* Carried so an interface can say how long a lap is without
+                   knowing the rule, and so none of them re-derive the count
+                   from a constant of their own — which is exactly how the
+                   counter and the ring came apart. */
+                lapMetres: lapM,
                 pulse: raw.pulse || 0,
                 avgSpeed: raw.avgSpeed || 0, maxSpeed: raw.maxSpeed || 0,
                 avgIncline: raw.avgIncline || 0, maxIncline: raw.maxIncline || 0,
@@ -1463,6 +1487,32 @@ function distUnit(caps) { var u = IMPERIAL ? 'mi' : 'km'; return caps ? u.toUppe
 function spdUnit(caps)  { var u = IMPERIAL ? 'mph' : 'km/h'; return caps ? u.toUpperCase() : u; }
 function elevUnit(caps) { var u = IMPERIAL ? 'ft' : 'm'; return caps ? u.toUpperCase() : u; }
 
+/** One lap of the oval: a metric lap, or a quarter mile, m. */
+var LAP_KM_M = 400;
+var LAP_MI_M = 1609.344 / 4;            // 402.336
+
+/**
+ * How long a lap is, in metres, under the current unit setting.
+ *
+ * A lap is a unit, so it changes with the setting the way every other one
+ * does. It used to be 400 m in both systems while the imperial label said
+ * "LAPS OF 0.25 MI" — and 400 m is 0.2485 mi, so the counter turned over
+ * 2.34 m early every lap and the error stacked. By lap twelve the ring said
+ * twelve while the distance beside it read 2.98 MI, which is the fault this
+ * exists to fix: two numbers describing the same walk, disagreeing.
+ *
+ * Read at *call* time, never captured. `track()` is constructed when the page
+ * loads and the unit setting does not arrive until the first frame, so a lap
+ * length frozen at construction would be the metric one for the whole walk on
+ * a console set to miles.
+ *
+ * Everything that counts laps, draws the ring, or places the walker on it goes
+ * through here or through the `track()` methods that call it, so the ring and
+ * the counter cannot come apart — which is the thing worth protecting, and the
+ * reason the old 400 was left alone for as long as it was.
+ */
+function lapMetres() { return IMPERIAL ? LAP_MI_M : LAP_KM_M; }
+
 /**
  * Rewrite the static unit labels in the document.
  *
@@ -1992,6 +2042,7 @@ global.STRIDE = {
   spd: spd,
   elev: elev,
   distUnit: distUnit,
+  lapMetres: lapMetres,
   spdUnit: spdUnit,
   elevUnit: elevUnit,
   applyUnitLabels: applyUnitLabels,

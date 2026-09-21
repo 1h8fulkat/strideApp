@@ -895,13 +895,20 @@ function renderPath(s){
 }
 
 function renderLaps(s){
-  const d = s.session.distance;
-  const frac = (d % 400) / 400;
-  $('laps').textContent = Math.floor(d / 400);
+  /* Both come off the state rather than being worked out again here.
+     Daylight is the only interface with no oval in it — the hero is a number
+     and a bar — so it was the one place dividing by a hardcoded 400 of its own
+     instead of asking track(). That 400 is a metric lap, while this card's own
+     label reads LAPS OF 0.25 MI on a console set to miles: the two disagreed
+     by 2.34 m a lap, and the gap grew every time round. See lapMetres() in
+     stride-core. */
+  const laps = s.session.laps;
+  const frac = s.session.lapFraction;
+  $('laps').textContent = laps;
   $('lapPct').textContent = 'and ' + Math.round(frac * 100) + '%';
   // Parked to the right of however many digits the lap count has, so it never
   // sits on top of the number.
-  $('lapPct').style.left = (Math.floor(d / 400) >= 10 ? 250 : 140) + 'px';
+  $('lapPct').style.left = (laps >= 10 ? 250 : 140) + 'px';
   $('lapBar').style.width = (frac * 740).toFixed(0) + 'px';
 }
 
