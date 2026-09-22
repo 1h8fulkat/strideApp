@@ -3,6 +3,8 @@
 **Branch:** `heart-rate-zones` (off `main` at `38ae7f9`)
 **Started:** 21 September 2026
 **Phase 1 of 6 complete, deployed, and tested on the treadmill.**
+**Phase 2 built, deployed, and driven by hand with the belt cold. Its
+treadmill gate — walk with the strap on — has not been done yet.**
 
 This file is the handoff. It exists because the work spans more sessions than
 one context window holds, and because the decisions behind it are worth more
@@ -60,8 +62,8 @@ What is **not** negotiable and is not part of that decision:
 |---|---|
 | Console | NordicTrack C 1750, FitPro board, Android 7.0, **Chromium 51 WebView** |
 | Reachable at | `192.168.10.10:5555` over adb-over-TCP |
-| Installed | `app-debug.apk`, 3.0M, built from `fbcb00a` |
-| Installed at | 2026-09-21 21:03 |
+| Installed | `app-debug.apk`, 3.0M, built from `c55452b` |
+| Installed at | 2026-09-21 21:39 |
 | Signer SHA-256 | `f274956772b6606c3fca0264dd84f870df2addecbe4e56d13925b5447997d677` |
 | Board limits | speed 0.8–19.31 km/h, incline −3.0 to +15.0 % |
 | Units | miles (`units: mi`) |
@@ -139,7 +141,7 @@ profile cards at y≈492 (`x` 404 / 640 / 876), BACK `120 730`, settings CLOSE
    document.** Anything taller must state its own height, or its content
    renders outside its own border. This caused the one visible bug of phase 1.
 4. **Run the suite before deploying:** `tools/ui-test.sh all` — `es`, `zones`,
-   `engine`, and `ui` in three modes. All four gates pass at `fbcb00a`.
+   `engine`, and `ui` in three modes. All four gates pass at `c55452b`.
 
 ---
 
@@ -166,19 +168,23 @@ original brief referring to one. The tree was mapped by hand.
 console/stride/app/src/main/
   java/dev/stride/hud/
     HrZones.kt        NEW — all zone arithmetic. Single source of truth.
+    HrTrace.kt        NEW — the walk's HR+pace trace, downsampled as it fills.
     Settings.kt       Person.birthday + restingHr; derived age/maxPulse/zoneFloors
-    MainActivity.kt   3961 lines. Poll loop, Bridge (@JavascriptInterface), zoneSecs
+    MainActivity.kt   4176 lines. Poll loop, Bridge (@JavascriptInterface),
+                      zoneSecs, walkTrace
     Session.kt        Snapshot — the one frame sent to the page and to HA
     Coach.kt          Spoken coaching. Has its own softer ZONE_WORDS register.
     History.kt        Walk records on disk. Aggregates only, no time series.
     Plan.kt           Guided-walk templates. Phase 4 adds zone presets here.
     HeartRate.kt      BLE strap, standard 0x180D/0x2A37
   assets/ui/
-    stride-core.js    2064+ lines. Shared helpers. ZONES + the page's zone math.
+    stride-core.js    2400+ lines. Shared helpers. ZONES, the page's zone math,
+                      and hrGraph() — the shared zone-coloured trace renderer.
     stride-settings.js  The settings screen, shared by all five interfaces.
-    original.html     The default interface, 2284+ lines. Build here first.
+    original.html     The default interface, 2500+ lines. Build here first.
     cluster.html / ember.html / pacer.html / daylight.html   Port targets.
-console/stride/app/src/test/java/dev/stride/hud/HrZonesTest.kt   NEW — 35 tests
+console/stride/app/src/test/java/dev/stride/hud/HrZonesTest.kt   NEW — 22 tests
+console/stride/app/src/test/java/dev/stride/hud/HrTraceTest.kt   NEW — 13 tests
 tools/uitest/zones.js   NEW — holds the page's copy of the formulas to Kotlin's
 tools/uitest/es.js      Extended with the CSS audit
 ```
@@ -364,33 +370,146 @@ or by clearing an RHR.
 
 ## Phase 2 — live zone state and the in-workout UI
 
-**Not started.** Touches no belt command; the gate is visual.
+**Built, deployed, and driven by hand with the belt cold. The treadmill gate is
+still to walk.** Touches no belt command: the belt behaves exactly as it did at
+`fbcb00a`.
 
-* **Kotlin.** Add to `Snapshot` in `Session.kt`: current `zone` (−1 when there
-  is no reading), the walker's `zoneFloors`, and the active zone's bpm band.
-  `hrMax` and `zoneSecs` are already there. Extend `toJson()` and mirror the
-  fields in `adapt()` in `stride-core.js`.
-* **HR trace buffer.** A ring buffer in `MainActivity` of (elapsed, bpm, kph)
-  samples for the current walk. **In memory, summary only** — the owner chose
-  this. Downsample as you go; a 60-minute walk at 5 Hz is 18 000 samples and
-  the graph needs a few hundred. Cleared in `resetSession()`.
-* **Shared graph renderer in `stride-core.js`.** Canvas, not SVG — `profile()`
-  and `sparkline()` in this project already draw to canvas, and the four ports
-  in Phase 6 should be thin. The line colour must change **at the crossing
-  point**, so a segment that spans a boundary is split, not painted with its
-  endpoint's colour. Note the jsdom canvas stub in `tools/uitest/ui.js` —
-  the renderer must survive a context that returns nothing useful.
-* **`original.html`:** the graph goes **below the track display**. The fan
-  panel is allowed to overlay it when open. The live BPM box in `.strip` gets
-  a zone-coloured border or background, driven by `STRIDE.zoneColour(bpm,
-  floors)` — which returns `''` for no reading, and that must mean "leave it
-  alone", not "paint it grey".
-* **Label assumed zones.** If `hrZones().assumed` is true the walker never gave
-  an age. Say so somewhere on the HUD.
+Commit: `c55452b` The zone a walker is in, and the line that shows how they got
+there — 979 insertions across 8 files.
 
-**Treadmill gate:** walk with the strap on and watch the line change colour at
-the boundaries. Cross-check the live zone against the bands in the table above.
-The belt must behave exactly as it does today.
+### What was built
+
+* **`Snapshot`** gained `zone`, `zoneFloors` and the band in force
+  (`zoneFrom`/`zoneTo`). The zone is computed in Kotlin, where the floors are
+  already cached, because Phase 3's loop reads the same answer and two sides
+  each dividing a pulse by a maximum is how a belt ends up speeding up to
+  reach a zone the summary says it was already in.
+* **`HrTrace.kt`** — the walk's heart rate and pace, bucketed by time, merging
+  every neighbouring pair and doubling the bucket when it runs out of room.
+  360 points at 5 s covers half an hour; the first merge an hour; the walk
+  never has to say in advance how long it will be. **Halved in place, not
+  trimmed from the front** — a trace that forgot its first thirty minutes
+  would draw an hour of effort as a flat half hour.
+* **`STRIDE.hrGraph`** in `stride-core.js` — the shared canvas renderer. Splits
+  a segment **at the boundary it crosses** and draws each piece in its own
+  colour. Breaks the line over a bpm of 0. Returns a description of what it
+  drew (range, pieces, gaps, and the bpm/second of every split), which is
+  nothing the page wants and is how the headless suite sees a canvas that
+  produces no pixels.
+* **`original.html`** — the trace in the coach's band, and the live BPM box
+  bordered in the zone's colour.
+* **`tools/uitest/ui.js`** — 19 new checks, in all three modes.
+* **`tools/hud_drive.py`** pushed `pulse: 0`, so every design screenshot it
+  has ever taken was of the HUD in its no-reading state. It carries Jeff's
+  real zones and a pulse of 148 now.
+
+### Two departures from the plan above, and why
+
+1. **The trace buffer is its own file, not inline in `MainActivity`.** The
+   merge-and-double arithmetic is the kind of thing worth driving through
+   scripted traces, and `HrTraceTest` does — two hours at 5 Hz, a ramp that
+   must still read as a ramp after two halvings, and the dropout cases. The
+   instance lives in `MainActivity` and is cleared in `resetSession()`, so the
+   trace still belongs to one walk and is still in memory only.
+2. **The page pulls the trace; it is not pushed on the frame.** `Stride.hrTrace()`
+   returns `{"bucket":5,"samples":[[t,bpm,kph],…]}`. The Snapshot goes out five
+   times a second and the trace gains a point every five seconds, so putting it
+   on the frame would make the largest thing crossing the bridge the one thing
+   that had not changed. The page asks once a second, keyed off the **session**
+   clock rather than the wall clock, so a walk starting over redraws on its
+   first frame.
+
+### Where the graph actually went, and why it is not under the track
+
+The plan said "below the track display". There is no band there. The hero owns
+172–576 and the oval's bottom arc reaches y=550, so a strip laid under the
+track the way the elevation strip is laid under the path would cross the ring.
+
+The band below it — 588–668, the coach's — is empty most of the time and
+already had two tenants, which is the argument for a third rather than against
+it. The fan menu (z-index 45) lays over the trace and that is fine: five
+buttons over a line, and the plan allows it.
+
+**The coach is not fine, and this was found on the console.** Its background is
+`rgba(10,21,51,.96)` — deliberately short of opaque so a ghost of the walk
+shows through, which was written when the band was empty. With the trace behind
+it, an uppercase `ZONE 4 · ANAEROBIC · 154–165 BPM` and a heart-rate line came
+through the middle of the coach's sentence, and the caption read as a second
+line of coaching. The trace hides itself while the coach is up and is back the
+frame after it goes; `renderZones` checks the ribbon's class every frame rather
+than hooking `window.coach`, so the dismiss tap, the timeout and `showScreen`
+clearing it all put the trace back for free. There is a headless check for it.
+
+### Faults found and fixed in this phase
+
+1. **The coach ghosting through the trace**, above. Only visible on the
+   machine, because it is a 4% alpha difference.
+2. **Filled zone bands were a muddy gradient.** They are what went to the
+   console first: five translucent fills over a 56px strip do not read as five
+   zones, they read as one vertical smear, and they compete with the line that
+   carries the same information legibly. The renderer draws a hairline at each
+   floor instead, in the colour of the zone that starts there. `bands:true`
+   still fills, for whatever draws this tall enough for the fills to separate —
+   Phase 5's summary plot is the candidate.
+3. **The head dot was clipped in half** at the right-hand edge — drawn centred
+   on `x=W` inside a box with `overflow:hidden`, which reads as the trace
+   running off the edge of its own container. Both ends are inset by the dot's
+   radius now.
+4. **The border on one metric box knocked the row out of line.** `.strip` is
+   `align-items:center`, so each column centres against its own height and a
+   border on the heart-rate box alone dropped that column's label four pixels
+   below the other three. All four carry the border, transparent; only the
+   heart rate ever gets a colour in it. It only looks crooked once the strap
+   connects, which is the sort of thing that ships.
+5. **A trailing-lambda test helper bound to the wrong parameter.** `walk(t,
+   9.9) { 120 }` attached the lambda to `kph`, not `bpm`, because `kph` was
+   last. Caught by the compiler, not by a wrong answer, but the same shape has
+   produced silent wrong answers before: the varying argument goes last.
+
+### Verified on the console, belt cold
+
+Driven through DevTools with the real renderer parked (`window._real`), on the
+NordicTrack at `192.168.10.10:5555`:
+
+* Zone 3 and zone 4 frames — caption, band and border all correct and in the
+  zone's colour.
+* **Strap off** — caption reads "waiting for a reading", the border comes
+  *off* the box rather than going grey or staying on the last zone, and the
+  number reads `—`.
+* **Zone 0** — names itself "Resting · 60–118 bpm" and keeps the zone-0 grey.
+  Visibly a different state from no reading at all, which is the whole point.
+* **Zone 5** — drawn open-ended, "166+ bpm", rather than as a ceiling
+  somebody has broken.
+* **Assumed age through the real bridge** — `Stride.setGuestAge(40, true)`,
+  then `hrZones()` returned
+  `{"floors":[0,90,108,126,144,162],"max":180,"assumed":true}` — percent-of-max
+  for a walker with no resting rate — and the HUD showed "zones assumed · no
+  age given".
+* Warm-up: the phase panel takes the hero and the trace sits below it.
+* A 25-minute synthetic trace with an 80-second dropout in it: 285 pieces, 16
+  gaps, the colour changing along the line and the break clearly a break.
+* 48 unit tests pass, 13 of them new. All four `ui-test.sh` gates pass.
+* No errors or warnings in logcat across install, launch and restart.
+
+### Still to do — the treadmill gate
+
+**Walk with the strap on and watch the line change colour at the boundaries.**
+Cross-check the live zone against the bands in the table above. The belt must
+behave exactly as it does today.
+
+The one link that a cold console cannot exercise is `walkTrace.add` in
+`accumulate()`, which only runs while the session is moving — so the trace has
+been driven from synthetic samples, and the first real walk is the first time
+Kotlin's own buffer fills. Worth a specific look at: the line appearing within
+the first five or ten seconds, the axis filling in rather than stretching over
+the first five minutes, and the trace surviving a pause and resume.
+
+### Notes for Phase 5
+
+The trace already carries `kph` on every point, so the pace overlay needs no
+new plumbing — only a second series in `hrGraph`. `bands:true` is there for the
+taller summary plot. `bucket` comes back with the samples, so anything that
+wants to say what it is showing can.
 
 ---
 
