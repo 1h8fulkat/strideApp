@@ -508,34 +508,57 @@
      — it is the difference between Karvonen zones and plain percent-of-max,
      not between having zones and not.
 
-     Stepping below the bottom clears it rather than sticking, for the same
-     reason the birthday has a CLEAR: a resting rate nobody has measured must
-     not be guessed at, because a wrong one moves every zone boundary at once
-     and does it silently. The first tap up lands at 60, which is the middle of
-     the range rather than its floor. */
+     CLEAR rather than stepping off the bottom. "Not set" has to stay reachable,
+     because a resting rate nobody has measured must not be guessed at — a
+     wrong one moves every zone boundary at once and does it silently — but the
+     floor is 30 and the value lands at 60, so unsetting it by stepping was
+     thirty-one presses on a treadmill. The birthday next to it already had a
+     CLEAR and this did not, which is also just inconsistent.
+
+     The first tap up lands at 60, the middle of the range rather than its
+     floor, for the same reason the birthday opens at forty years back. */
   function rhrStepper(p, onChange) {
+    var wrap = el('div', 'sx-bday');
     var s = el('div', 'sx-step');
     var v = el('div', 'sx-v');
     var value = p.resting_hr || 0;
+
+    var clear = press(el('button', 'sx-pill', 'CLEAR'), function () {
+      value = 0;
+      commit();
+    });
+
     var draw = function () {
       v.innerHTML = value >= 30
         ? value + '<small>bpm</small>' : '<small>not set</small>';
+      clear.style.display = value >= 30 ? '' : 'none';
     };
-    var bump = function (k) {
-      if (value < 30) value = k > 0 ? 60 : 0;
-      else value = value + k;
-      if (value > 100) value = 100;
-      if (value < 30) value = 0;
+
+    function commit() {
       draw();
       try { S = JSON.parse(bridge().setPersonRhr(p.name, value)); } catch (e) {}
       p.resting_hr = value;
       if (onChange) onChange();
+    }
+
+    var bump = function (k) {
+      if (value < 30) value = k > 0 ? 60 : 0;
+      else value = value + k;
+      if (value > 100) value = 100;
+      // Stepping off the bottom still clears, so the two ways out agree.
+      if (value < 30) value = 0;
+      commit();
     };
+
     s.appendChild(press(el('button', '', '&minus;'), function () { bump(-1); }));
     s.appendChild(v);
     s.appendChild(press(el('button', '', '+'), function () { bump(1); }));
+    wrap.appendChild(s);
+    var foot = el('div', 'sx-bday-foot');
+    foot.appendChild(clear);
+    wrap.appendChild(foot);
     draw();
-    return s;
+    return wrap;
   }
 
   /* Escaping, for the handful of strings here that come from outside the
