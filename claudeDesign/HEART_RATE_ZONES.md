@@ -246,14 +246,35 @@ number, so anything drawing a zone built on it can say so. Honour that.
 **Palette** (grey, blue, green, yellow, orange, red — matches the owner's
 reference image):
 
-| Zone | Name | Colour |
-|---|---|---|
-| 0 | Resting | `#3a4348` |
-| 1 | Low intensity | `#5aa9c8` |
-| 2 | Weight control | `#5fc08a` |
-| 3 | Aerobic | `#e0c264` |
-| 4 | Anaerobic | `#e08a4a` |
-| 5 | Maximum | `#d75d5d` |
+| Zone | Name | Colour | |
+|---|---|---|---|
+| 0 | Resting | `#7e8b95` | was `#3a4348` |
+| 1 | Low intensity | `#5a9ae0` | was `#5aa9c8` |
+| 2 | Weight control | `#5fc08a` | |
+| 3 | Aerobic | `#e0c264` | |
+| 4 | Anaerobic | `#e08a4a` | |
+| 5 | Maximum | `#d75d5d` | |
+
+**Zones 0 and 1 were retuned in phase 2**, after the live graph reached the
+console and the owner compared it against their own watch. Both are about the
+colour being *identifiable*, which is not the same requirement as pleasant:
+
+* Zone 1 was hue **194°, a cyan**. Every consumer device draws low intensity at
+  around 211°, and so does the owner's watch — sampled off their screenshot,
+  its bars are `#59a3ee`, `#49ce1b`, `#ffed0d`, `#ff7013`, `#e21502`. On this
+  console the old value had a second problem: `--accent` in `original.html` is
+  `#39e0ff`, also cyan, so the one zone colour that had to read as a category
+  read as a piece of the UI chrome instead.
+* Zone 0 was a grey at 28% value, which on a `#050b1f` panel is not a grey but
+  an absence — a warm-up drawn in it looked like a gap in the line rather than
+  like time below zone 1. It is a mid grey now. That makes the least important
+  zone more visible than it was, which is the trade, and it is the right way
+  round: a colour nobody can see is not a quiet colour, it is a missing one.
+
+**Zones 2–5 are deliberately left in the muted register they were drawn in.**
+The reference's are fully saturated, which is right on a phone's pure black and
+would be three glowing bars on a navy HUD. If the owner asks for the rest to
+match, that is a one-line change in the same three places.
 
 **VO2 max:** Uth–Sørensen–Overgaard–Pedersen, `15.3 × max / resting`. Needs
 both numbers. An estimate built on an estimate — good for watching move over
@@ -503,6 +524,45 @@ been driven from synthetic samples, and the first real walk is the first time
 Kotlin's own buffer fills. Worth a specific look at: the line appearing within
 the first five or ten seconds, the axis filling in rather than stretching over
 the first five minutes, and the trace surviving a pause and resume.
+
+### Retuned after the owner saw it, same session
+
+Two changes, both from the owner looking at the deployed graph beside their
+watch:
+
+1. **Zone 0's grey and zone 1's blue**, above. Three places, as the palette
+   always is: `HrZones.ZONE_COLOURS`, `ZONES` in `stride-core.js`, and the
+   table above. `tools/uitest/zones.js` reads the Kotlin and holds the page to
+   it, so two of the three cannot drift. The settings screen's Zones row picks
+   the palette up from `core().ZONES` and needed no change.
+2. **The plot is 92px, not 56px, and the legend moved beside it.** The owner
+   called the zone boundaries tight and they were — seven pixels apart. Two
+   things were wrong and both are fixed:
+   * The legend was a 22px caption strip across the top of the box, costing the
+     plot a quarter of its height for one line of text. It is a column to the
+     left of the plot now: zone number, zone name in the zone's colour, the
+     band in bpm, and the assumed-age note under it. Nothing is drawn over the
+     line any more, so no label needs a halo and none can land on the red band.
+   * The box grew from 588–668 to **582–676**, taking the gutters either side.
+     It is taller than the coach's band, which is only allowed because the two
+     are never on screen together. The limits are the hero and the elevation
+     strip, which both end at 576, and the control buttons, which start at 684
+     — there is a headless check on that arithmetic, and another that the
+     canvas's pixel size matches its CSS box, because Chromium scales one to
+     the other silently and a mismatch is a blurred line slightly out of
+     register with the rules behind it.
+   * **`hrGraph` no longer takes `max`.** The top of the vertical range was the
+     formula maximum, which reserved room above the last rule for a boundary
+     that does not exist — the top of zone 5 is open. It is zone 5's *floor*
+     now, widened by the data as before, so a reading above the maximum is
+     still drawn. The ladder went from 63% of the plot to 85%.
+
+Net effect on the boundaries: ~7px apart to ~16px.
+
+Verified on the console by sampling the framebuffer rather than by eye — the
+line came back grey `#7e8b95`, then blue `#5a9ae0`, then green, yellow, orange
+and red, in that order, with the palette values exact where the line is flat
+enough not to be antialiased.
 
 ### Notes for Phase 5
 

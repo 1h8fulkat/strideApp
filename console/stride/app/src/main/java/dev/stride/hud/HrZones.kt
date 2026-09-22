@@ -111,9 +111,33 @@ object HrZones {
      * Grey for zone 0, then blue, green, yellow, orange, red. Yellow at zone 3
      * is not in every chart but it is in the one this was drawn against, and
      * dropping it puts green next to orange with nothing between them.
+     *
+     * **Zone 0 and zone 1 were retuned on 21 September 2026**, after the live
+     * graph went on the console and the owner compared it against their own
+     * watch. Both changes are about the colours being *identifiable*, which is
+     * a different requirement from being pleasant:
+     *
+     * * Zone 1 was `#5aa9c8`, hue 194° — a cyan. The reference is 211°, and so
+     *   is every other consumer device: low intensity is *blue*. On this
+     *   console the old value had a second problem, which is that
+     *   `--accent: #39e0ff` is cyan too, so the one zone colour that had to
+     *   look like a category read as a piece of the UI chrome. Now 211°, the
+     *   same hue as the watch, at this palette's own saturation rather than
+     *   the watch's full one.
+     * * Zone 0 was `#3a4348`, which is a grey at 28% value — on a `#050b1f`
+     *   panel that is not a grey, it is an absence, and a warm-up drawn in it
+     *   looked like a gap in the line rather than like time below zone 1. It
+     *   is a mid grey now. That does make the least important zone more
+     *   visible than it was, which is the trade: a colour nobody can see is
+     *   not a quiet colour, it is a missing one.
+     *
+     * The other four are deliberately left in the muted register they were
+     * drawn in. The reference's are fully saturated — `#ffed0d`, `#e21502` —
+     * which is right on a phone's pure black and would be three glowing bars
+     * on a navy HUD next to a cyan accent.
      */
     val ZONE_COLOURS = arrayOf(
-        "#3a4348", "#5aa9c8", "#5fc08a", "#e0c264", "#e08a4a", "#d75d5d",
+        "#7e8b95", "#5a9ae0", "#5fc08a", "#e0c264", "#e08a4a", "#d75d5d",
     )
 
     /**

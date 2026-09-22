@@ -610,6 +610,38 @@ JSDOM.fromFile(path, {
   const rgb = h => 'rgb(' + [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16)).join(', ') + ')';
 
   w.render(hrFrame(148, 3));
+  /* The canvas's pixel size is an attribute and its box is CSS, and Chromium
+     scales one to the other silently — a mismatch is a blurred line slightly
+     out of register with the rules behind it, which is hard to see and easy to
+     introduce. The comment in original.html says the numbers have to agree;
+     this is what makes that true. */
+  check('the canvas is exactly the size of the box it is drawn in', () => {
+    const box = w.document.getElementById('hrg');
+    const cv = w.document.getElementById('hrgCanvas');
+    const cs = w.getComputedStyle(box), cc = w.getComputedStyle(cv);
+    const bw = parseFloat(cs.borderTopWidth) || 0;
+    const innerW = 1280 - parseFloat(cs.left) - parseFloat(cs.right) - 2 * bw;
+    const innerH = parseFloat(cs.height) - 2 * bw;
+    const left = parseFloat(cc.left) || 0;
+    const got = left + cv.width;
+    if (got !== innerW) return '!legend ' + left + ' + canvas ' + cv.width +
+      ' = ' + got + ', box is ' + innerW + ' wide';
+    return cv.height === innerH ? cv.width + '×' + cv.height + ' in ' +
+      innerW + '×' + innerH
+      : '!canvas is ' + cv.height + 'px tall in a ' + innerH + 'px box';
+  });
+  /* And it must clear its neighbours: the hero and the elevation strip both
+     end at 576, and the control buttons start at 684 — the row is at 678 and
+     centres a 76px button in 88px. The band is taller than the coach's, which
+     is only allowed because the two are never up together. */
+  check('the band clears the hero above it and the buttons below it', () => {
+    const cs = w.getComputedStyle(w.document.getElementById('hrg'));
+    const top = parseFloat(cs.top), h = parseFloat(cs.height);
+    return top >= 576 && top + h <= 684
+      ? top + '–' + (top + h) + ', inside 576–684'
+      : '!' + top + '–' + (top + h) + ' overruns 576–684';
+  });
+
   check('the trace band appears once there are zones to draw', () =>
     w.document.getElementById('hrg').classList.contains('on')
       ? 'up' : '!no band with floors on the frame');
@@ -679,7 +711,7 @@ JSDOM.fromFile(path, {
        six pieces come out of one segment — and each split has to sit at the
        bpm of the boundary, at the time the line actually reaches it. */
     const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
-      [[0, 100, 5], [60, 170, 5]], { floors: FLOORS, max: HRMAX });
+      [[0, 100, 5], [60, 170, 5]], { floors: FLOORS });
     if (g.drawn !== 6) return '!drew ' + g.drawn + ' pieces, expected 6';
     const at = g.splits.map(s => s[1]).join(',');
     if (at !== '119,131,143,154,166') return '!split at ' + at;
@@ -691,13 +723,13 @@ JSDOM.fromFile(path, {
   });
   check('each piece is drawn in the zone it is actually in', () => {
     const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
-      [[0, 100, 5], [60, 170, 5]], { floors: FLOORS, max: HRMAX });
+      [[0, 100, 5], [60, 170, 5]], { floors: FLOORS });
     return g.zones.join(',') === '1,1,1,1,1,1'
       ? 'one piece per zone' : '!pieces per zone: ' + g.zones.join(',');
   });
   check('a line inside one zone is one piece', () => {
     const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
-      [[0, 135, 5], [30, 140, 5]], { floors: FLOORS, max: HRMAX });
+      [[0, 135, 5], [30, 140, 5]], { floors: FLOORS });
     return g.drawn === 1 && g.splits.length === 0 && g.zones[2] === 1
       ? 'one piece in zone 2' : '!drawn=' + g.drawn + ' zones=' + g.zones.join(',');
   });
@@ -706,22 +738,37 @@ JSDOM.fromFile(path, {
   check('a dropout breaks the line instead of drawing through it', () => {
     const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
       [[0, 140, 5], [5, 0, 5], [10, 0, 5], [15, 138, 5]],
-      { floors: FLOORS, max: HRMAX });
+      { floors: FLOORS });
     return g.drawn === 0 && g.gaps === 3
       ? 'three gaps, nothing drawn across them'
       : '!drawn=' + g.drawn + ' gaps=' + g.gaps;
   });
   check('the head sits on the last real reading, not on the dropout', () => {
     const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
-      [[0, 140, 5], [5, 152, 5], [10, 0, 5]], { floors: FLOORS, max: HRMAX });
+      [[0, 140, 5], [5, 152, 5], [10, 0, 5]], { floors: FLOORS });
     return g.head && g.head[1] === 152 ? 'head at ' + g.head[1] + ' bpm'
       : '!head at ' + (g.head ? g.head[1] : 'nothing');
   });
   check('a pulse above the formula maximum is drawn, not clipped to it', () => {
     const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
-      [[0, 170, 5], [30, 191, 5]], { floors: FLOORS, max: HRMAX });
+      [[0, 170, 5], [30, 191, 5]], { floors: FLOORS });
     return g.hi >= 191 ? 'range tops out at ' + g.hi
       : '!range tops out at ' + g.hi + ', below the 191 that was read';
+  });
+  /* The top of the range is zone 5's *floor*, not the formula maximum. Above
+     the last rule there is no boundary to draw — the top of zone 5 is open —
+     and reserving 178-to-166 of headroom for it cost a fifth of the plot and
+     squeezed the five rules into the middle. Jeff's ladder is 119..166, so a
+     walk inside it must come out at 115..170 and not 115..182. */
+  check('the range stops at the top rule, not at the formula maximum', () => {
+    const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
+      [[0, 130, 5], [600, 158, 5]], { floors: FLOORS });
+    if (g.hi !== FLOORS[5] + 4) return '!range tops out at ' + g.hi +
+      ', expected ' + (FLOORS[5] + 4);
+    /* And the point of it: the ladder has to fill most of the plot. */
+    const share = (FLOORS[5] - FLOORS[1]) / (g.hi - g.lo);
+    return share > 0.7 ? 'ladder fills ' + Math.round(share * 100) + '% of the plot'
+      : '!ladder fills only ' + Math.round(share * 100) + '%';
   });
   check('no floors draws nothing rather than guessing a ladder', () => {
     const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
@@ -732,7 +779,7 @@ JSDOM.fromFile(path, {
      across the full width reads as a walk that is over. */
   check('a young trace fills the width in rather than stretching to it', () => {
     const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
-      [[0, 140, 5], [45, 150, 5]], { floors: FLOORS, max: HRMAX });
+      [[0, 140, 5], [45, 150, 5]], { floors: FLOORS });
     return g.span === 300 ? 'span held at ' + g.span + 's'
       : '!span ' + g.span + 's after 45s of walk';
   });

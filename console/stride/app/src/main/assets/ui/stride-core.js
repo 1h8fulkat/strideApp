@@ -865,13 +865,19 @@ function adapt(raw) {
  * Six colours running cool to hot, the same six in every theme, so a glance at
  * the summary means the same thing whichever UI is on.
  *
+ * Zone 0's grey and zone 1's blue were retuned after the live graph reached
+ * the console — zone 1 was a cyan, which is the wrong hue for low intensity
+ * and the same hue as this interface's accent, and zone 0 was dark enough on a
+ * navy panel to read as a break in the line rather than as a colour. The
+ * reasoning is written out once, in HrZones.ZONE_COLOURS.
+ *
  * Duplicated in HrZones.kt for anything Kotlin publishes. The two are held to
  * each other by tools/uitest/zones.js, which reads the palette and the names
  * straight out of the Kotlin source.
  */
 var ZONES = [
-  { key: 'z0', name: 'Resting',        from: 0.00, colour: '#3a4348' },
-  { key: 'z1', name: 'Low intensity',  from: 0.50, colour: '#5aa9c8' },
+  { key: 'z0', name: 'Resting',        from: 0.00, colour: '#7e8b95' },
+  { key: 'z1', name: 'Low intensity',  from: 0.50, colour: '#5a9ae0' },
   { key: 'z2', name: 'Weight control', from: 0.60, colour: '#5fc08a' },
   { key: 'z3', name: 'Aerobic',        from: 0.70, colour: '#e0c264' },
   { key: 'z4', name: 'Anaerobic',      from: 0.80, colour: '#e08a4a' },
@@ -1028,7 +1034,8 @@ function zoneRows(zones) {
  *
  * @param cv       a <canvas>; its width and height attributes are the pixels
  * @param samples  [[elapsedSec, bpm, kph], ...] — Stride.hrTrace()'s shape
- * @param opts     { floors, max, span, minSpan, bands, bandAlpha, width, head }
+ * @param opts     { floors, span, minSpan, rules, ruleAlpha, bands, bandAlpha,
+ *                   width, head, headRadius }
  * @return what was drawn — the bpm range, the time span, how many pieces and
  *         gaps, and the bpm/second of every split. Nothing on the page needs
  *         it; it is how the headless suite sees a canvas that draws nothing.
@@ -1052,10 +1059,16 @@ function hrGraph(cv, samples, opts) {
   // needs nobody's age instead — it does not get a grey line by default.
   if (!W || !H || floors.length < ZONES.length) return out;
 
-  /* The vertical range starts at the zones and is widened by the walk, so the
-     ladder is always fully in frame and a pulse above the formula maximum —
-     which happens, routinely — is still drawn rather than clipped to it. */
-  var lo = floors[1], hi = opts.max || floors[ZONES.length - 1];
+  /* The vertical range covers the ladder and is widened by the walk, so every
+     boundary is always in frame and a pulse above the formula maximum — which
+     happens, routinely — is drawn rather than clipped to it.
+
+     The top is the **floor of zone 5, not the formula maximum**. That started
+     as the maximum and cost the graph a fifth of its height to reserve room
+     above the last rule for a line that is never drawn: the top of zone 5 is
+     open, there is no boundary up there, and the effect on the console was
+     five zone rules crammed into the middle of the plot. */
+  var lo = floors[1], hi = floors[ZONES.length - 1];
   var b;
   for (i = 0; i < samples.length; i++) {
     b = samples[i][1];

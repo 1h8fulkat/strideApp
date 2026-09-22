@@ -529,13 +529,28 @@ button.pulse{animation:pulse .9s ease-out 2}
    is: a positioned box late in the document wins the tap, and the coach's
    Dismiss lives inside this rectangle.
 
-   The canvas starts 22px down so the zone caption has a row of its own.
-   Labels drawn over the line need a halo and get illegible against the red
-   band; a reserved strip needs neither. Its size is written out in pixels
-   here and in the width/height attributes, and the two have to agree: 1280
-   less 34 each side less the 1px border is 1210. */
+   **It is taller than the coach's band and that is allowed**, because it is
+   never on screen at the same time as the coach — see renderZones. So it
+   takes the two gutters either side as well: the hero and the elevation strip
+   both end at 576, and the control buttons start at 684 (the row is at 678
+   and centres a 76px button in 88px), which leaves 582–676 free. The fan menu
+   is 590–666, so it lays over the middle of this with a few pixels of graph
+   showing above and below it. That is the plan's "the fan panel is allowed to
+   overlay it when open" and it looks like what it is.
+
+   The legend sits **beside** the plot, not above it. It began as a 22px
+   caption strip across the top, which cost the graph a quarter of its height
+   for one line of text — and with the plot at 56px the five zone boundaries
+   came out seven pixels apart, which the owner correctly called tight. Moved
+   into a column it costs width instead, of which there is 1210px and only a
+   few hundred samples to spend it on. Nothing is drawn over the line, so no
+   label needs a halo and none of them can land on the red band.
+
+   Every size here is written out in pixels and the canvas attributes have to
+   agree with it: 1280 less 34 each side less the 1px border is 1210, of which
+   the legend takes 238 and the canvas the remaining 972. */
 .hrg{
-  position:absolute;left:34px;right:34px;top:588px;height:80px;
+  position:absolute;left:34px;right:34px;top:582px;height:94px;
   background:rgba(8,17,44,.72);
   border:1px solid rgba(57,224,255,.16);
   border-radius:18px;
@@ -544,18 +559,28 @@ button.pulse{animation:pulse .9s ease-out 2}
   pointer-events:none;
 }
 .hrg.on{display:block}
-.hrg canvas{position:absolute;left:0;top:22px}
-.hrg .zn{
-  position:absolute;left:18px;top:4px;
-  font-size:12px;letter-spacing:.22em;text-transform:uppercase;
-  color:var(--ink-dim);
+.hrg canvas{position:absolute;left:238px;top:0}
+/* Centred as a block rather than positioned line by line, so a two-word zone
+   name and a one-word one sit on the same centre line. */
+.hrg .leg{
+  position:absolute;left:18px;top:0;width:212px;height:92px;
+  display:flex;flex-direction:column;justify-content:center;
 }
-.hrg .zn b{font-weight:600}
+.hrg .leg .zn{
+  font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--ink-faint);
+}
+/* 18px and semibold: this is the one word in the band worth reading from
+   three feet away mid-stride. The colour is set from the zone. */
+.hrg .leg .nm{margin-top:3px;font-size:18px;font-weight:600;letter-spacing:.01em}
+.hrg .leg .bd{
+  margin-top:3px;font-size:12px;color:var(--ink-dim);
+  font-variant-numeric:tabular-nums;
+}
 /* Said out loud, because an assumed age is the one figure on this console
    that nobody gave it. */
-.hrg .note{
-  position:absolute;right:18px;top:4px;
-  font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+.hrg .leg .note{
+  margin-top:6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
   color:var(--ink-faint);
 }
 
@@ -915,9 +940,13 @@ button.pulse{animation:pulse .9s ease-out 2}
        walker has no age: no zones, no graph, and the numbers above it still
        say everything they always did. -->
   <div class="hrg" id="hrg">
-    <div class="zn" id="hrgZone"></div>
-    <div class="note" id="hrgNote"></div>
-    <canvas id="hrgCanvas" width="1210" height="56"></canvas>
+    <div class="leg" id="hrgZone">
+      <div class="zn" id="hrgZoneNo">Heart rate</div>
+      <div class="nm" id="hrgZoneName">&mdash;</div>
+      <div class="bd" id="hrgZoneBand"></div>
+      <div class="note" id="hrgNote"></div>
+    </div>
+    <canvas id="hrgCanvas" width="972" height="92"></canvas>
   </div>
 
   <!-- Each pair under the gauge it moves. -->
@@ -2292,18 +2321,23 @@ function renderZones(s){
   if (!zoned){ hrDrawnAt = -1; return; }
 
   const zone = s.zone == null ? -1 : s.zone;
-  const zn = $('hrgZone');
   if (zone < 0){
-    zn.innerHTML = 'Heart rate · waiting for a reading';
-    zn.style.color = '';
+    /* Not a zone name and not a colour. A pulse of 0 is the strap saying
+       nothing, and the legend says that rather than naming the zone the
+       walker was in before it went quiet. */
+    $('hrgZoneNo').textContent   = 'Heart rate';
+    $('hrgZoneName').textContent = '—';
+    $('hrgZoneName').style.color = '';
+    $('hrgZoneBand').textContent = 'waiting for a reading';
   } else {
     /* Zone 5's top is the formula maximum, which people pass routinely, so it
        is drawn open-ended rather than as a ceiling somebody has broken. */
-    const band = zone >= 5 ? (s.zoneFrom || 0) + '+'
-                           : (s.zoneFrom || 0) + '–' + (s.zoneTo || 0);
-    zn.innerHTML = 'Zone ' + zone + ' · <b>' + STRIDE.esc(STRIDE.ZONES[zone].name) +
-                   '</b> · ' + band + ' bpm';
-    zn.style.color = STRIDE.ZONES[zone].colour;
+    $('hrgZoneNo').textContent   = 'Zone ' + zone;
+    $('hrgZoneName').textContent = STRIDE.ZONES[zone].name;
+    $('hrgZoneName').style.color = STRIDE.ZONES[zone].colour;
+    $('hrgZoneBand').textContent = (zone >= 5
+      ? (s.zoneFrom || 0) + '+'
+      : (s.zoneFrom || 0) + '–' + (s.zoneTo || 0)) + ' bpm';
   }
 
   /* Once a second, off the session clock rather than the wall clock. The
@@ -2317,8 +2351,8 @@ function renderZones(s){
   let trace = [];
   try { trace = JSON.parse(Stride.hrTrace() || '{}').samples || []; } catch (e) {}
   try { hrAssumed = !!JSON.parse(Stride.hrZones() || '{}').assumed; } catch (e) {}
-  $('hrgNote').textContent = hrAssumed ? 'zones assumed · no age given' : '';
-  STRIDE.hrGraph($('hrgCanvas'), trace, { floors: floors, max: s.hrMax || 0 });
+  $('hrgNote').textContent = hrAssumed ? 'zones assumed' : '';
+  STRIDE.hrGraph($('hrgCanvas'), trace, { floors: floors });
 }
 
 window.render = function(s){
