@@ -2,13 +2,45 @@
 
 **Branch:** `heart-rate-zones` (off `main` at `38ae7f9`)
 **Started:** 21 September 2026
-**Phase 1 of 6 complete, deployed, and tested on the treadmill.**
-**Phase 2 built, deployed, and driven by hand with the belt cold. Its
-treadmill gate — walk with the strap on — has not been done yet.**
+**Phases 1 and 2 of 6 complete, deployed, and tested on the treadmill.**
 
 This file is the handoff. It exists because the work spans more sessions than
 one context window holds, and because the decisions behind it are worth more
 than the diff. Read it before touching anything.
+
+---
+
+## Where this stands
+
+| | |
+|---|---|
+| Done | **Phase 1** — the model, birthdays, resting rates, the settings UI, the guest age prompt. Owner-walked. |
+| Done | **Phase 2** — live zone state on the frame, the in-memory HR trace, the shared zone-coloured graph, the zone-coloured BPM box, the grey zone 0, the max-HR override. Owner-walked 21 September 2026 and reported good. |
+| **Next** | **Phase 3 — the zone-targeting control loop.** The dangerous one. It is the commit that removes the "incline is driven, speed is suggested" invariant, so read the warning below before starting it. |
+| Then | Phase 4 presets · Phase 5 summary analytics · Phase 6 the other four interfaces |
+
+**Nothing on the branch commands belt speed yet.** Everything through phase 2
+is read-only with respect to the motor: the belt behaves exactly as it does on
+`main`. Phase 3 is where that stops being true.
+
+### Next steps, in order
+
+1. **Re-read the warning under "The one thing to read first".** Phase 3 is the
+   one that removes a documented safety guarantee, on the owner's explicit
+   instruction, and it has to rewrite `Plan.kt`'s header, the README bullet and
+   `SAFETY.md` in the same commit so no safety document is left promising
+   something the code no longer does.
+2. **Confirm the walkers' maxima are what they mean to be.** Jeff's override
+   currently reads **185**, set on the console on 21 September 2026 while the
+   new stepper was being tried out; their watch measures 175 and Tanaka gives
+   178. Under Karvonen that is the difference between zone 1 starting at 123
+   and at 118, and phase 3 will drive a belt at whichever it is. Worth one
+   question before the loop goes in, not after.
+3. **Write `ZoneControl.kt` as a pure class with `ZoneControlTest.kt` beside
+   it**, driven through scripted heart-rate traces. Keep Android out of it. The
+   `HrTrace` / `HrTraceTest` pair from phase 2 is the shape to copy.
+4. **Walk the whole thing before merging.** The gate for phase 3 is explicitly
+   not a spot check — see the phase's own section.
 
 ---
 
@@ -385,20 +417,31 @@ now fixed. Confirmed by screenshot and by reading the stored prefs:
 Useful as a fixture — these are the live numbers on the console.
 
 ```
-Jeff    b. 1983-03-28  age 43  rhr 60  max 178  reserve 118  VO2 45.4
-  Z1 Low intensity   119-130     Z4 Anaerobic  154-165
-  Z2 Weight control  131-142     Z5 Maximum    166-178
-  Z3 Aerobic         143-153
+Jeff    b. 1983-03-28  age 43  rhr 60  max 185 MEASURED  reserve 125  VO2 47.2
+  Z0 Resting        under 123    Z3 Aerobic    148-159
+  Z1 Low intensity    123-134    Z4 Anaerobic  160-172
+  Z2 Weight control   135-147    Z5 Maximum    173-185
 
-Lauren  b. 1984-04-11  age 42  rhr 60  max 179  reserve 119  VO2 45.6
-  Z1 Low intensity   120-130     Z4 Anaerobic  155-166
-  Z2 Weight control  131-142     Z5 Maximum    167-179
-  Z3 Aerobic         143-154
+Lauren  b. 1984-04-11  age 42  rhr 60  max 179 Tanaka    reserve 119  VO2 45.6
+  Z0 Resting        under 120    Z3 Aerobic    143-154
+  Z1 Low intensity    120-130    Z4 Anaerobic  155-166
+  Z2 Weight control   131-142    Z5 Maximum    167-179
 ```
 
-Note both were given a resting rate of 60 by the owner during testing, so
-**Karvonen is the live path** — percent-of-max is now only exercised by a guest
-or by clearing an RHR.
+Both were given a resting rate of 60 by the owner during phase 1 testing, so
+**Karvonen is the live path** — percent-of-max is only exercised by a guest or
+by clearing an RHR.
+
+**Jeff's maximum is an override, not the formula.** 185 was set on the console
+on 21 September 2026 while the new stepper was being tried; Tanaka gives 178
+and their watch measures 175. Under Karvonen that moves every boundary — zone 1
+starts at 123 rather than 119 or 118 — and phase 3 will drive a belt at
+whichever number is in force, so it is worth confirming it is deliberate. See
+the next steps at the top.
+
+Zone 0 is written as "under 123" rather than "60-122" because that is what it
+is: `floors[0]` is where the range starts, not a boundary, and a pulse of 45 is
+zone 0 too.
 
 ### Faults found and fixed in this phase, worth learning from
 
@@ -543,18 +586,17 @@ NordicTrack at `192.168.10.10:5555`:
 * 48 unit tests pass, 13 of them new. All four `ui-test.sh` gates pass.
 * No errors or warnings in logcat across install, launch and restart.
 
-### Still to do — the treadmill gate
+### Verified on the treadmill
 
-**Walk with the strap on and watch the line change colour at the boundaries.**
-Cross-check the live zone against the bands in the table above. The belt must
-behave exactly as it does today.
+**Walked by the owner on 21 September 2026, who reported everything good.**
+That closes the one link a cold console cannot exercise: `walkTrace.add` in
+`accumulate()` only runs while the session is moving, so until the first real
+walk the trace had only ever been driven from synthetic samples and Kotlin's
+own buffer had never filled.
 
-The one link that a cold console cannot exercise is `walkTrace.add` in
-`accumulate()`, which only runs while the session is moving — so the trace has
-been driven from synthetic samples, and the first real walk is the first time
-Kotlin's own buffer fills. Worth a specific look at: the line appearing within
-the first five or ten seconds, the axis filling in rather than stretching over
-the first five minutes, and the trace surviving a pause and resume.
+The owner also used the max-HR stepper on the console during the same session —
+23 presses are in the log, walking Jeff's override up to 185 — which is the
+control working under a real finger rather than under `input tap`.
 
 ### Retuned after the owner saw it, same session
 

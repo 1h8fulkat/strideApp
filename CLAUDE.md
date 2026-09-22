@@ -3,9 +3,9 @@
 ## Active work
 
 **Branch `heart-rate-zones`** — dynamic heart-rate zone tracking, 6 phases.
-Phase 1 complete, deployed and walked. Phase 2 complete and deployed; its
-treadmill gate — walk with the strap on and watch the line change colour at the
-zone boundaries — has not been done yet. **Read
+Phases 1 and 2 are complete, deployed and owner-walked. **Phase 3 is next: the
+zone-targeting control loop, which is the one that commands belt speed.**
+Nothing on the branch moves the motor yet. **Read
 [claudeDesign/HEART_RATE_ZONES.md](claudeDesign/HEART_RATE_ZONES.md) before
 touching anything on this branch.** It holds the full plan, the decisions the
 owner has already made, the deployment state, and the faults found so far.
