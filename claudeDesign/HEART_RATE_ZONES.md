@@ -62,8 +62,8 @@ What is **not** negotiable and is not part of that decision:
 |---|---|
 | Console | NordicTrack C 1750, FitPro board, Android 7.0, **Chromium 51 WebView** |
 | Reachable at | `192.168.10.10:5555` over adb-over-TCP |
-| Installed | `app-debug.apk`, 3.0M, built from `7a24752` |
-| Installed at | 2026-09-21 22:03 |
+| Installed | `app-debug.apk`, 3.0M, built from `e1a6f07` |
+| Installed at | 2026-09-21 22:47 |
 | Signer SHA-256 | `f274956772b6606c3fca0264dd84f870df2addecbe4e56d13925b5447997d677` |
 | Board limits | speed 0.8–19.31 km/h, incline −3.0 to +15.0 % |
 | Units | miles (`units: mi`) |
@@ -141,7 +141,7 @@ profile cards at y≈492 (`x` 404 / 640 / 876), BACK `120 730`, settings CLOSE
    document.** Anything taller must state its own height, or its content
    renders outside its own border. This caused the one visible bug of phase 1.
 4. **Run the suite before deploying:** `tools/ui-test.sh all` — `es`, `zones`,
-   `engine`, and `ui` in three modes. All four gates pass at `7a24752`.
+   `engine`, and `ui` in three modes. All four gates pass at `e1a6f07`.
 
 ---
 
