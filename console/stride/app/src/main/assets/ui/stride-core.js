@@ -698,8 +698,15 @@ function adapt(raw) {
                 measured: raw.beltKph || 0,
                 slipping: !!raw.slipping },
 
-    /* Guided owns incline only. `speed` here is a suggestion the user is free
-       to ignore, and nothing may apply it to the belt. */
+    /* `suggest` is the pace the plan would like, and it is a number for the
+       walker to take or ignore — every interface renders it as something you
+       can tap, and the tap is the walker acting.
+
+       It is *not* a guarantee about the console any more. "Nothing may apply
+       this to the belt" was the project's suggest-only rule and that rule has
+       been dropped so zone targeting can command speed; see SAFETY.md. This
+       field is still only a proposal, and the field that will carry a driven
+       speed is a different one. */
     targets:  { speed: raw.targetSpeed || 0,
                 incline: raw.targetIncline || 0,
                 suggest: raw.suggestPace || 0,

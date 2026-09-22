@@ -8,13 +8,24 @@ package dev.stride.hud
  * model, or from a real route exported out of Strava. All three produce the
  * same shape, which is why this file has no idea which it is holding.
  *
- * Two rules the plan cannot break, both enforced in `MainActivity`, not here:
+ * One rule the plan cannot break, enforced in `MainActivity` and not here:
  *
- * * **Incline is driven, speed is suggested.** The deck has no interlock and
- *   cannot run away underneath anyone, so the plan moves it. The belt can, so
- *   the plan only ever proposes a pace and the person on the treadmill decides.
  * * **Everything is clamped against what the board says it can do.** A plan is
  *   a proposal. The machine's own reported limits win.
+ *
+ * There used to be a second: *incline is driven, speed is suggested.* The deck
+ * has no interlock and cannot run away underneath anyone, so the plan moved it;
+ * the belt can, so the plan only ever proposed a pace and the person on the
+ * treadmill decided. **That rule has been dropped**, deliberately, so the
+ * console can hold a heart-rate zone — which is not possible without commanding
+ * belt speed, because the belt is what moves a heart rate. See `SAFETY.md`,
+ * which no longer promises it either.
+ *
+ * What is still true of *this file*, today: [Segment.paceDelta] is a
+ * suggestion and nothing here applies it. That is now a fact about these
+ * templates rather than a guarantee about the console — zone-targeted segments
+ * are coming, and when they land a segment will be able to drive speed as well
+ * as grade.
  *
  * Pace is expressed as a *delta*, not an absolute. The baseline is whatever
  * pace Sam settles at during the opening segment, so a plan adapts to the day
@@ -28,7 +39,10 @@ object Plan {
      *
      * @param share    fraction of the total walk this segment occupies
      * @param incline  target grade, %, before clamping to the board's range
-     * @param paceDelta km/h to suggest relative to the settled baseline pace
+     * @param paceDelta km/h to suggest relative to the settled baseline pace.
+     *                  A suggestion: nothing in this file applies it. See the
+     *                  header for why that is no longer a promise about the
+     *                  console as a whole.
      */
     data class Segment(
         val share: Double,

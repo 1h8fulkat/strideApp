@@ -11,14 +11,64 @@ standing on it.
 ## What can hurt you
 
 **The belt and deck can move without you touching anything.** A guided walk
-changes the incline on its own, and a warm-up ramps the belt up when a workout
-starts.
+changes the incline on its own, a warm-up ramps the belt up when a workout
+starts, and heart-rate zone targeting changes the belt speed throughout a walk
+— see [The belt speed is the console's](#the-belt-speed-is-the-consoles) below,
+which is new and which replaces a promise this project used to make.
 
 **The incline deck moves under load** — flat to nine percent shifts real weight
 while you're on it.
 
 **Everything that was dangerous about the treadmill before still is.** The
 motor, belt and deck are unchanged.
+
+---
+
+## The belt speed is the console's
+
+**This project used to promise that it would never choose your pace.** The rule
+was "incline is driven, speed is suggested": a guided walk moved the deck on
+its own, but the belt only ever did what you asked it to, and a plan that
+wanted you going faster put a number on the screen and left the decision with
+you. It was stated in this file, in the README, in `CONTRIBUTING.md` and in the
+header of `Plan.kt`.
+
+**That guarantee is withdrawn.** It was dropped deliberately, by the owner of
+the machine STRIDE was built on, so the console can hold a heart-rate zone —
+which it cannot do without commanding belt speed, because the belt is what
+changes your heart rate. If you are here because you liked that promise: it is
+gone, and nothing replaces it.
+
+What it means in practice:
+
+* **The console already set belt speed without being asked, at the edges.**
+  START takes the belt to your warm-up pace, the warm-up and cool-down ramp it,
+  and ending a walk eases it down.
+* **Zone targeting drives it continuously.** Give the console a target zone and
+  it raises and lowers the belt for as long as the walk lasts to keep your pulse
+  in a band. It moves in small steps and then waits fifteen to thirty seconds
+  for your heart to answer before moving again, so it is not chasing a
+  transient. A pulse of zero is read as a monitor that has come off rather than
+  as a resting heart, and the belt holds its speed until a real reading returns.
+* **A manual speed press takes the belt back** for the rest of the walk, with a
+  control to hand it back deliberately.
+
+**Where this actually stands, so this file does not promise something that is
+not built.** As of this commit the targeting loop is *not in the code*. Zone
+tracking is live — the console knows which zone you are in, draws it, and
+records time in each — and the belt is still driven only at the edges described
+above. The loop is the next piece of work. The guarantee is recorded as
+withdrawn here rather than at the moment the loop lands, because a safety
+document that grants a guarantee it is about to take away is worse than one
+that never gave it.
+
+**What has not changed, and was never part of that decision:**
+
+* The **safety key is still the emergency stop**, and it is hardware.
+* **Every commanded speed is still clamped** to the range the board reports for
+  itself — on the console this was built against, 0.8 to 19.31 km/h. No
+  interface, plan, zone or setting can raise it.
+* Nothing in software is the last line. See below.
 
 ---
 

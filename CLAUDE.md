@@ -14,8 +14,14 @@ The short version of the one thing that matters: this feature **deliberately
 removes** the project's "incline is driven, speed is suggested" safety
 invariant. The owner was asked directly and chose auto speed control,
 unconditional. That decision is made — don't re-litigate it or quietly build a
-weaker version. Phase 3 must rewrite `Plan.kt`, `README.md` and `SAFETY.md` so
-they stop promising something the code no longer does.
+weaker version.
+
+**The safety documents have already been rewritten to drop it** — `SAFETY.md`,
+`README.md`, `CONTRIBUTING.md`, `Plan.kt`'s header and the interface comments
+that asserted it. Done ahead of the code on purpose, because a safety document
+granting a guarantee it is about to withdraw is worse than one that never gave
+it. If you find a comment still claiming speed is only suggested, it is a
+leftover: fix it, don't code to it.
 
 ## This machine
 

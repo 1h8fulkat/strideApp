@@ -80,8 +80,11 @@
 
 > ⚠️ **This drives a motorised treadmill.** Read [SAFETY.md](SAFETY.md) before
 > you install anything. Your physical safety key is still the stop that matters
-> and it cuts the motor directly. STRIDE drives the incline, but speed is only
-> ever suggested. You decide when to go faster.
+> and it cuts the motor directly. **STRIDE drives both the incline and the belt
+> speed** — it used to promise that it would only ever *suggest* a pace and
+> leave the decision to you, and that promise has been dropped so the console
+> can hold a heart-rate zone. Every commanded speed is still clamped to the
+> range the board reports for itself.
 
 > **Gen 7 / iFit 2.0.** Second-hand reports say this update closes the
 > privileged-mode route everything here depends on. If you know how to do this on Gen 7

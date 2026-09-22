@@ -16,7 +16,7 @@ than the diff. Read it before touching anything.
 |---|---|
 | Done | **Phase 1** — the model, birthdays, resting rates, the settings UI, the guest age prompt. Owner-walked. |
 | Done | **Phase 2** — live zone state on the frame, the in-memory HR trace, the shared zone-coloured graph, the zone-coloured BPM box, the grey zone 0, the max-HR override. Owner-walked 21 September 2026 and reported good. |
-| **Next** | **Phase 3 — the zone-targeting control loop.** The dangerous one. It is the commit that removes the "incline is driven, speed is suggested" invariant, so read the warning below before starting it. |
+| **Next** | **Phase 3 — the zone-targeting control loop.** The dangerous one: the first code on this branch that commands belt speed. The safety documents have already been rewritten to drop the "incline is driven, speed is suggested" guarantee, so read the warning below before starting it. |
 | Then | Phase 4 presets · Phase 5 summary analytics · Phase 6 the other four interfaces |
 
 **Nothing on the branch commands belt speed yet.** Everything through phase 2
@@ -25,11 +25,12 @@ is read-only with respect to the motor: the belt behaves exactly as it does on
 
 ### Next steps, in order
 
-1. **Re-read the warning under "The one thing to read first".** Phase 3 is the
-   one that removes a documented safety guarantee, on the owner's explicit
-   instruction, and it has to rewrite `Plan.kt`'s header, the README bullet and
-   `SAFETY.md` in the same commit so no safety document is left promising
-   something the code no longer does.
+1. **Re-read the warning under "The one thing to read first".** The safety
+   documents are already rewritten — the guarantee was withdrawn on 21
+   September 2026, ahead of the code, so nothing in the tree promises a thing
+   the console is about to stop doing. One paragraph in `SAFETY.md` says the
+   targeting loop is not built yet, and updating that sentence is part of this
+   phase.
 2. **Confirm the walkers' maxima are what they mean to be.** Jeff's override
    currently reads **185**, set on the console on 21 September 2026 while the
    new stepper was being tried out; their watch measures 175 and Tanaka gives
@@ -49,8 +50,8 @@ is read-only with respect to the motor: the belt behaves exactly as it does on
 This feature **removes a documented safety invariant**, deliberately and on the
 owner's explicit instruction.
 
-`Plan.kt`, `README.md`, `SAFETY.md` and `CONTRIBUTING.md` all state some form
-of:
+`Plan.kt`, `README.md`, `SAFETY.md` and `CONTRIBUTING.md` all used to state
+some form of:
 
 > **Incline is driven, speed is suggested.** The deck has no interlock and
 > cannot run away underneath anyone, so the plan moves it. The belt can, so the
@@ -66,11 +67,22 @@ mode, and the invariant goes. That decision is made. Do not re-litigate it,
 do not quietly reintroduce a gate they declined, and do not implement a weaker
 version than they asked for.
 
-What must still happen, in Phase 3, is that the docs stop claiming something
-the code no longer does. `Plan.kt`'s header, the README bullet and `SAFETY.md`
-all have to be rewritten to describe the console as it will actually behave.
-Leaving a safety document describing a guarantee that has been removed is worse
-than never having written it.
+**The documents have been rewritten — done on 21 September 2026, ahead of the
+code and on the owner's instruction.** `SAFETY.md` has a section named after
+the change that says plainly the guarantee is withdrawn and why; the README
+banner, `CONTRIBUTING.md`'s belt section, `Plan.kt`'s header and the five
+interface comments that asserted the rule all follow it.
+
+Ahead of the code on purpose. A safety document that grants a guarantee it is
+about to take away is worse than one that never gave it, so the withdrawal is
+recorded now rather than at the moment the loop lands. `SAFETY.md` says
+explicitly where things stand — tracking live, loop not built — and **that
+paragraph is the one thing Phase 3 has to update**, because it is the only
+sentence in the tree that will become false when the loop goes in.
+
+`CONTRIBUTING.md` also tells contributors that the rule is not one to restore,
+and that a comment still claiming it is a leftover to fix rather than something
+to code to.
 
 What is **not** negotiable and is not part of that decision:
 
@@ -710,10 +722,12 @@ wants to say what it is showing can.
 * Wire into the poll loop. New bridge methods for on/off, override, resume.
   Controls and a clear state indicator in `original.html` — the walker must be
   able to tell at a glance whether the belt is steering itself.
-* **Rewrite the docs.** `Plan.kt`'s header, the README bullet, `SAFETY.md`.
-  They currently promise speed is only ever suggested. After this they must
-  describe what the console actually does, and say plainly that the belt can
-  now change speed on its own.
+* **Update the one paragraph the doc rewrite left pending.** The documents were
+  rewritten ahead of the code — see "The one thing to read first" — so the
+  guarantee is already withdrawn everywhere. What is left is the "Where this
+  actually stands" paragraph in `SAFETY.md`, which currently says the targeting
+  loop is not in the code. That sentence becomes false the moment this phase
+  lands, and it is deliberately the only one that does.
 * Consider what the coach says. `Coach.kt` nudges pace verbally on zone drift;
   with the loop running, that advice is redundant or contradictory.
 

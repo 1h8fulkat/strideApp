@@ -978,8 +978,9 @@ window.render = function(raw){
   $('inclineBar').style.left  = (40 + Math.min(0, incPx)) + 'px';
   $('inclineBar').style.width = Math.abs(incPx) + 'px';
 
-  /* A suggestion. The plan never applies it — the person on the treadmill
-     decides the pace, always — but they can take it with one tap. */
+  /* A suggestion, and this interface does not apply it — the tap does.
+     Not a promise that the console leaves pace alone: that rule is gone,
+     see SAFETY.md. */
   /* Which way it points depends on where the pace already is — "lift to 6.0"
      while walking 7.0 reads as the plan ignoring the walker, and the tap would
      have slowed him down. Within a tenth there is nothing to suggest. */

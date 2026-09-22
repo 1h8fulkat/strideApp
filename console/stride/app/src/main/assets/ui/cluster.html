@@ -484,8 +484,8 @@ button{font-family:inherit;color:inherit;background:none;border:none;text-align:
       <circle cx="150" cy="150" r="120" fill="none" stroke="#20262a" stroke-width="12"/>
       <circle id="spdArc" cx="150" cy="150" r="120" fill="none" stroke="#eef3f5" stroke-width="12"
               pathLength="1000" stroke-dasharray="0 1000" transform="rotate(-90 150 150)"/>
-      <!-- The plan's suggestion, as a tick on the bezel. The plan never
-           applies it; tapping it does. -->
+      <!-- The plan's suggestion, as a tick on the bezel. This interface
+           does not apply it; tapping it does. -->
       <circle id="spdTick" cx="150" cy="150" r="120" fill="none" stroke="#e5b567" stroke-width="12"
               pathLength="1000" stroke-dasharray="0 1000" transform="rotate(-90 150 150)"/>
     </svg>
@@ -965,8 +965,10 @@ window.render = function(raw){
   $('inclineNote').textContent = !guided ? 'MANUAL'
                                : s.targets.inclineAuto ? 'PROFILE' : 'MANUAL OVERRIDE';
 
-  /* The suggestion is a bezel tick and a caption, not a needle. Nothing on the
-     console may act on it — the pace belongs to whoever is on the belt. */
+  /* The suggestion is a bezel tick and a caption, not a needle: it is drawn
+     where a driven value would be drawn, so it must not look driven. Nothing
+     here acts on it without a tap — which is no longer a rule about the
+     console, only about this field. See SAFETY.md. */
   const suggesting = guided && s.targets.suggest > 0 && !timed;
   suggestKph = suggesting ? s.targets.suggest : 0;
   $('suggest').textContent = suggesting ? 'TGT ' + STRIDE.spd(s.targets.suggest) : '';

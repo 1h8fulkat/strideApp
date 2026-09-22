@@ -68,6 +68,12 @@ person standing on it.
 
 - **The safety key is the stop of record.** It's hardware and it cuts the
   motor. Nothing in software gets to be the last line.
+- **"Speed is only suggested" is no longer true, and isn't a rule to restore.**
+  This project used to guarantee that it drove the incline and never chose your
+  pace. That was dropped on purpose so the console can hold a heart-rate zone,
+  which needs belt speed. If you find a comment or a doc still claiming it,
+  that's a leftover — fix it rather than coding to it. The two rules below did
+  not go anywhere.
 - **Every request is clamped** to the range the board reports for itself, in
   Kotlin, not in the interface. A layout can't outrun the machine, and it
   should stay that way.
