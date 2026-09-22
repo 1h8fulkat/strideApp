@@ -253,16 +253,29 @@
        short of the pane and a full-width stepper is 248px on its own. The
        value boxes are sized to their widest content — "Sep" and a four-digit
        year — rather than to a shared minimum, or the day box wastes the room
-       the year box needs. */
-    '.sx-bday{display:flex;flex-direction:column;align-items:flex-end;gap:8px}',
-    '.sx-bday-line{display:flex;align-items:center;gap:4px}',
-    '.sx-step-sm button{width:46px;height:50px;border-radius:11px;font-size:24px}',
+       the year box needs.
+
+       **No flexbox `gap` anywhere in here.** It is Chrome 84 and this console
+       is Chromium 51 — see the header of stride-core.js. It does not fail
+       loudly, it is simply ignored, so a layout built on it comes out with
+       whatever spacing the margins happened to give and looks almost right on
+       the machine while looking exactly right on the desktop it was written
+       on. Margins do the spacing here, which is what the rest of this file
+       already did. */
+    '.sx-bday{display:flex;flex-direction:column;align-items:flex-end}',
+    '.sx-bday-line{display:flex;align-items:center}',
+    '.sx-step-sm button{width:46px;height:50px;border-radius:11px;font-size:24px;margin:0 2px}',
     '.sx-step-sm .sx-v{min-width:76px;font-size:21px}',
     '.sx-step-sm .sx-v small{display:block;margin:0;font-size:12px}',
     /* The derived age and CLEAR share a line under the steppers. CLEAR is
        hidden rather than disabled when there is nothing to clear — a dead
-       button on a touch screen is a thing people press twice. */
-    '.sx-bday-foot{display:flex;align-items:center;gap:14px}'
+       button on a touch screen is a thing people press twice.
+
+       The top margin is on this rather than on .sx-bday as a flex gap, and
+       the row's own left margin keeps the age text off the stepper above it
+       without needing one either. */
+    '.sx-bday-foot{display:flex;align-items:center;margin-top:10px}',
+    '.sx-bday-foot .sx-ro{margin-right:6px}'
   ].join('');
 
   /* ---- tiny DOM helpers -------------------------------------------------- */

@@ -83,14 +83,88 @@ function scan(name, raw) {
   return problems.length;
 }
 
+/* ---- CSS this console cannot run either ----------------------------------
+   The scan above is about JavaScript, and a `?.` at least throws where you can
+   see it. CSS is worse: an unsupported property is *ignored*, silently, so a
+   layout built on one looks exactly right on the desktop it was written on and
+   almost right on the treadmill — spacing that came from somewhere else, a box
+   whose caption has quietly rendered outside its own border.
+
+   That is not hypothetical. The age prompt shipped on 21 September 2026 with
+   `gap:18px` and no explicit heights, and what reached the console was a
+   two-line caption sitting on top of the row of buttons underneath it. It read
+   as overlapping buttons. The buttons were fine.
+
+   Only the properties actually reached for and actually missing are listed.
+   This is not a full Chromium 51 audit and does not pretend to be one. */
+const CSS = [
+  [/(^|[;{\s])(gap|row-gap|column-gap)\s*:/g,
+   'flexbox gap (Chrome 84) — use margins'],
+  [/position\s*:\s*sticky/g,
+   'position:sticky (Chrome 56)'],
+  [/:\s*(is|where)\s*\(/g,
+   ':is() / :where() (Chrome 88)'],
+  [/aspect-ratio\s*:/g,
+   'aspect-ratio (Chrome 88)'],
+  [/clamp\s*\(|min\s*\([^)]*,|max\s*\([^)]*,/g,
+   'CSS clamp()/min()/max() (Chrome 79)'],
+  [/inset\s*:/g,
+   'inset shorthand (Chrome 87)'],
+  [/backdrop-filter\s*:/g,
+   'backdrop-filter (Chrome 76)'],
+];
+
+/* Three uses of `gap` in cluster.html predate this check.
+   
+   Grandfathered rather than fixed here, because fixing them is a change to a
+   layout nobody has looked at on the machine and this commit is about a
+   different screen. They are cosmetic — the affected rows get their spacing
+   from `button{margin:0 8px}` instead and read as slightly tight — but they
+   are real, and cluster.html is one of the five interfaces somebody may be
+   using. Worth a pass of its own.
+   
+   Anything NOT in here fails. */
+const CSS_KNOWN = { 'cluster.html': 3 };
+
+function scanCss(name, raw) {
+  /* Comments first, or a `/* … gap: … *\/` note reads as a declaration. */
+  const css = raw.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '));
+  let problems = [], total = 0;
+  for (const [re, why] of CSS) {
+    const hits = css.match(re);
+    if (!hits) continue;
+    total += hits.length;
+    const lines = css.split('\n').map((l, i) => [i + 1, l])
+      .filter(([, l]) => { re.lastIndex = 0; return re.test(l); })
+      .slice(0, 3).map(([n]) => n);
+    problems.push(why + ' ×' + hits.length + ' at line(s) ' + lines.join(', '));
+  }
+  const allowed = CSS_KNOWN[name] || 0;
+  if (total <= allowed) {
+    console.log('ok ' + name + ' (css)' +
+      (allowed ? '  — ' + allowed + ' known, see CSS_KNOWN' : ''));
+    return 0;
+  }
+  console.log('X  ' + name + ' (css)');
+  problems.forEach(p => console.log('     ' + p));
+  if (allowed) console.log('     ' + allowed + ' of these are grandfathered; the rest are new');
+  return 1;
+}
+
 let bad = 0;
 for (const f of ['stride-core.js','stride-route.js','stride-settings.js','vendor/leaflet.js']) {
   bad += scan(f, fs.readFileSync(UI+f,'utf8'));
 }
+/* stride-settings.js carries its own stylesheet as an array of strings, so it
+   is scanned as CSS as well as as JavaScript. That is where the birthday
+   picker's `gap` was. */
+bad += scanCss('stride-settings.js', fs.readFileSync(UI+'stride-settings.js','utf8'));
 for (const f of ['original.html','ember.html','cluster.html','daylight.html','pacer.html']) {
   const html = fs.readFileSync(UI+f,'utf8');
   const scripts = [...html.matchAll(/<script(?![^>]*src)[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
   scripts.forEach((s,i) => bad += scan(f + ' (inline script ' + (i+1) + ')', s));
+  const styles = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m=>m[1]).join('\n');
+  bad += scanCss(f, styles);
 }
 console.log(bad ? '\n' + bad + ' issue(s)' : '\nnothing past ES2015');
 /* Exits non-zero, so this is a gate and not a report nobody reads. */

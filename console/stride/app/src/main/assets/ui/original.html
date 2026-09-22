@@ -507,22 +507,54 @@ button.pulse{animation:pulse .9s ease-out 2}
    A stepper, a row of decades, and SKIP. The decades are there because the
    stepper alone is forty presses from its default to a twenty-year-old, and
    nobody is doing that standing on a treadmill with the belt about to start.
-   SKIP is a chip rather than a link: it is a real answer with a real
-   consequence and it should look as pressable as the rest. */
+   SKIP looks as pressable as the rest, because it is a real answer with a
+   real consequence rather than a way of dodging the question.
+
+   **Every size here is explicit, and that is the whole lesson of this block.**
+   The first version inherited from `button{}` above — which sets `height:76px`
+   on every button in the document — and put a two-line label inside the value
+   box. 64px of number plus two lines of 17px caption does not fit in 76px, so
+   the second line rendered *below the button's own border*, on top of the row
+   of decades underneath it. It looked like the chips were overlapping. They
+   were not; the caption was sitting on them.
+
+   It also used flexbox `gap`, which is Chrome 84 and this console is Chromium
+   51 — see the header of stride-core.js. `gap` does not fail loudly, it is
+   simply ignored, so the spacing silently came from `button{margin:0 8px}`
+   instead of from the 18px asked for. Nothing here uses it; margins do the
+   spacing, the way the rest of this file already did. */
 .agewhy{max-width:640px;margin:14px auto 0;font-size:20px;font-weight:300;
         line-height:1.45;color:var(--dim)}
-.agepick{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:30px}
-.agebtn{width:88px;height:78px;border-radius:18px;border:none;
-        background:var(--bg-1);color:var(--fg);font-size:38px;font-weight:300}
-.agebtn:active{background:rgba(57,224,255,.2)}
-.ageval{min-width:260px;padding:10px 18px;border-radius:18px;border:1px solid var(--bg-1);
-        background:transparent;color:var(--fg);font-size:64px;font-weight:200;letter-spacing:-1px}
-.ageval:active{background:rgba(57,224,255,.2)}
-.ageval small{display:block;font-size:17px;letter-spacing:2px;
-              text-transform:uppercase;color:var(--dim)}
-#ageQuick{margin-top:26px}
-.chip.ghost{margin-top:30px;background:transparent;border:1px solid var(--bg-1);
-            color:var(--dim)}
+.agepick{display:flex;align-items:center;justify-content:center;margin-top:28px}
+.agebtn{flex:none;width:88px;height:96px;max-width:none;margin:0 9px;
+        border-radius:18px;border:2px solid var(--track-line);
+        background:rgba(22,37,90,.55);color:var(--fg);font-size:38px;font-weight:300}
+/* One box, two lines, and a height that fits both: 64px of number on a 1.0
+   line-height, then a 17px caption. Stated rather than left to the content,
+   so a longer word in the caption can never push the border down again. */
+.ageval{flex:none;width:250px;height:96px;max-width:none;margin:0 9px;padding:0;
+        border-radius:18px;border:2px solid var(--track-line);
+        background:rgba(22,37,90,.55);color:var(--fg);overflow:hidden}
+.ageval b{display:block;height:64px;line-height:64px;
+          font-size:56px;font-weight:200;letter-spacing:-1px}
+.ageval i{display:block;height:20px;line-height:20px;font-style:normal;
+          font-size:15px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+/* The instruction lives out here rather than inside the button. Inside, it is
+   the thing that overflowed; out here it can wrap to two lines on a narrower
+   screen and cost nothing but its own height. */
+.agehint{margin-top:16px;font-size:17px;letter-spacing:.1em;
+         text-transform:uppercase;color:var(--dim)}
+/* Six decades. Sized so the row is 6x104 + 10x8 = 704px and cannot collide
+   with anything either side of it, and allowed to wrap rather than overflow
+   if a future interface is narrower than this one. */
+.agechips{margin-top:26px;display:flex;flex-wrap:wrap;justify-content:center}
+.agechips button{flex:none;width:104px;height:64px;max-width:none;margin:4px;
+                 border-radius:20px;font-size:21px}
+.agechips button.on{border-color:var(--accent);color:var(--accent);
+                    background:rgba(57,224,255,.14)}
+.ageskip{display:block;width:160px;height:64px;max-width:none;
+         margin:30px auto 0;border-radius:20px;
+         background:transparent;border:2px solid var(--track-line);color:var(--dim)}
 .chips{margin-top:26px;display:flex;justify-content:center}
 .chip{
   flex:none;width:112px;height:64px;margin:0 7px;max-width:none;
@@ -679,11 +711,12 @@ button.pulse{animation:pulse .9s ease-out 2}
         exactly the same — the zones are just drawn on a guess.</div>
       <div class="agepick">
         <button class="agebtn" id="ageDown">&minus;</button>
-        <button class="ageval" id="ageAccept"><span id="ageNum">40</span><small>years — tap to start</small></button>
+        <button class="ageval" id="ageAccept"><b id="ageNum">40</b><i>years</i></button>
         <button class="agebtn" id="ageUp">+</button>
       </div>
-      <div class="chips" id="ageQuick"></div>
-      <button class="chip ghost" id="ageSkip">SKIP</button>
+      <div class="agehint">Tap the number to start</div>
+      <div class="agechips" id="ageQuick"></div>
+      <button class="ageskip" id="ageSkip">SKIP</button>
     </div>
 
     <!-- No number here. It used to say "2 km/h", which was the old default
@@ -1220,7 +1253,7 @@ function drawAge(){
      with a ±10 bpm spread on it anyway. */
   [25,35,45,55,65,75].forEach(a => {
     const b = document.createElement('button');
-    b.className = 'chip' + (a === ageValue ? ' on' : '');
+    b.className = (a === ageValue ? 'on' : '');
     b.textContent = a;
     tap(b, () => { ageValue = a; drawAge(); });
     q.appendChild(b);
