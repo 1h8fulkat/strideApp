@@ -2295,14 +2295,25 @@ let hrDrawnAt = -1, hrAssumed = false;
 function renderZones(s){
   const floors = s.zoneFloors || [];
   const zoned = floors.length > 5;
+  const zone = s.zone == null ? -1 : s.zone;
 
-  /* '' back from zoneColour means "no reading", and it must not become the
-     zone 0 grey — a strap that has dropped out is not a resting heart. The
-     box goes back to no colour at all rather than keeping the last zone it
-     saw: a border still glowing amber ten minutes after the strap came off is
-     the same lie as a heart that carries on beating. */
+  /* The box takes its colour from the frame's zone, not from re-deriving one
+     out of the pulse. Both were available and STRIDE.zoneColour(pulse, floors)
+     was the obvious reach — but then the border and the legend beside it come
+     off two answers to one question, and a test frame carrying a pulse of 148
+     with zone 3 on it promptly painted the box orange under a caption that
+     said Aerobic. On the console they cannot disagree, because both come out
+     of one accumulate(); relying on that while re-deriving anyway is the thing
+     this feature has avoided everywhere else, and Phase 3 steers the belt off
+     the same field.
+
+     Zone -1 is "no reading" and takes the colour *off* rather than painting it
+     the zone 0 grey — a strap that has dropped out is not a resting heart —
+     and off rather than keeping the last zone it saw, because a border still
+     glowing amber ten minutes after the strap came off is the same lie as a
+     heart animation that carries on beating. */
   $('pulseBox').style.borderColor =
-    (zoned && STRIDE.zoneColour(s.pulse || 0, floors)) || 'transparent';
+    (zoned && zone >= 0) ? STRIDE.ZONES[zone].colour : 'transparent';
 
   /* No floors is no age is no graph. The four numbers above it have never
      needed one and still say everything they always did.
@@ -2320,7 +2331,6 @@ function renderZones(s){
   $('hrg').classList.toggle('on', zoned && !$('coach').classList.contains('show'));
   if (!zoned){ hrDrawnAt = -1; return; }
 
-  const zone = s.zone == null ? -1 : s.zone;
   if (zone < 0){
     /* Not a zone name and not a colour. A pulse of 0 is the strap saying
        nothing, and the legend says that rather than naming the zone the
@@ -2330,14 +2340,19 @@ function renderZones(s){
     $('hrgZoneName').style.color = '';
     $('hrgZoneBand').textContent = 'waiting for a reading';
   } else {
-    /* Zone 5's top is the formula maximum, which people pass routinely, so it
-       is drawn open-ended rather than as a ceiling somebody has broken. */
+    /* Both open-ended zones are drawn open-ended, and they are the two ends.
+       Zone 5's top is the formula maximum, which people pass routinely, so it
+       is not a ceiling somebody has broken. Zone 0's bottom is the walker's
+       resting rate, which is where their range starts and not a boundary — a
+       pulse under it is still zone 0, so "under 119" is the true statement and
+       "60–118" implies a floor the zone does not have. */
     $('hrgZoneNo').textContent   = 'Zone ' + zone;
     $('hrgZoneName').textContent = STRIDE.ZONES[zone].name;
     $('hrgZoneName').style.color = STRIDE.ZONES[zone].colour;
-    $('hrgZoneBand').textContent = (zone >= 5
-      ? (s.zoneFrom || 0) + '+'
-      : (s.zoneFrom || 0) + '–' + (s.zoneTo || 0)) + ' bpm';
+    $('hrgZoneBand').textContent = zone >= 5
+      ? (s.zoneFrom || 0) + '+ bpm'
+      : zone === 0 ? 'under ' + (floors[1] || 0) + ' bpm'
+      : (s.zoneFrom || 0) + '–' + (s.zoneTo || 0) + ' bpm';
   }
 
   /* Once a second, off the session clock rather than the wall clock. The

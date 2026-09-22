@@ -232,6 +232,27 @@ class Settings(context: Context) {
          * how, and this stays 0 until somebody types it.
          */
         val restingHr: Int = 0,
+        /**
+         * A maximum heart rate this person has measured, or 0 for "use the
+         * formula".
+         *
+         * Tanaka is a regression over a population and the spread around it is
+         * ±10-12 bpm, which is most of a zone — so for anyone who has watched
+         * their own ceiling on a watch or in a test, their own number is
+         * simply better information than an estimate from their birthday. It
+         * matters more here than it would elsewhere because the boundaries are
+         * Karvonen: every one of them is a share of `max − resting`, so three
+         * beats on the maximum moves the whole ladder.
+         *
+         * 0 rather than a copy of the formula's answer, so an override stays
+         * distinguishable from a coincidence and so the zones follow a
+         * birthday as the walker ages instead of freezing at whatever the
+         * formula said the day they set it. That is the same mistake the plain
+         * `age` field made — see [birthday].
+         *
+         * See [HrZones.MAX_RANGE] for what is believed.
+         */
+        val maxHr: Int = 0,
     ) {
         fun json(): JSONObject = JSONObject()
             .put("id", id).put("name", name)
@@ -239,6 +260,7 @@ class Settings(context: Context) {
             .put("ha_person", haPerson)
             .put("birthday", birthday)
             .put("resting_hr", restingHr)
+            .put("max_hr", maxHr)
             // Derived, and sent so the settings page and the HUD can show it
             // without reimplementing the calendar. Never read back in.
             .put("age", age)
@@ -255,22 +277,25 @@ class Settings(context: Context) {
         val age: Int get() = HrZones.ageOn(birthday)
 
         /**
-         * Maximum heart rate by Tanaka, or 0 if unknown.
+         * This person's maximum heart rate, or 0 if unknown.
          *
-         * Was `220 - age`, which nobody has ever been able to find a study
-         * for. See [HrZones.maxPulse] — the two disagree by up to six beats at
+         * [maxHr] when they have measured one, Tanaka otherwise. Tanaka was
+         * `220 - age`, which nobody has ever been able to find a study for —
+         * see [HrZones.maxPulse], where the two disagree by up to six beats at
          * the ends of the range, which is most of a zone.
          */
-        val maxPulse: Int get() = HrZones.maxPulse(age)
+        val maxPulse: Int get() = HrZones.maxPulse(age, maxHr)
 
         /**
          * The bpm this walker's zones start at, indexed 0-5, or empty when
          * there is no age to build them on.
          *
-         * Karvonen if they gave a resting rate, percent-of-max if not. The one
-         * call anything outside this file should need — see [HrZones.floors].
+         * Karvonen if they gave a resting rate, percent-of-max if not, on
+         * [maxPulse] — which is their own measured maximum when they have
+         * given one. The one call anything outside this file should need; see
+         * [HrZones.floors].
          */
-        val zoneFloors: IntArray get() = HrZones.floors(age, restingHr)
+        val zoneFloors: IntArray get() = HrZones.floors(age, restingHr, maxHr)
     }
 
     /**
@@ -361,6 +386,7 @@ class Settings(context: Context) {
                         if (old in HrZones.AGE_RANGE) HrZones.birthdayForAge(old) else ""
                     },
                     restingHr = o.optInt("resting_hr", 0),
+                    maxHr = o.optInt("max_hr", 0),
                 )
             }
         } catch (e: Exception) {

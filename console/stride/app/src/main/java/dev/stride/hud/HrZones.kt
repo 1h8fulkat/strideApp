@@ -163,6 +163,23 @@ object HrZones {
     val RHR_RANGE = 30..100
 
     /**
+     * What a maximum heart rate typed in by hand is allowed to be.
+     *
+     * A measured maximum beats a formula and this is the door for one — a
+     * watch that has watched somebody work for a year knows more about their
+     * ceiling than `208 − 0.7 × age` does. The range is there so the door is
+     * not also the way a typo gets in: below 120 the likeliest explanation is
+     * a resting rate typed into the wrong box, and Tanaka itself never returns
+     * below 138, so a "maximum" of 60 is not a person with an unusual heart,
+     * it is a mistake that would move every boundary at once and do it
+     * silently.
+     *
+     * Outside this range the override is ignored and the formula is used, the
+     * same way an implausible resting rate is disbelieved rather than obeyed.
+     */
+    val MAX_RANGE = 120..220
+
+    /**
      * The age the console proceeds with when nobody will say.
      *
      * Only ever reached after the walker has been asked and has declined or
@@ -186,6 +203,20 @@ object HrZones {
         if (age in AGE_RANGE) Math.round(208.0 - 0.7 * age).toInt() else 0
 
     /**
+     * This walker's maximum: the figure they gave when they gave one, Tanaka's
+     * estimate otherwise, 0 when there is neither.
+     *
+     * **An override works without an age.** That looks like a hole in "no age
+     * means no zones" and is not one: that rule exists so the console never
+     * invents a number, and a maximum somebody measured is the opposite of an
+     * invented one. Somebody who knows their ceiling and will not give a
+     * birthday gets zones, which is the right answer — see [MAX_RANGE] for
+     * what stops a typo taking the same door.
+     */
+    fun maxPulse(age: Int, override: Int): Int =
+        if (override in MAX_RANGE) override else maxPulse(age)
+
+    /**
      * The bpm each zone starts at, indexed 0-5, or empty when there is no
      * usable maximum.
      *
@@ -196,11 +227,20 @@ object HrZones {
      * effort "zone 2" is supposed to name.
      *
      * Index 0 is the bottom of the range — the resting rate under Karvonen, or
-     * zero under percent-of-max — so that `floors[z]` is always "the lowest
-     * pulse that counts as zone z" and [zoneOf] can be a plain scan.
+     * zero under percent-of-max. It is where the walker's range *starts* and
+     * not a boundary: [zoneOf] never reads it, and a pulse below it is still
+     * zone 0 rather than nothing. Zone 0 is everything under the bottom of
+     * zone 1, however far under, which is what the grey field at the foot of
+     * the live graph draws.
+     *
+     * [maxOverride] replaces Tanaka when the walker has measured their own
+     * ceiling — see [maxPulse]. It shifts every boundary, because under
+     * Karvonen every boundary is a share of `max − resting`: for a 43-year-old
+     * resting at 60, Tanaka's 178 gives 119/131/143/154/166 and a measured 175
+     * gives 118/129/141/152/164.
      */
-    fun floors(age: Int, restingHr: Int): IntArray {
-        val max = maxPulse(age)
+    fun floors(age: Int, restingHr: Int, maxOverride: Int = 0): IntArray {
+        val max = maxPulse(age, maxOverride)
         if (max <= 0) return IntArray(0)
         val karvonen = restingHr in RHR_RANGE && restingHr < max
         val base = if (karvonen) restingHr.toDouble() else 0.0
@@ -238,9 +278,9 @@ object HrZones {
      * and a reading above it is a reading, not an error. Callers that draw a
      * band should treat the top of zone 5 as open.
      */
-    fun band(zone: Int, floors: IntArray, age: Int): IntRange? {
+    fun band(zone: Int, floors: IntArray, age: Int, maxOverride: Int = 0): IntRange? {
         if (zone < 0 || zone > TOP || floors.size <= TOP) return null
-        val top = if (zone == TOP) maxPulse(age) else floors[zone + 1] - 1
+        val top = if (zone == TOP) maxPulse(age, maxOverride) else floors[zone + 1] - 1
         return floors[zone]..top
     }
 
@@ -337,8 +377,8 @@ object HrZones {
      * printing a fitness score after a stroll invites the reading that the
      * stroll produced it.
      */
-    fun vo2max(age: Int, restingHr: Int): Double {
-        val max = maxPulse(age)
+    fun vo2max(age: Int, restingHr: Int, maxOverride: Int = 0): Double {
+        val max = maxPulse(age, maxOverride)
         if (max <= 0 || restingHr !in RHR_RANGE) return 0.0
         return 15.3 * max / restingHr
     }

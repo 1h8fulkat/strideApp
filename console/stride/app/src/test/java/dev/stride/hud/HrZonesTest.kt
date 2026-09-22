@@ -109,6 +109,87 @@ class HrZonesTest {
         assertEquals(0, HrZones.floors(12, 55).size)
     }
 
+    /**
+     * Index 0 is where the walker's range starts, not a boundary, and
+     * [HrZones.zoneOf] must not treat it as one. A strap reading 40 on
+     * somebody whose resting rate is 55 is a low reading, not an
+     * unclassifiable one — zone 0 is the answer, and -1 stays reserved for no
+     * reading at all.
+     *
+     * This matters for the graph: zone 0 is drawn as everything under the
+     * bottom of zone 1, so anything that fell out of the bottom of the range
+     * has to still come back as zone 0 and be painted grey.
+     */
+    @Test fun `a pulse under the resting rate is still zone 0, not unknown`() {
+        val f = HrZones.floors(40, 55)     // 55, 118, 130, 143, 155, 168
+        assertEquals(0, HrZones.zoneOf(40, f))
+        assertEquals(0, HrZones.zoneOf(54, f))
+        assertEquals(0, HrZones.zoneOf(117, f))
+        assertEquals(-1, HrZones.zoneOf(0, f))
+    }
+
+    // --- a maximum the walker measured ----------------------------------------
+
+    /**
+     * The owner's case, and the reason the override exists. Their watch has
+     * measured 175 from a year of real workouts; Tanaka says 178 at 43. Under
+     * Karvonen every boundary is a share of `max − resting`, so three beats on
+     * the maximum is not three beats on one number, it moves the whole ladder.
+     */
+    @Test fun `an override replaces tanaka and moves the whole ladder`() {
+        assertEquals(178, HrZones.maxPulse(43))
+        assertEquals(175, HrZones.maxPulse(43, 175))
+        assertArrayEquals(
+            intArrayOf(60, 119, 131, 143, 154, 166),
+            HrZones.floors(43, 60),
+        )
+        assertArrayEquals(
+            intArrayOf(60, 118, 129, 141, 152, 164),
+            HrZones.floors(43, 60, 175),
+        )
+    }
+
+    /** An implausible maximum is disbelieved, not obeyed — the likeliest one
+     *  is a resting rate typed into the wrong box, and it would move every
+     *  boundary at once and do it silently. */
+    @Test fun `an implausible maximum falls back to the formula`() {
+        assertEquals(178, HrZones.maxPulse(43, 0))
+        assertEquals(178, HrZones.maxPulse(43, 60))    // a resting rate
+        assertEquals(178, HrZones.maxPulse(43, 119))   // just under the range
+        assertEquals(178, HrZones.maxPulse(43, 221))
+        assertArrayEquals(HrZones.floors(43, 60), HrZones.floors(43, 60, 60))
+    }
+
+    /**
+     * An override works with no age at all, and that is not a hole in "no age
+     * means no zones".
+     *
+     * That rule is there so the console never invents a number. A maximum
+     * somebody measured is the opposite of an invented one, so a walker who
+     * knows their ceiling and will not give a birthday gets zones — which is
+     * the right answer rather than a loophole.
+     */
+    @Test fun `a measured maximum gives zones without a birthday`() {
+        assertEquals(0, HrZones.maxPulse(0))
+        assertEquals(190, HrZones.maxPulse(0, 190))
+        val f = HrZones.floors(0, 55, 190)
+        assertEquals(6, f.size)
+        // Karvonen on a reserve of 135: zone 1 at 55 + 0.5 x 135.
+        assertArrayEquals(intArrayOf(55, 123, 136, 150, 163, 177), f)
+    }
+
+    /** The top of zone 5 is the maximum in force, not the formula's. */
+    @Test fun `the top of zone five follows the override`() {
+        assertEquals(166..178, HrZones.band(5, HrZones.floors(43, 60), 43))
+        assertEquals(164..175, HrZones.band(5, HrZones.floors(43, 60, 175), 43, 175))
+    }
+
+    /** And so does the VO2 max, which is a ratio of the two figures. */
+    @Test fun `vo2 max follows the override too`() {
+        assertEquals(15.3 * 178 / 60, HrZones.vo2max(43, 60), 0.001)
+        assertEquals(15.3 * 175 / 60, HrZones.vo2max(43, 60, 175), 0.001)
+    }
+
     // --- zoneOf ---------------------------------------------------------------
 
     @Test fun `a pulse lands in the zone its floor says`() {

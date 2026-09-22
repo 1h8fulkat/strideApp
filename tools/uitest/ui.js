@@ -608,6 +608,10 @@ JSDOM.fromFile(path, {
   /* jsdom normalises a hex colour to rgb() on the way into a style property,
      so the expectation has to be converted rather than compared as written. */
   const rgb = h => 'rgb(' + [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16)).join(', ') + ')';
+  /* The legend is four stacked divs, so its textContent carries the newlines
+     between them and printed as a blank line in the check detail. */
+  const legend = () => w.document.getElementById('hrgZone')
+    .textContent.replace(/\s+/g, ' ').trim();
 
   w.render(hrFrame(148, 3));
   /* The canvas's pixel size is an attribute and its box is CSS, and Chromium
@@ -646,15 +650,26 @@ JSDOM.fromFile(path, {
     w.document.getElementById('hrg').classList.contains('on')
       ? 'up' : '!no band with floors on the frame');
   check('the caption names the zone and its band', () => {
-    const t = w.document.getElementById('hrgZone').textContent;
+    const t = legend();
     return /Zone 3/.test(t) && /Aerobic/.test(t) && /143/.test(t) && /153/.test(t)
       ? t : '!caption reads "' + t + '"';
   });
+  /* Zone 0 reads "under 119" rather than "60-118". floors[0] is where the
+     walker's range starts and not a boundary — zoneOf puts a pulse of 45 in
+     zone 0 too — so a printed floor would be claiming something the zone does
+     not have. Both open-ended zones are drawn open-ended. */
+  check('zone 0 is drawn open-ended downwards, not floored at the resting rate', () => {
+    w.render(hrFrame(100, 0, 605));
+    const t = legend();
+    return /under 119 bpm/.test(t) && t.indexOf('\u2013') < 0
+      ? t : '!caption reads "' + t + '"';
+  });
+
   /* People pass their formula maximum routinely, so the top band is drawn as
      open-ended rather than as a ceiling somebody has broken. */
   check('zone 5 is drawn open-ended, not capped at the formula maximum', () => {
     w.render(hrFrame(171, 5, 601));
-    const t = w.document.getElementById('hrgZone').textContent;
+    const t = legend();
     return /166\+/.test(t) ? t : '!caption reads "' + t + '"';
   });
   check('the BPM box takes the colour of the zone it is in', () => {
@@ -673,9 +688,24 @@ JSDOM.fromFile(path, {
       : '!border is ' + got + ', wanted transparent';
   });
   check('and the caption says there is no reading rather than naming a zone', () => {
-    const t = w.document.getElementById('hrgZone').textContent;
+    const t = legend();
     return /waiting/i.test(t) && !/Zone \d/.test(t) ? t : '!caption reads "' + t + '"';
   });
+  /* One answer to "which zone is this", and the border has to be reading it.
+     The frame below carries a pulse of 100 — zone 0 on this ladder — with zone
+     3 stamped on it, which is a state the console cannot produce and a test
+     can: if the box re-derives the zone from the pulse it goes grey under a
+     caption that says Aerobic. Phase 3 steers the belt off the same field, so
+     the HUD had better be showing it. */
+  check('the BPM box reads the frame\'s zone, not one re-derived from the pulse', () => {
+    w.render(hrFrame(100, 3, 606));
+    const got = w.document.getElementById('pulseBox').style.borderColor;
+    const t = legend();
+    return got === rgb(w.STRIDE.ZONES[3].colour) && /Aerobic/.test(t)
+      ? 'border and caption agree on zone 3'
+      : '!border ' + got + ' under "' + t + '"';
+  });
+
   /* The coach owns that band when it speaks. Found on the console: the
      ribbon's background is rgba(...,.96), deliberately short of opaque so a
      ghost of the walk shows through it, and with the trace behind it an
@@ -706,6 +736,37 @@ JSDOM.fromFile(path, {
   /* ---- the renderer itself ----------------------------------------------
      A canvas that draws nothing can still be asked what it drew, which is
      what hrGraph's return value is for. */
+  /* Zone 0 is everything under the bottom of zone 1, and it gets a grey field
+     rather than a rule because it has no boundary below it. The owner asked
+     for it specifically, and the part worth pinning is that it is there even
+     when the walk never dropped into it — otherwise the band only appears once
+     somebody's pulse falls, which is exactly when you are not looking for an
+     explanation of a new stripe. */
+  check('zone 0 is a grey field, drawn whether or not the walk went there', () => {
+    const above = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
+      [[0, 140, 5], [600, 152, 5]], { floors: FLOORS });
+    if (!(above.zeroPx > 0)) return '!no zone 0 field on a walk that stayed above it';
+    if (above.lo > FLOORS[1] - 10) return '!floor at ' + above.lo +
+      ', leaves no room under the zone 1 rule at ' + FLOORS[1];
+    /* And a walk that does drop into it pulls the floor down, so the grey
+       grows to cover what actually happened rather than clipping it. */
+    const into = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
+      [[0, 72, 5], [600, 152, 5]], { floors: FLOORS });
+    return into.lo <= 68 && into.zeroPx > above.zeroPx
+      ? 'field ' + above.zeroPx + 'px normally, ' + into.zeroPx +
+        'px when the walk drops to 72'
+      : '!floor ' + into.lo + ', field ' + into.zeroPx + 'px';
+  });
+  check('a pulse below the resting rate is still drawn, and drawn grey', () => {
+    /* floors[0] is where the range starts, not a boundary. 45 bpm on somebody
+       resting at 60 is a low reading, and it is zone 0 — not off the chart and
+       not an unknown. */
+    const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
+      [[0, 45, 5], [30, 50, 5]], { floors: FLOORS });
+    return g.drawn === 1 && g.zones[0] === 1 && g.lo <= 41
+      ? 'one grey piece, floor at ' + g.lo
+      : '!drawn=' + g.drawn + ' zones=' + g.zones.join(',') + ' lo=' + g.lo;
+  });
   check('the line is split at the boundary, not at the sample', () => {
     /* One minute, 100 bpm to 170. Five boundaries lie strictly between, so
        six pieces come out of one segment — and each split has to sit at the

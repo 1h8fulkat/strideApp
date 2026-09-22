@@ -566,6 +566,18 @@ class MainActivity : Activity() {
     @Volatile private var walkerRhr = 0
 
     /**
+     * A maximum this walker measured rather than one derived from their age,
+     * or 0.
+     *
+     * Cached beside the rest for the same reason, and kept separately from
+     * [walkerHrMax] — which is the answer — because the page wants to say
+     * *which* it is showing, and because a walker who set an override and then
+     * had a birthday should still be using the override rather than a stale
+     * copy of a formula. See Settings.Person.maxHr.
+     */
+    @Volatile private var walkerMaxHr = 0
+
+    /**
      * An age typed at the start of a quick-play walk by somebody who is not in
      * the person list, or 0.
      *
@@ -599,8 +611,11 @@ class MainActivity : Activity() {
         // always wins over anything typed at the welcome screen.
         walkerAge = p?.age?.takeIf { it > 0 } ?: guestAge
         walkerRhr = p?.restingHr ?: 0
-        walkerHrMax = HrZones.maxPulse(walkerAge)
-        walkerZoneFloors = HrZones.floors(walkerAge, walkerRhr)
+        // A guest has no override — tapping GUEST is not agreeing to be
+        // remembered, and there is nowhere to remember this either.
+        walkerMaxHr = p?.maxHr ?: 0
+        walkerHrMax = HrZones.maxPulse(walkerAge, walkerMaxHr)
+        walkerZoneFloors = HrZones.floors(walkerAge, walkerRhr, walkerMaxHr)
     }
 
     // --- guided walk ---------------------------------------------------------
@@ -1455,6 +1470,11 @@ class MainActivity : Activity() {
             .put("age", walkerAge)
             .put("resting", walkerRhr)
             .put("karvonen", walkerRhr in HrZones.RHR_RANGE)
+            // True when the maximum is one the walker measured rather than one
+            // Tanaka guessed from their birthday. Not a caveat to display —
+            // a measured maximum is the better number — but the settings
+            // screen says which it is drawing, so it has to know.
+            .put("maxMeasured", walkerMaxHr > 0)
             // True when the age was typed at the welcome screen rather than
             // stored, so the page can label the zones as an assumption.
             .put("guest", guestAge > 0 && cfg.person(walker) == null)
@@ -1645,6 +1665,34 @@ class MainActivity : Activity() {
             refreshWalkerZones()
             Log.i(TAG, "settings: resting hr for $name -> " +
                 if (clean > 0) "$clean bpm" else "not given")
+            return cfg.json().toString()
+        }
+
+        /**
+         * Set or clear somebody's own maximum heart rate.
+         *
+         * Zero, or anything outside what a maximum plausibly is, goes back to
+         * the formula — see HrZones.MAX_RANGE. That is not a degraded console,
+         * it is the ordinary one: Tanaka is what everybody starts on.
+         *
+         * Refused once the belt is moving, for the same reason setGuestAge is.
+         * Under Karvonen every boundary is a share of `max − resting`, so this
+         * moves all five at once, and the seconds already counted against them
+         * would be retroactively re-filed — with the Phase 3 loop running it
+         * would move the belt as well.
+         */
+        @JavascriptInterface fun setPersonMaxHr(name: String, bpm: Int): String {
+            if (Session.isMoving(session)) {
+                Log.i(TAG, "settings: max hr refused, belt is moving")
+                return cfg.json().toString()
+            }
+            val clean = if (bpm in HrZones.MAX_RANGE) bpm else 0
+            cfg.savePeople(cfg.people().map {
+                if (it.name == name) it.copy(maxHr = clean) else it
+            })
+            refreshWalkerZones()
+            Log.i(TAG, "settings: max hr for $name -> " +
+                if (clean > 0) "$clean bpm, measured" else "formula")
             return cfg.json().toString()
         }
 
@@ -3520,7 +3568,7 @@ class MainActivity : Activity() {
         // pulse by a maximum. -1 when the strap said nothing, and band() hands
         // back null for that rather than a band of zeros.
         val zoneNow = HrZones.zoneOf(pulse, walkerZoneFloors)
-        val bandNow = HrZones.band(zoneNow, walkerZoneFloors, walkerAge)
+        val bandNow = HrZones.band(zoneNow, walkerZoneFloors, walkerAge, walkerMaxHr)
 
         return Snapshot(
             speed = speed,

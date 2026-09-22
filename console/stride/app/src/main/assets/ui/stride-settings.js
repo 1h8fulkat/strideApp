@@ -37,12 +37,15 @@
      time so that a core that failed to parse produces a settings screen with
      no zone preview, rather than no settings screen. */
   function core() { return global.STRIDE || {}; }
-  function maxPulse(age) {
-    return core().maxPulse ? core().maxPulse(age) : 0;
+  /* `override` is the walker's own measured maximum, 0 for "use the formula".
+     Optional on both of these so the callers that do not have a person in
+     hand still read as they did. */
+  function maxPulse(age, override) {
+    return core().maxPulse ? core().maxPulse(age, override || 0) : 0;
   }
   function zoneFloors(p) {
     return core().zoneFloorsFor
-      ? core().zoneFloorsFor(p.age || 0, p.resting_hr || 0) : [];
+      ? core().zoneFloorsFor(p.age || 0, p.resting_hr || 0, p.max_hr || 0) : [];
   }
   var ZONE_COLOURS = (core().ZONES || []).map(function (z) { return z.colour; });
   var ZONE_NAMES = (core().ZONES || []).map(function (z) { return z.name; });
@@ -574,6 +577,90 @@
     return wrap;
   }
 
+  /* Somebody's own maximum heart rate, overriding the formula.
+
+     Tanaka is a regression over a population and the spread around it is
+     ±10-12 bpm, which is most of a zone — so anybody who has watched their own
+     ceiling on a watch or in a test has better information than their birthday
+     gives. It matters more here than it would on a percent-of-max console,
+     because these boundaries are Karvonen: every one of them is a share of
+     `max − resting`, so a few beats on the maximum moves the whole ladder.
+
+     Same shape as the resting rate beside it — stepper, CLEAR, and "not set"
+     reachable — for the same reasons, and because two controls that do the
+     same kind of thing should not work differently. The first tap up lands on
+     whatever the formula currently says rather than on the floor of the range:
+     somebody opening this is adjusting an estimate, not entering a number from
+     nothing, and 120 is ninety presses away from anywhere useful. */
+  function maxHrStepper(p, onChange) {
+    var wrap = el('div', 'sx-bday');
+    var st = el('div', 'sx-step');
+    var v = el('div', 'sx-v');
+    var value = p.max_hr || 0;
+    var formula = core().maxPulse ? core().maxPulse(p.age || 0) : 0;
+    var MIN = core().MAX_MIN || 120, MAX = core().MAX_MAX || 220;
+    /* Where the first press starts from: the formula when there is one, the
+       population middle's maximum when there is not. */
+    var anchor = formula ||
+      (core().maxPulse ? core().maxPulse(core().ASSUMED_AGE || 40) : 180);
+
+    var clear = press(el('button', 'sx-pill', 'CLEAR'), function () {
+      value = 0;
+      commit();
+    });
+
+    var draw = function () {
+      /* "not set" would usually be a lie: there is a maximum whether or not
+         anybody typed one, it is just the formula's. So the unset state shows
+         the number in use and says where it came from — and only says "not
+         set" when there is genuinely no maximum at all, which is somebody
+         with no birthday who has not typed one either. */
+      v.innerHTML = value >= MIN
+        ? value + '<small>bpm</small>'
+        : (formula ? formula + '<small>from age</small>'
+                   : '<small>not set</small>');
+      clear.style.display = value >= MIN ? '' : 'none';
+    };
+
+    function commit() {
+      draw();
+      try { S = JSON.parse(bridge().setPersonMaxHr(p.name, value)); } catch (e) {}
+      p.max_hr = value;
+      if (onChange) onChange();
+    }
+
+    var bump = function (k) {
+      if (value < MIN) {
+        /* First press starts from the estimate being corrected and moves it —
+           not from the floor of the range, which is ninety presses from
+           anywhere useful, and not from the estimate unchanged, because a
+           press of − that does not decrease anything reads as a dead button.
+
+           With no birthday there is no estimate to correct, and this is then
+           the only way the walker gets zones at all. Anchoring on the assumed
+           age's maximum rather than on 120 means they are adjusting a
+           plausible number rather than climbing out of a hole. */
+        value = anchor + k;
+      } else {
+        value = value + k;
+      }
+      if (value > MAX) value = MAX;
+      // Stepping off the bottom clears, so the two ways out agree.
+      if (value < MIN) value = 0;
+      commit();
+    };
+
+    st.appendChild(press(el('button', '', '&minus;'), function () { bump(-1); }));
+    st.appendChild(v);
+    st.appendChild(press(el('button', '', '+'), function () { bump(1); }));
+    wrap.appendChild(st);
+    var foot = el('div', 'sx-bday-foot');
+    foot.appendChild(clear);
+    wrap.appendChild(foot);
+    draw();
+    return wrap;
+  }
+
   /* Escaping, for the handful of strings here that come from outside the
      console. A Bluetooth device names itself, that name goes into innerHTML on
      the heart rate screen, and "outside the console" means "whatever is
@@ -905,15 +992,18 @@
         }
         var bits = [], i;
         for (i = 1; i < floors.length; i++) {
-          var top = i < floors.length - 1 ? (floors[i + 1] - 1) : maxPulse(p.age);
+          var top = i < floors.length - 1 ? (floors[i + 1] - 1)
+                                          : maxPulse(p.age, p.max_hr);
           bits.push('<span style="color:' + ZONE_COLOURS[i] + '">&#9632;</span> ' +
             ZONE_NAMES[i] + ' <b>' + floors[i] + '&ndash;' + top + '</b>');
         }
+        var mx = maxPulse(p.age, p.max_hr);
         zoneNote.innerHTML =
-          (p.resting_hr ? 'Karvonen, on a reserve of ' +
-             (maxPulse(p.age) - p.resting_hr) + ' bpm.'
+          (p.resting_hr ? 'Karvonen, on a reserve of ' + (mx - p.resting_hr) + ' bpm.'
                         : 'Percent of maximum. Add a resting rate for Karvonen.') +
-          ' Maximum <b>' + maxPulse(p.age) + '</b>.<br>' + bits.join('<br>');
+          ' Maximum <b>' + mx + '</b>' +
+          (p.max_hr ? ', yours.' : ', from your age.') +
+          '<br>' + bits.join('<br>');
       };
 
       detail.appendChild(row('Date of birth',
@@ -932,7 +1022,21 @@
         'they name actually is, and the summary can estimate a VO2 max.',
         rhrStepper(p, function () { drawZones(); })));
 
-      detail.appendChild(row('Zones', 'What the two above work out to.', zoneNote));
+      detail.appendChild(row('Maximum heart rate',
+        'Worked out from your age unless you change it. The formula is a ' +
+        'population average and real people sit ten to twelve beats either ' +
+        'side of it, so if a watch or a test has told you your own number, ' +
+        'that one is better. It moves every zone boundary, because each one ' +
+        'is a share of the gap between this and your resting rate.',
+        /* drawZones only — *not* drawPeople. Rebuilding the people list
+           replaces this stepper's own buttons mid-press, and on the console
+           three taps on − registered as one: the second and third landed on
+           DOM that had just been thrown away. The birthday picker does call
+           drawPeople, because an age is printed on the cards; a maximum is
+           not. Same reason the resting rate beside it does not. */
+        maxHrStepper(p, function () { drawZones(); })));
+
+      detail.appendChild(row('Zones', 'What the three above work out to.', zoneNote));
       drawZones();
       detail.appendChild(row('Record to Home Assistant',
         'Their distance, time and calories, published under their own name.',

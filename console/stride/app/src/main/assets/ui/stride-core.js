@@ -910,12 +910,22 @@ var AGE_MIN = 13, AGE_MAX = 100;
    HrZones.ASSUMED_AGE. */
 var ASSUMED_AGE = 40;
 var RHR_MIN = 30, RHR_MAX = 100;
+/* What a hand-typed maximum is allowed to be. A measured ceiling beats a
+   formula and this is the door for one; the range is so the door is not also
+   how a resting rate typed into the wrong box gets in. Mirrors
+   HrZones.MAX_RANGE. */
+var MAX_MIN = 120, MAX_MAX = 220;
 
 /* Tanaka, 208 - 0.7 x age. Was 220 - age, which nobody has ever found a study
    for; the two differ by up to six beats at the ends of the range, which is
    most of a zone. 0 when the age is one the formula does not mean anything
    for — extrapolation dressed as physiology is the thing to avoid here. */
-function maxPulse(age) {
+function maxPulse(age, override) {
+  /* A maximum the walker measured wins outright, and works without an age:
+     "no age means no zones" is there so the console never invents a number,
+     and a measured ceiling is the opposite of an invented one. */
+  override = override || 0;
+  if (override >= MAX_MIN && override <= MAX_MAX) return override;
   age = age || 0;
   if (age < AGE_MIN || age > AGE_MAX) return 0;
   return Math.round(208 - 0.7 * age);
@@ -926,8 +936,8 @@ function maxPulse(age) {
    Karvonen on the reserve when there is a believable resting rate, a flat
    share of maximum when there is not. Index 0 is the bottom of the range, so
    floors[z] is always "the lowest pulse that counts as zone z". */
-function zoneFloorsFor(age, restingHr) {
-  var max = maxPulse(age);
+function zoneFloorsFor(age, restingHr, maxOverride) {
+  var max = maxPulse(age, maxOverride);
   if (!max) return [];
   var rhr = restingHr || 0;
   var karvonen = rhr >= RHR_MIN && rhr <= RHR_MAX && rhr < max;
@@ -972,8 +982,8 @@ function zoneColour(bpm, floors) {
    summary gates it on the walk having reached a real effort; a ratio of two
    maxima says nothing about a stroll, and printing a fitness score after one
    invites the reading that the stroll earned it. */
-function vo2max(age, restingHr) {
-  var max = maxPulse(age);
+function vo2max(age, restingHr, maxOverride) {
+  var max = maxPulse(age, maxOverride);
   if (!max || !restingHr || restingHr < RHR_MIN || restingHr > RHR_MAX) return 0;
   return 15.3 * max / restingHr;
 }
@@ -1034,8 +1044,8 @@ function zoneRows(zones) {
  *
  * @param cv       a <canvas>; its width and height attributes are the pixels
  * @param samples  [[elapsedSec, bpm, kph], ...] — Stride.hrTrace()'s shape
- * @param opts     { floors, span, minSpan, rules, ruleAlpha, bands, bandAlpha,
- *                   width, head, headRadius }
+ * @param opts     { floors, span, minSpan, zero, zeroBand, zeroAlpha, rules,
+ *                   ruleAlpha, bands, bandAlpha, width, head, headRadius }
  * @return what was drawn — the bpm range, the time span, how many pieces and
  *         gaps, and the bpm/second of every split. Nothing on the page needs
  *         it; it is how the headless suite sees a canvas that draws nothing.
@@ -1043,7 +1053,7 @@ function zoneRows(zones) {
 function hrGraph(cv, samples, opts) {
   opts = opts || {};
   var out = { lo: 0, hi: 0, span: 0, drawn: 0, gaps: 0, splits: [], zones: [],
-              head: null };
+              head: null, zeroPx: 0 };
   var z, i;
   for (z = 0; z < ZONES.length; z++) out.zones.push(0);
 
@@ -1067,14 +1077,22 @@ function hrGraph(cv, samples, opts) {
      as the maximum and cost the graph a fifth of its height to reserve room
      above the last rule for a line that is never drawn: the top of zone 5 is
      open, there is no boundary up there, and the effect on the console was
-     five zone rules crammed into the middle of the plot. */
-  var lo = floors[1], hi = floors[ZONES.length - 1];
+     five zone rules crammed into the middle of the plot.
+
+     The bottom leaves room for zone 0 whether or not the walk went there, so
+     the grey field under the zone 1 rule is always visible as a band rather
+     than appearing only once a pulse has dropped into it. `zeroBand` is the
+     smallest it may be; a walk that really does drop to 75 bpm pulls the floor
+     down further and the grey grows with it, which is the honest picture —
+     half a chart of grey means half a walk below zone 1. */
+  var zeroBand = opts.zeroBand == null ? 10 : opts.zeroBand;
+  var lo = floors[1] - zeroBand, hi = floors[ZONES.length - 1];
   var b;
   for (i = 0; i < samples.length; i++) {
     b = samples[i][1];
-    if (b > 0) { if (b < lo) lo = b; if (b > hi) hi = b; }
+    if (b > 0) { if (b - 4 < lo) lo = b - 4; if (b > hi) hi = b; }
   }
-  lo -= 4; hi += 4;
+  hi += 4;
   if (hi - lo < 20) hi = lo + 20;
 
   /* The axis does not stretch to fit two points. A trace one minute old drawn
@@ -1094,6 +1112,32 @@ function hrGraph(cv, samples, opts) {
   function yAt(v) { return H - PAD - (v - lo) / (hi - lo) * (H - 2 * PAD); }
 
   out.lo = lo; out.hi = hi; out.span = span;
+
+  /* Zone 0 — everything under the bottom of zone 1 — as a grey field rather
+     than as a sixth hairline.
+
+     It is the one zone with no rule of its own to draw, because it is not the
+     gap between two boundaries: it is the floor, and it reaches down as far as
+     a heart does. A field says that where a line cannot. It is also the only
+     band a walk enters without having done anything — standing on the rail,
+     easing off at the end — so being able to see at a glance that the trace
+     has dropped out of training is worth the ink.
+
+     Only zone 0 is filled, and the asymmetry is the point: five translucent
+     fills over a strip this tall read as one vertical smear and were taken out
+     for it, and `bands:true` still does them for anything drawn tall enough.
+     One fill at the bottom, under the rules rather than among them, reads as a
+     floor instead. */
+  if (opts.zero !== false) {
+    var yOne = yAt(Math.min(floors[1], hi));
+    if (yOne < H) {
+      c.globalAlpha = opts.zeroAlpha == null ? 0.26 : opts.zeroAlpha;
+      c.fillStyle = ZONES[0].colour;
+      c.fillRect(0, yOne, W, H - yOne);
+      c.globalAlpha = 1;
+      out.zeroPx = H - yOne;
+    }
+  }
 
   /* The ladder behind the line: a hairline where each zone starts, in the
      colour of the zone that starts there.
@@ -2448,6 +2492,8 @@ global.STRIDE = {
   ZONES: ZONES,
   zoneRows: zoneRows,
   ASSUMED_AGE: ASSUMED_AGE,
+  MAX_MIN: MAX_MIN,
+  MAX_MAX: MAX_MAX,
   maxPulse: maxPulse,
   zoneFloorsFor: zoneFloorsFor,
   zoneOf: zoneOf,

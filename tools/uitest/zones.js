@@ -60,6 +60,33 @@ check('age 40', S.zoneFloorsFor(40, 0), [0, 90, 108, 126, 144, 162]);
 console.log('floors — Karvonen, on the reserve');
 check('age 40, resting 55', S.zoneFloorsFor(40, 55), [55, 118, 130, 143, 155, 168]);
 
+/* A maximum the walker measured, which replaces Tanaka and — because these
+   boundaries are Karvonen shares of `max - resting` — moves all five of them.
+   Same values HrZonesTest asserts on the Kotlin side. */
+console.log('a measured maximum replaces the formula and moves the whole ladder');
+check('tanaka at 43',        S.maxPulse(43),      178);
+check('override 175',        S.maxPulse(43, 175), 175);
+check('floors on tanaka',    S.zoneFloorsFor(43, 60),      [60, 119, 131, 143, 154, 166]);
+check('floors on 175',       S.zoneFloorsFor(43, 60, 175), [60, 118, 129, 141, 152, 164]);
+check('top of zone 5 moves', S.zoneFloorsFor(43, 60, 175)[5], 164);
+
+console.log('an implausible maximum is disbelieved, not obeyed');
+check('0',   S.maxPulse(43, 0),   178);
+check('60',  S.maxPulse(43, 60),  178);   // a resting rate in the wrong box
+check('119', S.maxPulse(43, 119), 178);
+check('221', S.maxPulse(43, 221), 178);
+
+/* Not a hole in "no age means no zones": that rule is there so nothing gets
+   invented, and a measured ceiling is the opposite of invented. */
+console.log('a measured maximum gives zones with no birthday at all');
+check('no age, no override', S.maxPulse(0),          0);
+check('no age, override',    S.maxPulse(0, 190),     190);
+check('floors',              S.zoneFloorsFor(0, 55, 190), [55, 123, 136, 150, 163, 177]);
+
+console.log('vo2 max follows the override');
+check('tanaka',   Math.round(S.vo2max(43, 60) * 100) / 100,      Math.round(15.3 * 178 / 60 * 100) / 100);
+check('override', Math.round(S.vo2max(43, 60, 175) * 100) / 100, Math.round(15.3 * 175 / 60 * 100) / 100);
+
 console.log('an implausible resting rate is disbelieved, not used');
 check('resting 29',  S.zoneFloorsFor(40, 29),  S.zoneFloorsFor(40, 0));
 check('resting 101', S.zoneFloorsFor(40, 101), S.zoneFloorsFor(40, 0));
@@ -128,6 +155,14 @@ else {
 console.log('ASSUMED_AGE matches HrZones.ASSUMED_AGE');
 const a = /const val ASSUMED_AGE = (\d+)/.exec(kt);
 check('value', S.ASSUMED_AGE, a ? parseInt(a[1], 10) : null);
+
+/* MAX_RANGE decides which hand-typed maxima are believed, and a page and a
+   console that disagreed about it would accept a number on one side and
+   silently ignore it on the other. */
+console.log('MAX_MIN/MAX_MAX match HrZones.MAX_RANGE');
+const mr = /val MAX_RANGE = (\d+)\.\.(\d+)/.exec(kt);
+check('range', [S.MAX_MIN, S.MAX_MAX],
+      mr ? [parseInt(mr[1], 10), parseInt(mr[2], 10)] : null);
 
 console.log();
 if (fail) { console.error('>>> zone arithmetic has drifted between Kotlin and the page'); }

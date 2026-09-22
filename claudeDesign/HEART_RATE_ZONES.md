@@ -155,6 +155,8 @@ Asked and answered by the owner. Treat as settled.
 | How wide should the UI work go? | **`original.html` first, treadmill-test it, then port to the other four** as a separate phase. Shared drawing code goes in `stride-core.js` so the ports stay thin. |
 | Where does the post-workout HR trace live? | **In memory, summary only.** Kotlin buffers HR+pace for the current walk and hands it to the summary. Lost when the walk ends. Not persisted to `History`. |
 | Karvonen/Tanaka vs the existing `220 − age`? | **Replace globally.** One code path. Coach and History use the new numbers. |
+| Karvonen or percent-of-max for the boundaries? | **Karvonen.** Asked and answered twice. On 21 September 2026 a request to move zone 1 down to 87 was misread as a request for percent-of-max and implemented; the owner corrected it and it was reverted. **They want Karvonen.** What they had actually asked for was the grey zone 0 below zone 1, plus a max-HR override for tuning the ladder to their own body. Do not re-derive the boundaries from a plain share of maximum. |
+| Should the walker be able to override their maximum? | **Yes, per person, with the formula as the default.** Their watch measures 175 from real workout data and Tanaka says 178; a measured ceiling beats a regression. |
 | Zone names? | **The reference screenshot's set** — Low intensity, Weight control, Aerobic, Anaerobic, Maximum. The owner was offered the plainer effort labels and chose these. The trade-off is recorded in `HrZones.ZONE_NAMES`; don't undo it. |
 
 There is **no `Directory structure.txt`** in the repo or workspace, despite the
@@ -225,8 +227,37 @@ is not. Shares are the textbook `0 / .50 / .60 / .70 / .80 / .90`.
 The difference is large enough to matter: for a 40-year-old resting at 55, zone
 2 starts at **108** on percent-of-max and **130** by Karvonen.
 
+**Max HR override.** `floors`, `band` and `vo2max` all take an optional
+`maxOverride`, and `Settings.Person.maxHr` carries it per person. Tanaka is a
+regression over a population with ±10-12 bpm of spread around it — most of a
+zone — so anybody who has watched their own ceiling on a watch or in a test has
+better information than their birthday gives. It matters more here than it
+would on a percent-of-max console: every Karvonen boundary is a share of
+`max − resting`, so a few beats on the maximum moves the whole ladder. For a
+43-year-old resting at 60, Tanaka's 178 gives 119/131/143/154/166 and a
+measured 175 gives 118/129/141/152/164.
+
+Stored as 0 for "use the formula" rather than as a copy of the formula's
+answer, so an override stays distinguishable from a coincidence and so the
+zones keep following a birthday as the walker ages. That is the same mistake
+the plain `age` field made.
+
+`HrZones.MAX_RANGE = 120..220` decides what is believed; outside it the formula
+is used, the same way an implausible resting rate is disbelieved. **An override
+works with no age at all**, which looks like a hole in "no age means no zones"
+and is not one: that rule exists so the console never invents a number, and a
+measured ceiling is the opposite of invented.
+
 **Zone 0** is everything below the bottom of zone 1 — warm-up, cool-down,
-standing on the rail. Counted separately so it cannot inflate zone 1.
+standing on the rail. Counted separately so it cannot inflate zone 1. On the
+live graph it is a **grey field at the foot of the plot** rather than a sixth
+hairline: it is the one zone with no boundary beneath it, so there is no line
+to draw, and it reaches down as far as a heart does. The field is present
+whether or not the walk went there — `zeroBand`, 10 bpm minimum — because a
+band that only appears once somebody's pulse falls is a new stripe arriving at
+exactly the moment nobody is looking for an explanation. `floors[0]` is where
+the walker's range *starts* and is not a boundary: the HUD draws zone 0 as
+"under 119 bpm" rather than "60–118", because a pulse of 45 is zone 0 too.
 
 **`zoneOf()` returns −1 for "no reading", never 0.** This is the single most
 important invariant in the file and there is a test named after it. Zero is a
@@ -559,6 +590,48 @@ watch:
 
 Net effect on the boundaries: ~7px apart to ~16px.
 
+3. **The grey zone 0, and a max-HR override — after one wrong turn.** The owner
+   said the resting band ran from 60 to over 100 and that they wanted it to
+   stop around 87 with low intensity running 87 to 105. Those are their watch's
+   percent-of-max numbers, so percent-of-max was built, deployed and shown.
+
+   **That was a misreading and it was reverted.** What they wanted was
+   Karvonen kept, a grey zone 0 covering everything below zone 1's floor, and a
+   **max-HR override** so the ladder can be tuned to their own body. The lesson
+   is the cheap one: a request phrased as two bpm numbers was read as a request
+   for the model that produces those numbers, when it was a request about the
+   drawing plus a control. Four questions up front changed the shape of this
+   whole feature — see the working agreement — and one would have saved a
+   revert here.
+
+   `b19775c` and `b2223a1` were dropped with `git reset --hard 298af02` and are
+   still in the reflog if anything in them is ever wanted. Two things were
+   salvaged from them because they are independent of the zone model:
+
+   * **The BPM box was reading a zone it derived itself.** It coloured its
+     border from `STRIDE.zoneColour(pulse, floors)` while the legend beside it
+     read the frame's `zone` — two answers to one question, from two copies of
+     the same arithmetic. A test frame carrying a pulse of 148 with zone 3
+     stamped on it painted the box orange under a caption reading Aerobic,
+     which is how it was found. The box reads the frame now, and that
+     inconsistent frame is kept as a check. Phase 3 steers the belt off the
+     same field.
+   * A test naming the fact that a pulse **under** `floors[0]` is still zone 0
+     and not unknown, which is what the grey field depends on.
+
+   What was then built: the grey zone-0 field (see **The model**), the override
+   (ditto), and the HUD drawing both open-ended zones as open-ended — "under
+   119 bpm" at the bottom and "166+ bpm" at the top.
+
+   **Found on the console while testing the override:** three taps on − landed
+   as one. Its `onChange` called `drawPeople()` as well as `drawZones()`, which
+   rebuilds the pane and replaces the stepper's own buttons mid-press, so taps
+   two and three hit DOM that had just been thrown away. The birthday picker
+   does call `drawPeople` — an age is printed on the cards — but a maximum is
+   not, and the resting rate beside it never did. Only reachable by pressing
+   the same button three times quickly, which is exactly how somebody adjusts a
+   number by three.
+
 Verified on the console by sampling the framebuffer rather than by eye — the
 line came back grey `#7e8b95`, then blue `#5a9ae0`, then green, yellow, orange
 and red, in that order, with the palette values exact where the line is flat
@@ -692,15 +765,24 @@ drop the `CSS_KNOWN` entry in `tools/uitest/es.js`.
 
 Not blocking, but worth asking when they come up.
 
-1. **Does Tanaka match their own device?** Their Galaxy Watch7 reports a max of
-   **175**; Tanaka gives **178** at 43. Their watch's zone bands (from the
-   screenshot they supplied: Z5 158–175, Z4 141–157, Z3 123–140, Z2 106–122,
-   Z1 87–105) are **percent-of-max**, not Karvonen, so the console will now
-   read materially higher than their watch at every boundary. Worth confirming
-   that is what they want before Phase 3 drives a belt at those numbers. A
-   manual max-HR override was offered in Phase 1 and they chose "replace
-   globally" without it — it may be worth re-offering once they have compared
-   the two on a real walk.
+1. **Does Tanaka match their own device?** *Answered, and the answer is a
+   control rather than a formula change.* Their Galaxy Watch7 measures a max of
+   **175** from real workout data; Tanaka gives **178** at 43. Phase 2 added a
+   per-person override for exactly this — Settings → Who walks → Maximum heart
+   rate — so the walker can put their own number in and the Karvonen ladder
+   follows it.
+
+   **Their watch's bands are percent-of-max and this console's are Karvonen,
+   and that difference is settled and deliberate.** The watch draws Z1 87–105
+   on a maximum of 175; Karvonen on a reserve of 115 draws Z1 118–128. The two
+   will not agree at any maximum, because they are not the same model. The
+   owner was asked, in effect, on 21 September 2026 — a percent-of-max console
+   was built, shown, and rejected — and they want the reserve. Nothing is open
+   here any more; it is recorded so it is not reopened by whoever notices the
+   console and the watch disagreeing.
+
+   The override is still worth setting before Phase 3 drives a belt, since it
+   moves all five boundaries.
 2. **What does the coach say while the loop is driving?** Phase 3 question.
 3. **Should the HR trace ever be persisted?** They chose in-memory-only for
    now. Phase 5 may make a trend view tempting; it would need downsampling and
