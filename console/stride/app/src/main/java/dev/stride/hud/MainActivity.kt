@@ -860,6 +860,22 @@ class MainActivity : Activity() {
     @Volatile private var lastZoneAt = 0L
 
     /**
+     * Heart rate and pace over the walk so far, for the live graph and the
+     * summary's line.
+     *
+     * Downsamples as it fills — see [HrTrace] — because the poll loop makes
+     * 18 000 readings in an hour and the strip they are drawn into is 1210
+     * pixels wide. Read by the page through [Bridge.hrTrace] rather than sent
+     * on every [Snapshot]: the frame goes out five times a second and a few
+     * kilobytes of trace on each of them would be the largest thing crossing
+     * the bridge, to redraw a line that only moves once every five seconds.
+     *
+     * In memory and for this walk only, by the owner's choice. Cleared in
+     * [resetSession].
+     */
+    private val walkTrace = HrTrace()
+
+    /**
      * Metres climbed, integrated as the walk goes.
      *
      * The HUD has always computed this in the page (see profile() in
@@ -1445,6 +1461,39 @@ class MainActivity : Activity() {
             // Zones built on an age nobody gave. Draw them, and say so.
             .put("assumed", guestAgeAssumed)
             .toString()
+
+        /**
+         * The walk's heart rate and pace so far, as points a graph can draw:
+         * `{"bucket":5,"samples":[[elapsedSec, bpm, kph], ...]}`.
+         *
+         * Asked for rather than pushed. The [Snapshot] goes out five times a
+         * second and the trace only gains a point every [HrTrace.bucketSec],
+         * so sending it on the frame would make the largest thing crossing the
+         * bridge the one thing that had not changed. The page pulls it once a
+         * second instead.
+         *
+         * A `bpm` of 0 is a gap and not a beat — the strap was off or the
+         * board's grip field was reading its usual nothing. Whatever draws
+         * this has to break the line there rather than joining across it.
+         *
+         * `bucket` is how much walk each point covers. It starts at five
+         * seconds and doubles as the walk outgrows the buffer, which is worth
+         * knowing for anything that wants to say what it is showing.
+         */
+        @JavascriptInterface fun hrTrace(): String {
+            val pts = JSONArray()
+            for (s in walkTrace.samples()) {
+                pts.put(JSONArray().apply {
+                    put(Math.round(s.at * 10.0) / 10.0)
+                    put(s.bpm)
+                    put(Math.round(s.kph * 10.0) / 10.0)
+                })
+            }
+            return JSONObject()
+                .put("bucket", walkTrace.bucketSec)
+                .put("samples", pts)
+                .toString()
+        }
 
         /** "I've put the key back." If it is still out, the next poll re-raises. */
         @JavascriptInterface fun ackDmk() {
@@ -2747,6 +2796,7 @@ class MainActivity : Activity() {
         pulseSamples = 0
         zoneSecs.fill(0.0)
         lastZoneAt = 0L
+        walkTrace.clear()
         climbM = 0.0
         lastClimbMetres = 0.0
         earned = emptyList()
@@ -3408,6 +3458,13 @@ class MainActivity : Activity() {
             }
             lastClimbMetres = sessionDistance
 
+            // Outside the `pulse > 0` branch below on purpose: a dropout is
+            // part of the trace. The buffer records the gap as a zero and the
+            // renderer breaks the line over it, which is the honest picture of
+            // a strap that came off mid-walk — drawing straight through it
+            // would invent the beats nobody measured.
+            walkTrace.add(elapsedSec(), pulse, speed)
+
             // Zero is "no reading", never "no pulse" — see pulseNow.
             if (pulse > 0) {
                 if (pulse > maxPulse) maxPulse = pulse
@@ -3458,6 +3515,13 @@ class MainActivity : Activity() {
         }
         val step = currentStep()
 
+        // One answer to "which zone is this", computed where the floors are
+        // cached and sent down, rather than five interfaces each dividing a
+        // pulse by a maximum. -1 when the strap said nothing, and band() hands
+        // back null for that rather than a band of zeros.
+        val zoneNow = HrZones.zoneOf(pulse, walkerZoneFloors)
+        val bandNow = HrZones.band(zoneNow, walkerZoneFloors, walkerAge)
+
         return Snapshot(
             speed = speed,
             beltKph = beltKph,
@@ -3493,6 +3557,10 @@ class MainActivity : Activity() {
             hrMax = walkerHrMax,
             zoneSecs = if (walkerHrMax > 0) zoneSecs.map { Math.round(it).toInt() }
                        else emptyList(),
+            zone = zoneNow,
+            zoneFloors = walkerZoneFloors.toList(),
+            zoneFrom = bandNow?.first ?: 0,
+            zoneTo = bandNow?.last ?: 0,
             achievements = earned,
             who = walker,
             whoId = cfg.person(walker)?.id ?: "",

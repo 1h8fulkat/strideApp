@@ -589,6 +589,172 @@ JSDOM.fromFile(path, {
       ? '!still up on the summary' : 'gone';
   });
 
+  /* ---- heart-rate zones on the HUD --------------------------------------
+     Jeff's real numbers, off the console as configured: born 1983, resting
+     60, so Tanaka gives a maximum of 178 and Karvonen puts the floors at
+     119/131/143/154/166. Using the live fixture rather than round numbers
+     means a boundary that moves shows up here as well as in the arithmetic
+     tests, and means these assertions can be read against the table in
+     claudeDesign/HEART_RATE_ZONES.md. */
+  const FLOORS = [60, 119, 131, 143, 154, 166];
+  const HRMAX = 178;
+  const hrFrame = (pulse, zone, secs) => ({
+    mode: 'running', units: 'km', speed: 6.0, incline: 1, distance: 1200,
+    elapsed: secs == null ? 600 : secs, calories: 90, fan: 0, dmk: false,
+    segments: 0, pulse: pulse, hrMax: HRMAX, zoneFloors: FLOORS, zone: zone,
+    zoneFrom: zone > 0 ? FLOORS[zone] : 0,
+    zoneTo: zone > 0 ? (zone >= 5 ? HRMAX : FLOORS[zone + 1] - 1) : 0
+  });
+  /* jsdom normalises a hex colour to rgb() on the way into a style property,
+     so the expectation has to be converted rather than compared as written. */
+  const rgb = h => 'rgb(' + [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16)).join(', ') + ')';
+
+  w.render(hrFrame(148, 3));
+  check('the trace band appears once there are zones to draw', () =>
+    w.document.getElementById('hrg').classList.contains('on')
+      ? 'up' : '!no band with floors on the frame');
+  check('the caption names the zone and its band', () => {
+    const t = w.document.getElementById('hrgZone').textContent;
+    return /Zone 3/.test(t) && /Aerobic/.test(t) && /143/.test(t) && /153/.test(t)
+      ? t : '!caption reads "' + t + '"';
+  });
+  /* People pass their formula maximum routinely, so the top band is drawn as
+     open-ended rather than as a ceiling somebody has broken. */
+  check('zone 5 is drawn open-ended, not capped at the formula maximum', () => {
+    w.render(hrFrame(171, 5, 601));
+    const t = w.document.getElementById('hrgZone').textContent;
+    return /166\+/.test(t) ? t : '!caption reads "' + t + '"';
+  });
+  check('the BPM box takes the colour of the zone it is in', () => {
+    w.render(hrFrame(148, 3, 602));
+    const got = w.document.getElementById('pulseBox').style.borderColor;
+    return got === rgb(w.STRIDE.ZONES[3].colour) ? got
+      : '!border is ' + got + ', wanted ' + rgb(w.STRIDE.ZONES[3].colour);
+  });
+  /* The distinction the whole feature rests on, at the place a walker sees
+     it. A pulse of 0 is the strap saying nothing; painting the box the zone 0
+     grey would draw a disconnected strap as a resting heart. */
+  check('and loses it when the strap drops out, rather than going grey', () => {
+    w.render(hrFrame(0, -1, 603));
+    const got = w.document.getElementById('pulseBox').style.borderColor;
+    return got === 'transparent' ? got
+      : '!border is ' + got + ', wanted transparent';
+  });
+  check('and the caption says there is no reading rather than naming a zone', () => {
+    const t = w.document.getElementById('hrgZone').textContent;
+    return /waiting/i.test(t) && !/Zone \d/.test(t) ? t : '!caption reads "' + t + '"';
+  });
+  /* The coach owns that band when it speaks. Found on the console: the
+     ribbon's background is rgba(...,.96), deliberately short of opaque so a
+     ghost of the walk shows through it, and with the trace behind it an
+     uppercase "ZONE 4 · ANAEROBIC · 154–165 BPM" and a heart-rate line came
+     through the middle of the coach's sentence. */
+  check('the trace yields the band to the coach, rather than being ghosted by it', () => {
+    w.render(hrFrame(148, 3, 610));
+    const before = w.document.getElementById('hrg').classList.contains('on');
+    w.coach({ line: 'That climb put you in zone four — ease off at the top.' });
+    w.render(hrFrame(148, 3, 611));
+    const during = w.document.getElementById('hrg').classList.contains('on');
+    w.document.getElementById('coach').classList.remove('show');
+    w.render(hrFrame(148, 3, 612));
+    const after = w.document.getElementById('hrg').classList.contains('on');
+    return before && !during && after ? 'up, away for the coach, back after'
+      : '!before=' + before + ' during=' + during + ' after=' + after;
+  });
+
+  /* No age is no zones. Not default ones, and not a grey graph either. */
+  check('no floors means no band and no colour at all', () => {
+    w.render({ ...hrFrame(148, -1, 604), zoneFloors: [], hrMax: 0, zone: -1 });
+    const shown = w.document.getElementById('hrg').classList.contains('on');
+    const border = w.document.getElementById('pulseBox').style.borderColor;
+    return !shown && border === 'transparent' ? 'hidden, box uncoloured'
+      : '!band shown=' + shown + ' border=' + border;
+  });
+
+  /* ---- the renderer itself ----------------------------------------------
+     A canvas that draws nothing can still be asked what it drew, which is
+     what hrGraph's return value is for. */
+  check('the line is split at the boundary, not at the sample', () => {
+    /* One minute, 100 bpm to 170. Five boundaries lie strictly between, so
+       six pieces come out of one segment — and each split has to sit at the
+       bpm of the boundary, at the time the line actually reaches it. */
+    const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
+      [[0, 100, 5], [60, 170, 5]], { floors: FLOORS, max: HRMAX });
+    if (g.drawn !== 6) return '!drew ' + g.drawn + ' pieces, expected 6';
+    const at = g.splits.map(s => s[1]).join(',');
+    if (at !== '119,131,143,154,166') return '!split at ' + at;
+    // 119 is 19 of the 70 bpm climbed, so it is reached 16.3 s in.
+    const t = g.splits[0][0];
+    return Math.abs(t - 16.29) < 0.05
+      ? 'six pieces, first crossing at ' + t.toFixed(2) + 's'
+      : '!first crossing at ' + t.toFixed(2) + 's, expected 16.29';
+  });
+  check('each piece is drawn in the zone it is actually in', () => {
+    const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
+      [[0, 100, 5], [60, 170, 5]], { floors: FLOORS, max: HRMAX });
+    return g.zones.join(',') === '1,1,1,1,1,1'
+      ? 'one piece per zone' : '!pieces per zone: ' + g.zones.join(',');
+  });
+  check('a line inside one zone is one piece', () => {
+    const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
+      [[0, 135, 5], [30, 140, 5]], { floors: FLOORS, max: HRMAX });
+    return g.drawn === 1 && g.splits.length === 0 && g.zones[2] === 1
+      ? 'one piece in zone 2' : '!drawn=' + g.drawn + ' zones=' + g.zones.join(',');
+  });
+  /* A dropout is a hole in the trace, not a dive to zero. Joining across it
+     draws beats nobody measured, in a shape that looks deliberate. */
+  check('a dropout breaks the line instead of drawing through it', () => {
+    const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
+      [[0, 140, 5], [5, 0, 5], [10, 0, 5], [15, 138, 5]],
+      { floors: FLOORS, max: HRMAX });
+    return g.drawn === 0 && g.gaps === 3
+      ? 'three gaps, nothing drawn across them'
+      : '!drawn=' + g.drawn + ' gaps=' + g.gaps;
+  });
+  check('the head sits on the last real reading, not on the dropout', () => {
+    const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
+      [[0, 140, 5], [5, 152, 5], [10, 0, 5]], { floors: FLOORS, max: HRMAX });
+    return g.head && g.head[1] === 152 ? 'head at ' + g.head[1] + ' bpm'
+      : '!head at ' + (g.head ? g.head[1] : 'nothing');
+  });
+  check('a pulse above the formula maximum is drawn, not clipped to it', () => {
+    const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
+      [[0, 170, 5], [30, 191, 5]], { floors: FLOORS, max: HRMAX });
+    return g.hi >= 191 ? 'range tops out at ' + g.hi
+      : '!range tops out at ' + g.hi + ', below the 191 that was read';
+  });
+  check('no floors draws nothing rather than guessing a ladder', () => {
+    const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
+      [[0, 140, 5], [30, 150, 5]], { floors: [] });
+    return g.drawn === 0 ? 'nothing drawn' : '!drew ' + g.drawn + ' pieces';
+  });
+  /* The axis fills in rather than stretching: a trace a minute old drawn
+     across the full width reads as a walk that is over. */
+  check('a young trace fills the width in rather than stretching to it', () => {
+    const g = w.STRIDE.hrGraph(w.document.getElementById('hrgCanvas'),
+      [[0, 140, 5], [45, 150, 5]], { floors: FLOORS, max: HRMAX });
+    return g.span === 300 ? 'span held at ' + g.span + 's'
+      : '!span ' + g.span + 's after 45s of walk';
+  });
+
+  /* And the shared state the other four interfaces will read in Phase 6. The
+     `|| -1` trap is the reason this is checked: zone 0 is a real answer. */
+  check('stride-core keeps zone 0 apart from no reading at all', () => {
+    const resting = w.STRIDE.adapt(hrFrame(105, 0)).session;
+    const none = w.STRIDE.adapt(hrFrame(0, -1)).session;
+    const absent = w.STRIDE.adapt({ mode: 'running', units: 'km' }).session;
+    return resting.zone === 0 && none.zone === -1 && absent.zone === -1 &&
+           resting.zoneFloors.length === 6 && absent.zoneFloors.length === 0
+      ? 'zone 0 stayed 0, no reading stayed -1'
+      : '!resting=' + resting.zone + ' none=' + none.zone + ' absent=' + absent.zone;
+  });
+  check('and carries the band in force', () => {
+    const b = w.STRIDE.adapt(hrFrame(148, 3)).session.zoneBand;
+    return b.from === 143 && b.to === 153 ? b.from + '-' + b.to
+      : '!band ' + b.from + '-' + b.to;
+  });
+  w.STRIDE.resetDerived();
+
   if (errors.length) { console.log('\nUNCAUGHT:'); errors.forEach(e=>console.log('  '+e)); }
   console.log(fails.length || errors.length ? '\nFAILURES: ' + (fails.join(', ') || '(uncaught errors)') : '\nall checks passed');
   process.exit(fails.length || errors.length ? 1 : 0);

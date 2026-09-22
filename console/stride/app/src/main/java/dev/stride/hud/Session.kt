@@ -165,6 +165,38 @@ data class Snapshot(
      */
     val zoneSecs: List<Int> = emptyList(),
     /**
+     * Which zone [pulse] is in right now, or **-1 when there is no reading**.
+     *
+     * -1 and not 0, and the distinction is the one [HrZones.zoneOf] exists to
+     * keep: zone 0 is a real answer meaning "below the bottom of zone 1", and
+     * a pulse of 0 is the strap saying nothing. Sent rather than derived on
+     * the page so that the HUD, the summary and — from Phase 3 — the loop that
+     * drives the belt are all reading one answer computed in one place. The
+     * page has the arithmetic too, and uses it for the people it is not
+     * walking with; for the walker in front of it, this is the number.
+     */
+    val zone: Int = -1,
+    /**
+     * The bpm each zone starts at, indexed 0-5, or empty when the walker has
+     * no age to build them on.
+     *
+     * The whole ladder rather than the one zone, because the live graph draws
+     * every boundary it crosses and the colour has to change at the crossing
+     * point, not at the sample after it. Empty is the page's signal to draw
+     * the HUD with no zone colouring at all — see [hrMax].
+     */
+    val zoneFloors: List<Int> = emptyList(),
+    /**
+     * The band [zone] occupies, in bpm. Both 0 when there is no reading.
+     *
+     * [zoneTo] is [hrMax] for zone 5, which is the one boundary that is a
+     * promise rather than a threshold — people go past their formula maximum
+     * routinely, and a reading above it is a reading. Anything drawing the top
+     * band should treat it as open-ended.
+     */
+    val zoneFrom: Int = 0,
+    val zoneTo: Int = 0,
+    /**
      * What this walk did that previous walks did not — see History.
      *
      * Computed once, when the belt stops, against this walker's own recorded
@@ -314,6 +346,10 @@ data class Snapshot(
         append("\"maxPulse\":$maxPulse,")
         append("\"hrMax\":$hrMax,")
         append("\"zoneSecs\":${zoneSecs.joinToString(",", "[", "]")},")
+        append("\"zone\":$zone,")
+        append("\"zoneFloors\":${zoneFloors.joinToString(",", "[", "]")},")
+        append("\"zoneFrom\":$zoneFrom,")
+        append("\"zoneTo\":$zoneTo,")
         append("\"achievements\":${
             achievements.joinToString(",", "[", "]") { "\"${esc(it)}\"" }
         },")

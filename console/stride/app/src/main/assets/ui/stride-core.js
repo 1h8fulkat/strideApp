@@ -768,6 +768,26 @@ function adapt(raw) {
                    when there is no maximum to divide by. */
                 zones: raw.zoneSecs || [],
 
+                /* Which zone the walker is in right now, and the bpm ladder
+                   behind the answer.
+
+                   `zone` is **-1 for "no reading"**, and the explicit null
+                   check is the whole reason this is three lines rather than
+                   `raw.zone || -1`: zone 0 is a real answer meaning "below
+                   the bottom of zone 1", and `||` would quietly turn it into
+                   the no-reading case. See HrZones.zoneOf, which has a test
+                   named after this.
+
+                   `zoneFloors` is the ladder — every boundary, not just the
+                   one in force — because a line coloured by zone has to know
+                   where it crosses. Empty when the walker has no age. */
+                zone: raw.zone == null ? -1 : raw.zone,
+                zoneFloors: raw.zoneFloors || [],
+                /* The band in force, bpm. Both 0 when there is no reading, and
+                   `to` is the formula maximum in zone 5 — which people go
+                   past, so draw that one as open-ended. */
+                zoneBand: { from: raw.zoneFrom || 0, to: raw.zoneTo || 0 },
+
                 /* Filled once, when the belt stops. See History.kt. */
                 achievements: raw.achievements || [] },
 
@@ -979,6 +999,177 @@ function zoneRows(zones) {
   if (!total) return [];
   for (i = 0; i < rows.length; i++) rows[i].share = rows[i].secs / total;
   return rows;
+}
+
+/**
+ * Draw a heart-rate trace, coloured by the zone it is in.
+ *
+ * Shared because five interfaces want the same line and the four ports in
+ * Phase 6 should be thin. Canvas rather than SVG: profile() and the shape
+ * sparklines in this project already draw to canvas, a trace is a few hundred
+ * segments that change once a second, and building that many SVG nodes five
+ * times a second on Chromium 51 is not a thing to find out about on a
+ * treadmill.
+ *
+ * **The colour changes at the crossing, not at the sample.** A segment that
+ * spans a boundary is split where it crosses it and each piece is drawn in its
+ * own colour. Painting the whole segment in its endpoint's colour would put
+ * the change up to a bucket late — five seconds of the wrong zone, which on a
+ * five-second bucket is the entire point of the graph.
+ *
+ * **A bpm of 0 is a gap.** The line breaks over it rather than joining across
+ * it. Drawing through a dropout invents the beats nobody measured, and the
+ * shape it invents is a smooth one.
+ *
+ * Colours come from ZONES, which every theme shares — a glance at a zone means
+ * the same thing on all five. Everything else about the look is the caller's:
+ * pass `bands:false` for a bare line, `width` for the stroke, `head:false` to
+ * drop the dot on the end.
+ *
+ * @param cv       a <canvas>; its width and height attributes are the pixels
+ * @param samples  [[elapsedSec, bpm, kph], ...] — Stride.hrTrace()'s shape
+ * @param opts     { floors, max, span, minSpan, bands, bandAlpha, width, head }
+ * @return what was drawn — the bpm range, the time span, how many pieces and
+ *         gaps, and the bpm/second of every split. Nothing on the page needs
+ *         it; it is how the headless suite sees a canvas that draws nothing.
+ */
+function hrGraph(cv, samples, opts) {
+  opts = opts || {};
+  var out = { lo: 0, hi: 0, span: 0, drawn: 0, gaps: 0, splits: [], zones: [],
+              head: null };
+  var z, i;
+  for (z = 0; z < ZONES.length; z++) out.zones.push(0);
+
+  if (!cv || !cv.getContext) return out;
+  var c = cv.getContext('2d');
+  if (!c) return out;
+  var W = cv.width || 0, H = cv.height || 0;
+  c.clearRect(0, 0, W, H);
+
+  var floors = opts.floors || [];
+  samples = samples || [];
+  // No floors is no zones is nothing to draw. The caller shows something that
+  // needs nobody's age instead — it does not get a grey line by default.
+  if (!W || !H || floors.length < ZONES.length) return out;
+
+  /* The vertical range starts at the zones and is widened by the walk, so the
+     ladder is always fully in frame and a pulse above the formula maximum —
+     which happens, routinely — is still drawn rather than clipped to it. */
+  var lo = floors[1], hi = opts.max || floors[ZONES.length - 1];
+  var b;
+  for (i = 0; i < samples.length; i++) {
+    b = samples[i][1];
+    if (b > 0) { if (b < lo) lo = b; if (b > hi) hi = b; }
+  }
+  lo -= 4; hi += 4;
+  if (hi - lo < 20) hi = lo + 20;
+
+  /* The axis does not stretch to fit two points. A trace one minute old drawn
+     across the full width says the walk is over; it fills in instead, and only
+     starts compressing once it is longer than `minSpan`. */
+  var last = samples.length ? samples[samples.length - 1][0] : 0;
+  var span = Math.max(opts.span || 0, last, opts.minSpan == null ? 300 : opts.minSpan);
+
+  /* Inset both ways by the head dot's radius. Without it the dot on the end
+     of the line is drawn centred on x=W and the container clips half of it —
+     which on the console reads as the trace running off the edge of its own
+     box, and the first sample loses the same half at the other end. */
+  var PAD = 5;
+  function xAt(t) {
+    return PAD + Math.max(0, Math.min(1, t / span)) * (W - 2 * PAD);
+  }
+  function yAt(v) { return H - PAD - (v - lo) / (hi - lo) * (H - 2 * PAD); }
+
+  out.lo = lo; out.hi = hi; out.span = span;
+
+  /* The ladder behind the line: a hairline where each zone starts, in the
+     colour of the zone that starts there.
+
+     Rules and not filled bands, and that was decided on the machine. Five
+     translucent fills over a 56px strip do not read as five zones — they read
+     as one vertical gradient, and a muddy one, and they compete with the line
+     that is carrying the same information in a form you can actually see.
+     `bands:true` fills as well, for whatever draws this tall enough for the
+     fills to separate — the summary's plot in Phase 5 is the candidate. */
+  if (opts.rules !== false || opts.bands) {
+    for (z = 1; z < ZONES.length; z++) {
+      if (floors[z] <= lo || floors[z] >= hi) continue;
+      var yz = yAt(floors[z]);
+      if (opts.bands) {
+        var top = z + 1 < ZONES.length ? Math.min(floors[z + 1], hi) : hi;
+        c.globalAlpha = opts.bandAlpha == null ? 0.17 : opts.bandAlpha;
+        c.fillStyle = ZONES[z].colour;
+        c.fillRect(0, yAt(top), W, yz - yAt(top));
+        c.globalAlpha = 1;
+      }
+      if (opts.rules !== false) {
+        c.globalAlpha = opts.ruleAlpha == null ? 0.45 : opts.ruleAlpha;
+        c.fillStyle = ZONES[z].colour;
+        c.fillRect(0, yz, W, 1);
+        c.globalAlpha = 1;
+      }
+    }
+  }
+
+  c.lineWidth = opts.width || 3;
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+
+  function piece(t0, b0, t1, b1, zone) {
+    c.beginPath();
+    c.moveTo(xAt(t0), yAt(b0));
+    c.lineTo(xAt(t1), yAt(b1));
+    c.strokeStyle = ZONES[zone].colour;
+    c.stroke();
+    out.drawn++;
+    out.zones[zone]++;
+  }
+
+  for (i = 1; i < samples.length; i++) {
+    var t0 = samples[i - 1][0], b0 = samples[i - 1][1];
+    var t1 = samples[i][0], b1 = samples[i][1];
+    if (b0 <= 0 || b1 <= 0) { out.gaps++; continue; }
+
+    /* Every boundary strictly between the two readings. Strictly, because a
+       boundary landing exactly on a sample is already the join between two
+       segments — cutting there as well produces a piece of zero length. */
+    var cuts = [];
+    var bLo = Math.min(b0, b1), bHi = Math.max(b0, b1);
+    for (z = 1; z < ZONES.length; z++) {
+      if (floors[z] > bLo && floors[z] < bHi) cuts.push(floors[z]);
+    }
+    cuts.sort(b1 >= b0 ? function (p, q) { return p - q; }
+                       : function (p, q) { return q - p; });
+
+    var prev = 0, k, f, mid;
+    for (k = 0; k <= cuts.length; k++) {
+      f = k < cuts.length ? (cuts[k] - b0) / (b1 - b0) : 1;
+      /* The zone of the midpoint, rather than of either end. An end sits on a
+         boundary by construction and `>=` would give it to whichever side the
+         rounding fell; the middle of a piece is unambiguously inside one
+         zone. zoneOf never returns -1 here — both readings are above zero. */
+      mid = b0 + (b1 - b0) * (prev + f) / 2;
+      piece(t0 + (t1 - t0) * prev, b0 + (b1 - b0) * prev,
+            t0 + (t1 - t0) * f,    b0 + (b1 - b0) * f,
+            zoneOf(mid, floors));
+      if (k < cuts.length) out.splits.push([t0 + (t1 - t0) * f, cuts[k]]);
+      prev = f;
+    }
+  }
+
+  /* Where the walker is now. Searched backwards for the last real reading, so
+     a strap that dropped out ten seconds ago leaves the dot at the last beat
+     that was actually measured rather than at zero. */
+  for (i = samples.length - 1; i >= 0; i--) {
+    if (samples[i][1] > 0) { out.head = samples[i]; break; }
+  }
+  if (out.head && opts.head !== false) {
+    c.beginPath();
+    c.arc(xAt(out.head[0]), yAt(out.head[1]), opts.headRadius || 4.5, 0, Math.PI * 2);
+    c.fillStyle = zoneColour(out.head[1], floors) || ZONES[0].colour;
+    c.fill();
+  }
+  return out;
 }
 
 /**
@@ -1772,6 +1963,24 @@ function stub() {
     });
   };
 
+  /* A pretend heart-rate trace, so the live graph and — from Phase 5 — the
+     summary's line can be drawn and reviewed in a browser. The console never
+     takes this branch: it has a bridge, and a walk of its own.
+
+     Shaped like a walk rather than like a sine wave. It climbs out of the
+     warm-up, works over a couple of hills, and loses the strap for a minute
+     in the middle, because a trace with no gap in it never gets its gap
+     drawn and the broken line is the part most easily got wrong. */
+  s.hrTrace = function () {
+    var out = [], t, bpm;
+    for (t = 0; t <= 1800; t += 5) {
+      bpm = Math.round(104 + 30 * Math.sin(t / 250) + 12 * Math.sin(t / 43) + t / 110);
+      out.push([t, (t > 700 && t < 760) ? 0 : bpm,
+                Math.round((5.4 + 1.1 * Math.sin(t / 300)) * 10) / 10]);
+    }
+    return JSON.stringify({ bucket: 5, samples: out });
+  };
+
   var pretendUi = 'original';
   s.currentUi = function () { return pretendUi; };
   s.availableUis = function () {
@@ -2230,6 +2439,7 @@ global.STRIDE = {
   zoneFloorsFor: zoneFloorsFor,
   zoneOf: zoneOf,
   zoneColour: zoneColour,
+  hrGraph: hrGraph,
   vo2max: vo2max,
   beatStyle: beatStyle,
 

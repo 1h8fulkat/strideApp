@@ -26,7 +26,8 @@
        58 – 142   header      pause and cool down in the corners, the four
                               numbers between them
       172 – 576   hero        oval track, path ahead, or phase countdown
-      588 – 668   coach       docked ribbon; empty space when nothing is said
+      588 – 668   coach       the heart-rate trace, with the docked coach
+                              ribbon and the fan menu both over the top of it
       684 – 760   controls    incline pair · fan · speed pair
 
    Two rules hold this shape together, and both were paid for:
@@ -298,7 +299,17 @@ body::before{
   font-size:13px;letter-spacing:.2em;text-transform:uppercase;
   color:var(--ink-faint);margin-bottom:6px;
 }
-.metric .v{font-size:42px;font-weight:300;font-variant-numeric:tabular-nums}
+/* The border is on all four, transparent, and only the heart rate ever gets a
+   colour in it. `align-items:center` centres each column against its own
+   height, so giving the border to one box alone would drop that column's
+   label four pixels below the other three — a row that only looks crooked
+   once the strap connects. 21px of label plus 48 of number plus this comes to
+   75, inside the band's 84. */
+.metric .v{
+  font-size:42px;font-weight:300;font-variant-numeric:tabular-nums;
+  border:2px solid transparent;border-radius:16px;padding:1px 16px;
+  transition:border-color .3s;
+}
 .metric .v small{font-size:17px;color:var(--ink-dim);margin-left:4px}
 
 /* ---- controls -----------------------------------------------------------
@@ -493,6 +504,59 @@ button.pulse{animation:pulse .9s ease-out 2}
   position:absolute;top:0;right:0;width:180px;height:80px;
   color:var(--ink-faint);font-size:14px;line-height:80px;text-align:center;
   letter-spacing:.18em;text-transform:uppercase;
+}
+
+/* ---- the heart-rate trace ------------------------------------------------
+   The coach's band, on loan while the coach is quiet.
+
+   There is no spare band on this screen. The hero owns 172–576 and every
+   pixel of it is load-bearing — the oval's bottom arc reaches y=550, so a
+   strip laid under the track the way the elevation strip is laid under the
+   path would cross the ring. Below the hero there is exactly one box that is
+   empty most of the time, and this is it: 588–668, 80px, held open for a
+   ribbon that appears for a few seconds every few minutes.
+
+   So the band has two other tenants and an order of precedence. The fan menu
+   (z-index 45) lays over the trace while it is open, which is five buttons
+   over a line and reads fine — the plan allows it. The coach does not: its
+   ribbon is 96% opaque on purpose, and at that the caption and the line both
+   ghost through the sentence. The trace hides itself for the coach instead —
+   see renderZones. A sentence from the coach and a fan speed are each answers
+   to something the walker just did; the trace is there the rest of the time
+   and is back the moment they go.
+
+   Untouchable — `pointer-events:none` — for the same reason the metric strip
+   is: a positioned box late in the document wins the tap, and the coach's
+   Dismiss lives inside this rectangle.
+
+   The canvas starts 22px down so the zone caption has a row of its own.
+   Labels drawn over the line need a halo and get illegible against the red
+   band; a reserved strip needs neither. Its size is written out in pixels
+   here and in the width/height attributes, and the two have to agree: 1280
+   less 34 each side less the 1px border is 1210. */
+.hrg{
+  position:absolute;left:34px;right:34px;top:588px;height:80px;
+  background:rgba(8,17,44,.72);
+  border:1px solid rgba(57,224,255,.16);
+  border-radius:18px;
+  overflow:hidden;
+  display:none;
+  pointer-events:none;
+}
+.hrg.on{display:block}
+.hrg canvas{position:absolute;left:0;top:22px}
+.hrg .zn{
+  position:absolute;left:18px;top:4px;
+  font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--ink-dim);
+}
+.hrg .zn b{font-weight:600}
+/* Said out loud, because an assumed age is the one figure on this console
+   that nobody gave it. */
+.hrg .note{
+  position:absolute;right:18px;top:4px;
+  font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ink-faint);
 }
 
 /* ---- welcome sub-steps --------------------------------------------------
@@ -746,7 +810,9 @@ button.pulse{animation:pulse .9s ease-out 2}
     <div class="metric"><div class="k">Elapsed</div><div class="v" id="elapsed">0:00</div></div>
     <div class="metric"><div class="k">Distance</div><div class="v"><span id="distance">0</span><small id="distanceUnit">m</small></div></div>
     <div class="metric"><div class="k">Calories</div><div class="v"><span id="calories">0</span><small>kcal</small></div></div>
-    <div class="metric"><div class="k">Heart rate</div><div class="v"><span id="pulse">—</span><small>bpm</small></div></div>
+    <!-- The one box that takes a colour: its border is the zone the pulse is
+         in. Uncoloured when there is no reading — see renderZones(). -->
+    <div class="metric"><div class="k">Heart rate</div><div class="v" id="pulseBox"><span id="pulse">—</span><small>bpm</small></div></div>
   </div>
   <button class="act right stop" id="btnStop">COOL DOWN</button>
 
@@ -840,6 +906,18 @@ button.pulse{animation:pulse .9s ease-out 2}
       <div class="n" id="lap">0</div>
       <div class="cap" id="lapUnit">laps &middot; 400 m</div>
     </div>
+  </div>
+
+  <!-- The walk's heart rate so far, coloured by zone, in the band the coach
+       and the fan menu both overlay. Drawn by STRIDE.hrGraph from the trace
+       Kotlin keeps — see Bridge.hrTrace — so the four other interfaces get
+       the same line for the price of a canvas. Hidden outright when the
+       walker has no age: no zones, no graph, and the numbers above it still
+       say everything they always did. -->
+  <div class="hrg" id="hrg">
+    <div class="zn" id="hrgZone"></div>
+    <div class="note" id="hrgNote"></div>
+    <canvas id="hrgCanvas" width="1210" height="56"></canvas>
   </div>
 
   <!-- Each pair under the gauge it moves. -->
@@ -2168,6 +2246,81 @@ function applyUnits(imperial){
   $('lapUnit').textContent = imperial ? 'laps · 0.25 mi' : 'laps · 400 m';
 }
 
+/* --- heart-rate zones on the HUD -----------------------------------------
+   Three things: the zone the walker is in, the colour on the BPM box, and the
+   trace along the bottom.
+
+   All three read the *frame*. Kotlin sends `zone`, `zoneFloors` and the band
+   in force because it is the side with this walker's floors cached and the
+   side the belt will be steered from in Phase 3 — one answer to "which zone
+   is this", computed once. The page's own copy of the arithmetic
+   (zoneFloorsFor, zoneOf) is for the settings screen, which draws the zones
+   of whoever is being edited rather than of whoever is walking, and for a
+   desktop browser with no bridge behind it. It is not used here.
+
+   `assumed` is the one exception and comes from the bridge: it is not a
+   property of the walk but of how the age was arrived at. Fetched on the same
+   once-a-second tick as the trace. */
+let hrDrawnAt = -1, hrAssumed = false;
+
+function renderZones(s){
+  const floors = s.zoneFloors || [];
+  const zoned = floors.length > 5;
+
+  /* '' back from zoneColour means "no reading", and it must not become the
+     zone 0 grey — a strap that has dropped out is not a resting heart. The
+     box goes back to no colour at all rather than keeping the last zone it
+     saw: a border still glowing amber ten minutes after the strap came off is
+     the same lie as a heart that carries on beating. */
+  $('pulseBox').style.borderColor =
+    (zoned && STRIDE.zoneColour(s.pulse || 0, floors)) || 'transparent';
+
+  /* No floors is no age is no graph. The four numbers above it have never
+     needed one and still say everything they always did.
+
+     And the band goes when the coach speaks, rather than being covered by it.
+     The ribbon's background is rgba(...,.96) — deliberately just short of
+     opaque, so a faint ghost of the workout shows that the walk is still
+     there — and that was written when this band was empty. On the console on
+     21 September 2026 it put an uppercase "ZONE 4 · ANAEROBIC · 154–165 BPM"
+     and a heart-rate line through the middle of the coach's sentence, and the
+     caption read as a second line of coaching. The coach is the most
+     important thing on the screen for the nine seconds it is up. Checked
+     every frame rather than hooked onto window.coach, so the dismiss tap, the
+     timeout and showScreen clearing it all put the trace back for free. */
+  $('hrg').classList.toggle('on', zoned && !$('coach').classList.contains('show'));
+  if (!zoned){ hrDrawnAt = -1; return; }
+
+  const zone = s.zone == null ? -1 : s.zone;
+  const zn = $('hrgZone');
+  if (zone < 0){
+    zn.innerHTML = 'Heart rate · waiting for a reading';
+    zn.style.color = '';
+  } else {
+    /* Zone 5's top is the formula maximum, which people pass routinely, so it
+       is drawn open-ended rather than as a ceiling somebody has broken. */
+    const band = zone >= 5 ? (s.zoneFrom || 0) + '+'
+                           : (s.zoneFrom || 0) + '–' + (s.zoneTo || 0);
+    zn.innerHTML = 'Zone ' + zone + ' · <b>' + STRIDE.esc(STRIDE.ZONES[zone].name) +
+                   '</b> · ' + band + ' bpm';
+    zn.style.color = STRIDE.ZONES[zone].colour;
+  }
+
+  /* Once a second, off the session clock rather than the wall clock. The
+     trace gains a point every five seconds, so redrawing 1210×56 of canvas at
+     the full 5 Hz is four frames of work for a line that has not moved. Using
+     elapsed also means a walk starting over redraws on its first frame. */
+  const tick = Math.floor(s.elapsed || 0);
+  if (tick === hrDrawnAt) return;
+  hrDrawnAt = tick;
+
+  let trace = [];
+  try { trace = JSON.parse(Stride.hrTrace() || '{}').samples || []; } catch (e) {}
+  try { hrAssumed = !!JSON.parse(Stride.hrZones() || '{}').assumed; } catch (e) {}
+  $('hrgNote').textContent = hrAssumed ? 'zones assumed · no age given' : '';
+  STRIDE.hrGraph($('hrgCanvas'), trace, { floors: floors, max: s.hrMax || 0 });
+}
+
 window.render = function(s){
   const imperial = s.units === 'mi';
   applyUnits(imperial);
@@ -2197,6 +2350,7 @@ window.render = function(s){
   $('distance').textContent = displayDistance(s.distance == null ? 0 : s.distance, imperial);
   $('calories').textContent = nf(s.calories == null ? 0 : s.calories);
   $('pulse').textContent    = s.pulse ? s.pulse : '—';
+  renderZones(s);
 
   // 0..19 km/h and -3..+12 % mapped onto 10 ticks each
   ticks($('speedTicks'),   10, Math.round((s.speed == null ? 0 : s.speed) / 19 * 10));

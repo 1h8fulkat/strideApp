@@ -121,13 +121,21 @@ class Hud:
         return steps
 
     def push(self, **over):
+        # Jeff's real zones, off the console as configured: born 1983, resting
+        # 60, so Tanaka gives 178 and Karvonen puts the floors at
+        # 119/131/143/154/166. A pulse of 148 lands in zone 3, which is the
+        # frame worth screenshotting — a zone with a band on both sides of it.
+        # `pulse` used to be 0 here, which drew the HUD in its no-reading state
+        # and left the zone colouring and the trace out of every screenshot.
         s = {"speed": 6.2, "incline": 4.0, "targetSpeed": 6.2, "targetIncline": 4.0,
-             "distance": 1180, "elapsed": 640, "calories": 78, "pulse": 0, "fan": 0,
+             "distance": 1180, "elapsed": 640, "calories": 78, "pulse": 148, "fan": 0,
              "workout": "walk", "dmk": False, "ramping": "", "phaseLeft": 0,
              "boardMode": 2, "avgSpeed": 5.9, "maxSpeed": 6.8, "avgIncline": 2.4,
              "maxIncline": 6.0, "who": "Sam", "plan": "Rolling hills", "segment": 2,
              "segments": 9, "segmentLabel": "Hill one", "segmentLeft": 96,
-             "suggestPace": 6.4, "inclineAuto": True, "mode": "running"}
+             "suggestPace": 6.4, "inclineAuto": True, "mode": "running",
+             "hrMax": 178, "zoneFloors": [60, 119, 131, 143, 154, 166],
+             "zone": 3, "zoneFrom": 143, "zoneTo": 153}
         s.update(over)
         return self.ev(f"window._real({json.dumps(s)}); 'ok'")
 
