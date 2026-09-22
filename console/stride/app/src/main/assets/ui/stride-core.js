@@ -844,6 +844,100 @@ var ZONES = [
   { key: 'z5', name: 'Maximum',   from: 0.90, colour: '#d75d5d' }
 ];
 
+/* ---- the zone arithmetic, page side -------------------------------------
+   A deliberate second copy of HrZones.kt, and the comment is here so the next
+   person knows it is deliberate.
+
+   Kotlin computes the walker's floors once and sends them down, and for the
+   live HUD that is what gets used — `Stride.hrZones()`. Two things need the
+   arithmetic itself rather than one walker's answer:
+
+     * the settings screen, which draws the zones of whichever person is being
+       edited, and that person is usually not the one walking;
+     * every interface opened standalone in a desktop browser with no bridge
+       behind it, which is how these screens are actually developed.
+
+   The pair is pinned against each other by tools/uitest — the same handful of
+   ages and resting rates are asserted in HrZonesTest.kt and here, so the two
+   cannot drift apart quietly. If you change a boundary, change it in three
+   places and the test will tell you which one you forgot.
+   ------------------------------------------------------------------------ */
+
+var AGE_MIN = 13, AGE_MAX = 100;
+/* What the console proceeds on when the prompt is skipped. The population
+   middle, and the age at which Tanaka and the old 220-minus-age agree — so it
+   is the one age where using either formula is not a choice. Mirrors
+   HrZones.ASSUMED_AGE. */
+var ASSUMED_AGE = 40;
+var RHR_MIN = 30, RHR_MAX = 100;
+
+/* Tanaka, 208 - 0.7 x age. Was 220 - age, which nobody has ever found a study
+   for; the two differ by up to six beats at the ends of the range, which is
+   most of a zone. 0 when the age is one the formula does not mean anything
+   for — extrapolation dressed as physiology is the thing to avoid here. */
+function maxPulse(age) {
+  age = age || 0;
+  if (age < AGE_MIN || age > AGE_MAX) return 0;
+  return Math.round(208 - 0.7 * age);
+}
+
+/* The bpm each zone starts at, 0-5, or [] when there is no usable maximum.
+
+   Karvonen on the reserve when there is a believable resting rate, a flat
+   share of maximum when there is not. Index 0 is the bottom of the range, so
+   floors[z] is always "the lowest pulse that counts as zone z". */
+function zoneFloorsFor(age, restingHr) {
+  var max = maxPulse(age);
+  if (!max) return [];
+  var rhr = restingHr || 0;
+  var karvonen = rhr >= RHR_MIN && rhr <= RHR_MAX && rhr < max;
+  var base = karvonen ? rhr : 0;
+  var span = max - base;
+  var out = [], i;
+  for (i = 0; i < ZONES.length; i++) {
+    out.push(Math.round(base + ZONES[i].from * span));
+  }
+  return out;
+}
+
+/* Which zone a pulse falls in, or -1 when the question cannot be answered.
+
+   -1 and not 0. Zone 0 is a real answer meaning "below the bottom of zone 1";
+   "no reading" is a different thing and must look different, or a graph paints
+   a disconnected strap grey and calls it resting. A pulse of 0 is always the
+   second one — the board's grip field sits at zero all walk on a machine with
+   no grips wired in. */
+function zoneOf(bpm, floors) {
+  if (!bpm || bpm <= 0 || !floors || floors.length < ZONES.length) return -1;
+  var z = 0, i;
+  for (i = 1; i < ZONES.length; i++) if (bpm >= floors[i]) z = i;
+  return z;
+}
+
+/* The colour for a pulse, or '' when there is no answer.
+
+   '' rather than the zone 0 grey, for the reason in zoneOf: a caller that
+   wants "leave it alone" and a caller that wants "grey" are different callers,
+   and the live BPM box is the first one. */
+function zoneColour(bpm, floors) {
+  var z = zoneOf(bpm, floors);
+  return z < 0 ? '' : ZONES[z].colour;
+}
+
+/* Estimated VO2 max, ml/kg/min, or 0 when it cannot be estimated.
+
+   Uth-Sorensen-Overgaard-Pedersen: 15.3 x max / resting. An estimate built on
+   an estimate — the maximum is itself a formula — so it is worth watching move
+   over months and worth nothing at all compared against somebody else's. The
+   summary gates it on the walk having reached a real effort; a ratio of two
+   maxima says nothing about a stroll, and printing a fitness score after one
+   invites the reading that the stroll earned it. */
+function vo2max(age, restingHr) {
+  var max = maxPulse(age);
+  if (!max || !restingHr || restingHr < RHR_MIN || restingHr > RHR_MAX) return 0;
+  return 15.3 * max / restingHr;
+}
+
 /**
  * Turn the raw per-zone seconds into rows worth drawing.
  *
@@ -1050,6 +1144,56 @@ function flow(onStep) {
       return f.go('control');
     },
 
+    /**
+     * Does this walker need asking how old they are before the belt starts?
+     *
+     * True only when there is nothing to build zones on: no stored birthday,
+     * and nothing typed at this screen already. Somebody with a birthday in
+     * Settings is never asked, and somebody who has already answered — or
+     * already skipped — is never asked twice in one visit to the welcome
+     * screen.
+     *
+     * Deliberately not gated on the walk being zone-targeted. The live graph,
+     * the coloured BPM box and the time-in-zone summary all want zones, and
+     * they are on every walk; asking only when a zone workout is picked would
+     * mean the casual walk that is 90% of the use never gets any of it.
+     */
+    needsAge: function () {
+      if (f.ageAsked) return false;
+      var z = {};
+      try { z = JSON.parse(global.Stride.hrZones() || '{}'); } catch (e) {}
+      return !(z.floors && z.floors.length);
+    },
+
+    /** Set once this walk's prompt has been answered or skipped, either way. */
+    ageAsked: false,
+
+    /**
+     * An age typed at the prompt. Held for this walk only — a guest has not
+     * agreed to be remembered, and a named walker with no birthday should set
+     * one in Settings rather than have the welcome screen quietly write it.
+     */
+    setAge: function (years) {
+      f.ageAsked = true;
+      try { global.Stride.setGuestAge(years, false); } catch (e) {}
+      return f;
+    },
+
+    /**
+     * SKIP: proceed on the console's assumption rather than on an answer.
+     *
+     * The walk is never blocked on this. Forty is the population middle and
+     * the age at which the old 220-minus-age and Tanaka happen to agree, and
+     * everything that draws a zone built on it is told it was assumed — see
+     * `assumed` in Stride.hrZones(). Zones off by a decade of age are wrong by
+     * about seven beats, which is less wrong than having none.
+     */
+    skipAge: function () {
+      f.ageAsked = true;
+      try { global.Stride.setGuestAge(ASSUMED_AGE, true); } catch (e) {}
+      return f;
+    },
+
     /* Three choices, not two: casual, one of the four shapes, or a route you
        have walked. Routes are a peer of "free" and "shaped", not a variant of
        one — and putting them on the screen before keeps the plan step to four
@@ -1097,8 +1241,21 @@ function flow(onStep) {
     setMinutes: function (m) { f.minutes = m; return f; },
     setShape:   function (s) { f.shape = s;   return f; },
 
-    /** The one call that arms the belt. */
+    /**
+     * The one call that arms the belt.
+     *
+     * The age prompt sits in front of it rather than in front of the profile
+     * step, so it is the last thing between a tap and a moving belt and is
+     * asked once whichever route through the picker got here. `arm()` is what
+     * it hands back to.
+     */
     commit: function () {
+      if (f.needsAge()) return f.go('age');
+      return f.arm();
+    },
+
+    /** commit(), past the age prompt. Nothing else should call this. */
+    arm: function () {
       if (f.control === 'casual') { global.Stride.choose(); return f; }
       if (f.control === 'routes') {
         // Nothing to arm the belt with if no route was picked.
@@ -1110,6 +1267,8 @@ function flow(onStep) {
     },
 
     back: function () {
+      // From the age prompt, back to whichever step armed it.
+      if (f.step === 'age') return f.go(f.control === 'casual' ? 'control' : 'plan');
       if (f.step === 'plan')    return f.go('control');
       if (f.step === 'control') return f.go('profile');
       return f;
@@ -2052,6 +2211,12 @@ global.STRIDE = {
 
   ZONES: ZONES,
   zoneRows: zoneRows,
+  ASSUMED_AGE: ASSUMED_AGE,
+  maxPulse: maxPulse,
+  zoneFloorsFor: zoneFloorsFor,
+  zoneOf: zoneOf,
+  zoneColour: zoneColour,
+  vo2max: vo2max,
   beatStyle: beatStyle,
 
   stub: stub,

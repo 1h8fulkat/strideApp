@@ -193,34 +193,84 @@ class Settings(context: Context) {
         /** `person.jane_doe`, or empty for somebody who exists only here. */
         val haPerson: String = "",
         /**
-         * Years, or 0 for "has not said" — which is the default and stays the
-         * default. It buys one thing: heart-rate zones, via the usual
-         * 220-minus-age. That formula is crude enough (±10-12 bpm between two
-         * people of the same age) that the coach talks in its terms rather than
-         * quoting it, and a walker who leaves this alone still gets effort
-         * coaching measured against their own session average instead. Nobody
+         * `yyyy-MM-dd`, or empty for "has not said" — which is the default and
+         * stays the default. It buys heart-rate zones, and since 21 September
+         * 2026 it buys the zone-targeting loop that drives the belt towards
+         * one. A walker who leaves this alone still gets effort coaching
+         * measured against their own session average, and still walks. Nobody
          * has to tell a treadmill their age to be coached by it.
          *
+         * **A date rather than a number.** This used to be a plain `age: Int`,
+         * which is correct for up to a year and then quietly wrong for ever:
+         * nothing ever comes round to increment it, so somebody who typed 39 in
+         * 2023 is still being given a 39-year-old's maximum. A date is the fact;
+         * the age is derived from it on every read — see [age]. The people who
+         * had set an age are migrated to a birthday rather than cleared; see
+         * [HrZones.birthdayForAge] for why the midpoint of the year and not
+         * January.
+         *
          * Per person, not per console: there is a person registry here because
-         * more than one person walks on this machine, and one shared age would
-         * be wrong for all but one of them.
+         * more than one person walks on this machine, and one shared birthday
+         * would be wrong for all but one of them.
          */
-        val age: Int = 0,
+        val birthday: String = "",
+        /**
+         * Resting heart rate in bpm, or 0 for "has not said".
+         *
+         * Optional, and the whole feature works without it — it is the
+         * difference between Karvonen and plain percent-of-max, not between
+         * having zones and not. With it the zones are built on *reserve* and
+         * land where the effort they name actually is; without it they are a
+         * flat share of maximum and zone 2 starts about twenty beats too low
+         * for anyone with a decent resting rate. See [HrZones.floors].
+         *
+         * It is also the second half of the VO2 max estimate, which is the only
+         * reason the summary can offer one at all.
+         *
+         * Measured lying still before getting up, which is a thing the console
+         * cannot do for you and does not pretend to — the settings screen says
+         * how, and this stays 0 until somebody types it.
+         */
+        val restingHr: Int = 0,
     ) {
         fun json(): JSONObject = JSONObject()
             .put("id", id).put("name", name)
             .put("coached", coached).put("publish", publish)
             .put("ha_person", haPerson)
+            .put("birthday", birthday)
+            .put("resting_hr", restingHr)
+            // Derived, and sent so the settings page and the HUD can show it
+            // without reimplementing the calendar. Never read back in.
             .put("age", age)
 
         /**
-         * Maximum heart rate, or 0 if unknown.
+         * Years today, or 0 for "has not said".
          *
-         * Clamped to an age this formula means anything for. Below about 13 and
-         * above about 100 it is extrapolation, and a zone floor built on it
-         * would be a number the console had made up.
+         * Recomputed on every read rather than cached. It is a substring parse
+         * and a comparison, it is called at settings-save time and once per
+         * walk rather than per frame — MainActivity caches the *zones* for the
+         * poll loop, which is the hot path — and a cached age is exactly the
+         * bug the birthday was introduced to fix.
          */
-        val maxPulse: Int get() = if (age in 13..100) 220 - age else 0
+        val age: Int get() = HrZones.ageOn(birthday)
+
+        /**
+         * Maximum heart rate by Tanaka, or 0 if unknown.
+         *
+         * Was `220 - age`, which nobody has ever been able to find a study
+         * for. See [HrZones.maxPulse] — the two disagree by up to six beats at
+         * the ends of the range, which is most of a zone.
+         */
+        val maxPulse: Int get() = HrZones.maxPulse(age)
+
+        /**
+         * The bpm this walker's zones start at, indexed 0-5, or empty when
+         * there is no age to build them on.
+         *
+         * Karvonen if they gave a resting rate, percent-of-max if not. The one
+         * call anything outside this file should need — see [HrZones.floors].
+         */
+        val zoneFloors: IntArray get() = HrZones.floors(age, restingHr)
     }
 
     /**
@@ -292,8 +342,25 @@ class Settings(context: Context) {
                     publish = o.optBoolean("publish", true),
                     haPerson = o.optString("ha_person"),
                     // Absent for everyone who existed before zones did, which
-                    // is the same as declining to say — see Person.age.
-                    age = o.optInt("age", 0),
+                    // is the same as declining to say — see Person.birthday.
+                    //
+                    // **Migration, on read, without a write.** Entries stored
+                    // before 21 September 2026 carry a plain `age` and no
+                    // birthday. Rather than run a one-shot upgrade — which has
+                    // to be correct first time, on a console nobody can reach —
+                    // the old field is read whenever the new one is missing and
+                    // converted in place. The next save writes the birthday and
+                    // the fallback stops firing on its own.
+                    //
+                    // Deliberately *not* also dropping the old key on write:
+                    // `Person.json()` stops emitting `age` as an input, so a
+                    // downgrade loses the birthday, but nothing here rewrites
+                    // history to make that impossible. One direction is enough.
+                    birthday = o.optString("birthday").ifBlank {
+                        val old = o.optInt("age", 0)
+                        if (old in HrZones.AGE_RANGE) HrZones.birthdayForAge(old) else ""
+                    },
+                    restingHr = o.optInt("resting_hr", 0),
                 )
             }
         } catch (e: Exception) {

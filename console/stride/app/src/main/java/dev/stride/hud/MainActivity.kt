@@ -474,27 +474,6 @@ class MainActivity : Activity() {
         return if (secs > 1.0) sessionDistance / secs * 3.6 else 0.0
     }
 
-    /**
-     * Which zone a share of maximum heart rate falls in, 0-5.
-     *
-     * The usual five-zone split on percentage of maximum. Zone 0 is everything
-     * below 50%, which is standing about rather than a training zone, and is
-     * counted separately so it cannot inflate zone 1.
-     *
-     * Kept here rather than shared with Coach.zoneOf deliberately: that one
-     * answers "what should the coach call this effort right now" and returns
-     * 1-5 with no floor, because a coach saying "barely ticking over" about a
-     * 45% share is right. This one is dividing up a walk and needs the floor.
-     */
-    private fun zoneIndex(share: Double): Int = when {
-        share < 0.50 -> 0
-        share < 0.60 -> 1
-        share < 0.70 -> 2
-        share < 0.80 -> 3
-        share < 0.90 -> 4
-        else -> 5
-    }
-
     /** Pace at the moment of pausing, and the speed the resume ramp is climbing
      *  towards. Zero means there is no pace to go back to. */
     @Volatile private var pausedKph = 0.0
@@ -552,16 +531,76 @@ class MainActivity : Activity() {
     @Volatile private var walker = ""
 
     /**
-     * The current walker's maximum heart rate, or 0 if they have not given an
-     * age. Cached rather than looked up per frame: reading it means parsing the
-     * whole person list out of JSON in SharedPreferences, and the poll loop
-     * builds a Snapshot five times a second. Refreshed wherever [walker] is
-     * set, which is the only thing that can change the answer mid-walk.
+     * The current walker's maximum heart rate, or 0 if they have not given a
+     * birthday. Cached rather than looked up per frame: reading it means
+     * parsing the whole person list out of JSON in SharedPreferences, and the
+     * poll loop builds a Snapshot five times a second. Refreshed wherever
+     * [walker] is set, which is the only thing that can change the answer
+     * mid-walk.
      */
     @Volatile private var walkerHrMax = 0
 
-    private fun refreshWalkerHrMax() {
-        walkerHrMax = cfg.person(walker)?.maxPulse ?: 0
+    /**
+     * The bpm this walker's zones start at, 0-5, or empty when there are none.
+     *
+     * Cached beside [walkerHrMax] and for the same reason, and kept as the
+     * *floors* rather than recomputed from a share on every frame: since the
+     * zones may be Karvonen, "which zone is this pulse" is no longer a
+     * division. Two consumers now depend on it landing in the same place every
+     * time — the summary's time-in-zone totals and the loop that drives the
+     * belt — and a boundary that moved between them would be a belt speeding
+     * up to reach a zone the summary says it was already in.
+     */
+    @Volatile private var walkerZoneFloors: IntArray = IntArray(0)
+
+    /**
+     * The walker's own age and resting rate, cached for the same reason.
+     *
+     * Kept so the summary can offer a VO2 max without going back to
+     * SharedPreferences at the moment the belt stops, and so a guest who was
+     * asked for an age at the start of a quick-play walk gets zones for the
+     * walk they are on — see [guestAge], which is where that age lives, since
+     * a guest is by definition not in the person list.
+     */
+    @Volatile private var walkerAge = 0
+    @Volatile private var walkerRhr = 0
+
+    /**
+     * An age typed at the start of a quick-play walk by somebody who is not in
+     * the person list, or 0.
+     *
+     * A guest has nowhere to store an age, and asking them to create a profile
+     * before they can have zones is asking them to create a profile. This holds
+     * the answer for the length of one walk and is cleared when it ends — see
+     * [Bridge.setGuestAge] and the reset in [beginSession].
+     *
+     * Never written to Settings. Somebody who tapped GUEST has not agreed to
+     * the console remembering anything about them, which is the same reasoning
+     * that keeps a guest's walk off Home Assistant.
+     */
+    @Volatile private var guestAge = 0
+
+    /**
+     * True when [guestAge] is the console's assumption rather than anybody's
+     * answer — see [HrZones.ASSUMED_AGE].
+     *
+     * Reaches the page in `hrZones()` and is the reason the HUD can put
+     * "assumed" next to a zone. Everything downstream treats the zones as
+     * real, because the alternative is having no zones at all for the walker
+     * who skipped the prompt; this flag is how the console stays honest about
+     * that without refusing to do the work.
+     */
+    @Volatile private var guestAgeAssumed = false
+
+    private fun refreshWalkerZones() {
+        val p = cfg.person(walker)
+        // A guest is not in the list, so `p` is null and the age — if there is
+        // one — came from the prompt instead. A named walker's stored birthday
+        // always wins over anything typed at the welcome screen.
+        walkerAge = p?.age?.takeIf { it > 0 } ?: guestAge
+        walkerRhr = p?.restingHr ?: 0
+        walkerHrMax = HrZones.maxPulse(walkerAge)
+        walkerZoneFloors = HrZones.floors(walkerAge, walkerRhr)
     }
 
     // --- guided walk ---------------------------------------------------------
@@ -1247,6 +1286,11 @@ class MainActivity : Activity() {
          */
         @JavascriptInterface fun home() {
             session = Session.WELCOME
+            // The guest's age was for the walk that just ended. The next person
+            // on the belt gets asked for their own.
+            guestAge = 0
+            guestAgeAssumed = false
+            refreshWalkerZones()
             workout = "none"
             summaryLine = ""
             summaryUrl = ""
@@ -1331,9 +1375,76 @@ class MainActivity : Activity() {
 
         @JavascriptInterface fun setWalker(name: String) {
             walker = name
-            refreshWalkerHrMax()
+            // A named walker brings their own birthday, so anything a guest
+            // typed before them is not theirs and must not survive the tap.
+            guestAge = 0
+            guestAgeAssumed = false
+            refreshWalkerZones()
             Log.i(TAG, "walker: $name")
         }
+
+        /**
+         * An age for somebody who is not in the person list, good for this
+         * walk only.
+         *
+         * A guest has nowhere to keep a birthday and should not be made to
+         * create a profile to get zones, so the quick-play flow asks once, in
+         * one tap-and-done prompt, and the answer lives in memory until the
+         * walk ends. Nothing is written to Settings: tapping GUEST is not
+         * agreeing to be remembered.
+         *
+         * Zero is a complete answer and not a failure: it leaves [walkerHrMax]
+         * at 0, the page falls back to the average-and-peak summary that needs
+         * nobody's age, and the walk starts either way.
+         *
+         * [assumed] is the SKIP path — nobody said, so the console proceeds on
+         * [HrZones.ASSUMED_AGE] rather than blocking a walk over a form. It is
+         * carried as a flag rather than folded into the number because
+         * everything that draws a zone built on it has to be able to say so:
+         * an assumed maximum is the one place this console knowingly shows a
+         * figure nobody gave it, and the deal is that it never presents that
+         * figure as though somebody had.
+         *
+         * Refused once the belt is moving. Zone boundaries that shift mid-walk
+         * would retroactively re-file the seconds already counted against them,
+         * and with the targeting loop running they would move the belt.
+         */
+        @JavascriptInterface fun setGuestAge(age: Int, assumed: Boolean): Boolean {
+            if (Session.isMoving(session)) {
+                Log.i(TAG, "guest age: refused, belt is moving")
+                return false
+            }
+            guestAge = if (age in HrZones.AGE_RANGE) age else 0
+            guestAgeAssumed = assumed && guestAge > 0
+            refreshWalkerZones()
+            Log.i(TAG, "guest age: " + when {
+                guestAge == 0 -> "not given"
+                guestAgeAssumed -> "$guestAge, assumed"
+                else -> "$guestAge"
+            })
+            return true
+        }
+
+        /**
+         * The walker's zones as the page needs them: the bpm each starts at,
+         * the maximum, and whether Karvonen or percent-of-max drew them.
+         *
+         * `floors` is empty when there is no age, which is the page's signal to
+         * draw the HUD without zone colouring at all rather than to colour
+         * everything grey. See ZONES in stride-core.js for the other half.
+         */
+        @JavascriptInterface fun hrZones(): String = JSONObject()
+            .put("floors", JSONArray().apply { walkerZoneFloors.forEach { put(it) } })
+            .put("max", walkerHrMax)
+            .put("age", walkerAge)
+            .put("resting", walkerRhr)
+            .put("karvonen", walkerRhr in HrZones.RHR_RANGE)
+            // True when the age was typed at the welcome screen rather than
+            // stored, so the page can label the zones as an assumption.
+            .put("guest", guestAge > 0 && cfg.person(walker) == null)
+            // Zones built on an age nobody gave. Draw them, and say so.
+            .put("assumed", guestAgeAssumed)
+            .toString()
 
         /** "I've put the key back." If it is still out, the next poll re-raises. */
         @JavascriptInterface fun ackDmk() {
@@ -1442,19 +1553,49 @@ class MainActivity : Activity() {
         }
 
         /**
-         * Set or clear somebody's age. Zero, or anything outside what
-         * `220 - age` means anything for, clears it back to "has not said" —
-         * which is a supported state and not an error. See Settings.Person.age.
+         * Set or clear somebody's birthday, as `yyyy-MM-dd`.
+         *
+         * Anything that is not a date the console can read clears it back to
+         * "has not said", which is a supported state and not an error. An
+         * empty string is the settings screen's way of saying exactly that, so
+         * it takes the same path rather than being rejected.
+         *
+         * Validated here as well as in the page. The page is the only caller
+         * today, but a bridge method is reachable from anything running in the
+         * WebView, and a birthday in 2387 would hand the zone loop a negative
+         * heart-rate reserve.
+         *
+         * See Settings.Person.birthday.
          */
-        @JavascriptInterface fun setPersonAge(name: String, age: Int): String {
-            val clean = if (age in 13..100) age else 0
+        @JavascriptInterface fun setPersonBirthday(name: String, birthday: String): String {
+            val clean = if (HrZones.ageOn(birthday) in HrZones.AGE_RANGE) birthday else ""
             cfg.savePeople(cfg.people().map {
-                if (it.name == name) it.copy(age = clean) else it
+                if (it.name == name) it.copy(birthday = clean) else it
             })
-            // The walker may be the person just edited, and the zones the coach
-            // uses come off a cached copy.
-            refreshWalkerHrMax()
-            Log.i(TAG, "settings: age for $name -> ${if (clean > 0) "$clean" else "not given"}")
+            // The walker may be the person just edited, and the zones both the
+            // coach and the targeting loop use come off a cached copy.
+            refreshWalkerZones()
+            Log.i(TAG, "settings: birthday for $name -> " +
+                if (clean.isNotEmpty()) "$clean (age ${HrZones.ageOn(clean)})" else "not given")
+            return cfg.json().toString()
+        }
+
+        /**
+         * Set or clear somebody's resting heart rate.
+         *
+         * Zero, or anything outside what a resting rate plausibly is, clears
+         * it — the walker then gets percent-of-max zones instead of Karvonen
+         * ones, which is a working console and not a degraded one. See
+         * HrZones.RHR_RANGE for why a bad resting rate is worse than none.
+         */
+        @JavascriptInterface fun setPersonRhr(name: String, rhr: Int): String {
+            val clean = if (rhr in HrZones.RHR_RANGE) rhr else 0
+            cfg.savePeople(cfg.people().map {
+                if (it.name == name) it.copy(restingHr = clean) else it
+            })
+            refreshWalkerZones()
+            Log.i(TAG, "settings: resting hr for $name -> " +
+                if (clean > 0) "$clean bpm" else "not given")
             return cfg.json().toString()
         }
 
@@ -2669,7 +2810,7 @@ class MainActivity : Activity() {
         cfg.seedFromBuildConfig()
         cfg.seedRoutesFromBuildConfig()
         walker = cfg.defaultWalker()
-        refreshWalkerHrMax()
+        refreshWalkerZones()
         applyBrightness()
         applyStrap()
 
@@ -3272,14 +3413,20 @@ class MainActivity : Activity() {
                 if (pulse > maxPulse) maxPulse = pulse
                 pulseSum += pulse
                 pulseSamples++
-                if (walkerHrMax > 0) {
+                val floors = walkerZoneFloors
+                if (floors.isNotEmpty()) {
                     val nowMs = SystemClock.elapsedRealtime()
                     // Only credit time we were actually reading through. A gap
                     // longer than a couple of polls is a strap dropout, and the
                     // seconds inside it belong to no zone.
                     if (lastZoneAt > 0L && nowMs - lastZoneAt < ZONE_MAX_GAP_MS) {
-                        val z = zoneIndex(pulse.toDouble() / walkerHrMax)
-                        zoneSecs[z] += (nowMs - lastZoneAt) / 1000.0
+                        val z = HrZones.zoneOf(pulse, floors)
+                        // -1 is "cannot say", and cannot be an array index. It
+                        // only arrives here for a pulse of 0, which the branch
+                        // above has already excluded, but the loop that drives
+                        // the belt reads the same function and the two must not
+                        // disagree about what an unknown zone is.
+                        if (z >= 0) zoneSecs[z] += (nowMs - lastZoneAt) / 1000.0
                     }
                     lastZoneAt = nowMs
                 }

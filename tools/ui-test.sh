@@ -5,12 +5,14 @@
 #   tools/ui-test.sh ui         the interface suite only (path, map, console)
 #   tools/ui-test.sh engine     the Chromium 51 checks only
 #   tools/ui-test.sh es         the language-ceiling audit only
+#   tools/ui-test.sh zones      the heart-rate arithmetic only
 #
 # What each one is for is written at the top of the file it runs. The short
 # version: `es` stops a `?.` reaching a machine that cannot run it, `engine`
 # covers the two ways this console's seven-year-old WebView differs from the one
-# you are developing on, and `ui` drives original.html through the frames Kotlin
-# would push and asserts on what comes out.
+# you are developing on, `ui` drives original.html through the frames Kotlin
+# would push and asserts on what comes out, and `zones` holds the page's copy of
+# the heart-rate formulas to the same numbers HrZonesTest.kt holds Kotlin's.
 #
 # None of it touches the treadmill. It is the pass to run before
 # tools/docker-deploy.sh, not instead of walking on the thing afterwards.
@@ -57,12 +59,14 @@ case "$WHICH" in
   ui)     for m in path map console; do one ui "$m"; done ;;
   engine) one engine ;;
   es)     one es ;;
+  zones)  one zones ;;
   all)
     one es
+    one zones
     one engine
     for m in path map console; do one ui "$m"; done
     ;;
-  *) echo "usage: $0 [all|ui|engine|es]" >&2; exit 2 ;;
+  *) echo "usage: $0 [all|ui|engine|es|zones]" >&2; exit 2 ;;
 esac
 
 echo

@@ -30,6 +30,22 @@
   var poll = null;
 
   function bridge() { return global.Stride; }
+
+  /* The zone arithmetic lives in stride-core.js, which every interface loads
+     before this one — see the block above ZONES there for why the page has a
+     copy at all. Reached through a helper rather than destructured at load
+     time so that a core that failed to parse produces a settings screen with
+     no zone preview, rather than no settings screen. */
+  function core() { return global.STRIDE || {}; }
+  function maxPulse(age) {
+    return core().maxPulse ? core().maxPulse(age) : 0;
+  }
+  function zoneFloors(p) {
+    return core().zoneFloorsFor
+      ? core().zoneFloorsFor(p.age || 0, p.resting_hr || 0) : [];
+  }
+  var ZONE_COLOURS = (core().ZONES || []).map(function (z) { return z.colour; });
+  var ZONE_NAMES = (core().ZONES || []).map(function (z) { return z.name; });
   function has(fn) { try { return typeof bridge()[fn] === 'function'; } catch (e) { return false; } }
 
   function load() {
@@ -229,7 +245,24 @@
     '  background:rgba(255,157,60,.09);border-left:3px solid #ff9d3c;',
     '  font-size:14px;color:#7f92c4;line-height:1.55}',
     '.sx-ro{font-size:19px;font-weight:300;color:#7f92c4}',
-    '.sx-ro b{color:#eaf0ff;font-weight:300}'
+    '.sx-ro b{color:#eaf0ff;font-weight:300}',
+
+    /* ---- the birthday picker ------------------------------------------
+       Three steppers on one line, which only fits because they are narrower
+       than the standard one: the control column of a settings row is 302px
+       short of the pane and a full-width stepper is 248px on its own. The
+       value boxes are sized to their widest content — "Sep" and a four-digit
+       year — rather than to a shared minimum, or the day box wastes the room
+       the year box needs. */
+    '.sx-bday{display:flex;flex-direction:column;align-items:flex-end;gap:8px}',
+    '.sx-bday-line{display:flex;align-items:center;gap:4px}',
+    '.sx-step-sm button{width:46px;height:50px;border-radius:11px;font-size:24px}',
+    '.sx-step-sm .sx-v{min-width:76px;font-size:21px}',
+    '.sx-step-sm .sx-v small{display:block;margin:0;font-size:12px}',
+    /* The derived age and CLEAR share a line under the steppers. CLEAR is
+       hidden rather than disabled when there is nothing to clear — a dead
+       button on a touch screen is a thing people press twice. */
+    '.sx-bday-foot{display:flex;align-items:center;gap:14px}'
   ].join('');
 
   /* ---- tiny DOM helpers -------------------------------------------------- */
@@ -334,31 +367,169 @@
     return s;
   }
 
-  /* Somebody's age, which saves through setPersonAge rather than the global
-     store the ordinary stepper writes to — it belongs to a person, not to the
-     console.
+  /* Days in a month, so 31 February cannot be stepped to. Mirrors
+     HrZones.daysIn — the two are checked against each other by the settings
+     suite in tools/uitest, because a date the page can produce and Kotlin
+     rejects is a birthday that silently does not save. */
+  function daysIn(y, m) {
+    if (m === 2) return (y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0)) ? 29 : 28;
+    return (m === 4 || m === 6 || m === 9 || m === 11) ? 30 : 31;
+  }
 
-     "Not set" is a real value and the one it ships in: stepping below the
-     bottom clears it rather than sticking at a floor, because declining to
-     give a treadmill your age has to stay a supported answer. The first tap
-     up lands mid-range rather than at 13, so nobody has to press + forty
-     times to reach themselves. */
-  function ageStepper(p) {
+  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun',
+                'Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  /* Somebody's birthday, as three steppers, saving through setPersonBirthday
+     rather than the global store the ordinary stepper writes to — it belongs
+     to a person, not to the console.
+
+     A date and not a number of years. An age typed once is right for at most
+     a year and then wrong for ever, because nothing on a treadmill comes round
+     to increment it; the date is the fact and the age is derived from it every
+     time it is read. See Settings.Person.birthday.
+
+     "Not set" is a real value and the one it ships in: CLEAR puts it back,
+     because declining to give a treadmill your date of birth has to stay a
+     supported answer. An unset picker opens at 1 July of the year that makes
+     somebody forty, so nobody has to step forty years to reach themselves —
+     the same midpoint the migration from the old stored ages uses.
+
+     Three steppers rather than a calendar because this is a 302px rail on a
+     treadmill, operated with one finger by somebody who may be standing on a
+     belt, and a month grid is a precision target. Day clamps when the month
+     changes under it: stepping 31 January to February gives 28, not a date
+     that does not exist. */
+  function birthdayPicker(p, onChange) {
+    var wrap = el('div', 'sx-bday');
+    var now = new Date();
+    var set = /^\d{4}-\d{2}-\d{2}$/.test(p.birthday || '');
+    var y, m, d;
+
+    var reset = function () {
+      if (set) {
+        y = parseInt(p.birthday.slice(0, 4), 10);
+        m = parseInt(p.birthday.slice(5, 7), 10);
+        d = parseInt(p.birthday.slice(8, 10), 10);
+      } else {
+        /* Forty years back, mid-year. Not today's date forty years ago: a
+           birthday that happens to be today makes the age flip the moment the
+           screen is opened on the wrong side of midnight. */
+        y = now.getFullYear() - 40; m = 7; d = 1;
+      }
+    };
+    reset();
+
+    /* The oldest and youngest the formula behind the zones means anything for.
+       Outside it Kotlin clears the birthday rather than storing it, so the
+       picker must not be able to reach there — a stepper that saves nothing is
+       worse than one that stops. See HrZones.AGE_RANGE. */
+    var minYear = now.getFullYear() - 100;
+    var maxYear = now.getFullYear() - 13;
+
+    var commit = function () {
+      var max = daysIn(y, m);
+      if (d > max) d = max;
+      set = true;
+      p.birthday = y + '-' + pad2(m) + '-' + pad2(d);
+      try { S = JSON.parse(bridge().setPersonBirthday(p.name, p.birthday)); } catch (e) {}
+      /* Kotlin is the authority on the derived age, not the page: it has the
+         same calendar and it is what everything else reads. Take the stored
+         person back rather than computing a second answer here. */
+      var stored = null, i;
+      for (i = 0; i < (S.people || []).length; i++) {
+        if (S.people[i].name === p.name) stored = S.people[i];
+      }
+      if (stored) { p.age = stored.age; p.birthday = stored.birthday; }
+      draw();
+      if (onChange) onChange();
+    };
+
+    var unit = function (label, get, bump) {
+      var s = el('div', 'sx-step sx-step-sm');
+      var v = el('div', 'sx-v');
+      v.sxDraw = function () {
+        v.innerHTML = set ? get() + '<small>' + label + '</small>'
+                          : '<small>' + label + '</small>';
+      };
+      s.appendChild(press(el('button', '', '&minus;'), function () { bump(-1); commit(); }));
+      s.appendChild(v);
+      s.appendChild(press(el('button', '', '+'), function () { bump(1); commit(); }));
+      v.sxDraw();
+      return s;
+    };
+
+    var dayU = unit('day', function () { return d; }, function (k) {
+      var max = daysIn(y, m);
+      d = d + k; if (d < 1) d = max; if (d > max) d = 1;
+    });
+    var monU = unit('month', function () { return MONTHS[m - 1]; }, function (k) {
+      m = m + k; if (m < 1) m = 12; if (m > 12) m = 1;
+    });
+    var yearU = unit('year', function () { return y; }, function (k) {
+      y = y + k; if (y < minYear) y = minYear; if (y > maxYear) y = maxYear;
+    });
+
+    var age = el('div', 'sx-ro');
+    var clear = press(el('button', 'sx-pill', 'CLEAR'), function () {
+      set = false;
+      p.birthday = ''; p.age = 0;
+      try { S = JSON.parse(bridge().setPersonBirthday(p.name, '')); } catch (e) {}
+      reset();
+      draw();
+      if (onChange) onChange();
+    });
+
+    function draw() {
+      [dayU, monU, yearU].forEach(function (u) {
+        u.querySelector('.sx-v').sxDraw();
+      });
+      age.innerHTML = set && p.age
+        ? '<b>' + p.age + '</b> years old'
+        : 'not set';
+      clear.style.display = set ? '' : 'none';
+    }
+
+    var line = el('div', 'sx-bday-line');
+    line.appendChild(dayU);
+    line.appendChild(monU);
+    line.appendChild(yearU);
+    wrap.appendChild(line);
+    var foot = el('div', 'sx-bday-foot');
+    foot.appendChild(age);
+    foot.appendChild(clear);
+    wrap.appendChild(foot);
+    draw();
+    return wrap;
+  }
+
+  /* Somebody's resting heart rate. Optional, and the console works without it
+     — it is the difference between Karvonen zones and plain percent-of-max,
+     not between having zones and not.
+
+     Stepping below the bottom clears it rather than sticking, for the same
+     reason the birthday has a CLEAR: a resting rate nobody has measured must
+     not be guessed at, because a wrong one moves every zone boundary at once
+     and does it silently. The first tap up lands at 60, which is the middle of
+     the range rather than its floor. */
+  function rhrStepper(p, onChange) {
     var s = el('div', 'sx-step');
     var v = el('div', 'sx-v');
-    var value = p.age || 0;
+    var value = p.resting_hr || 0;
     var draw = function () {
-      v.innerHTML = value >= 13
-        ? value + '<small>years</small>' : '<small>not set</small>';
+      v.innerHTML = value >= 30
+        ? value + '<small>bpm</small>' : '<small>not set</small>';
     };
-    var bump = function (d) {
-      if (value < 13) value = d > 0 ? 40 : 0;
-      else value = value + d;
+    var bump = function (k) {
+      if (value < 30) value = k > 0 ? 60 : 0;
+      else value = value + k;
       if (value > 100) value = 100;
-      if (value < 13) value = 0;
+      if (value < 30) value = 0;
       draw();
-      try { S = JSON.parse(bridge().setPersonAge(p.name, value)); } catch (e) {}
-      p.age = value;
+      try { S = JSON.parse(bridge().setPersonRhr(p.name, value)); } catch (e) {}
+      p.resting_hr = value;
+      if (onChange) onChange();
     };
     s.appendChild(press(el('button', '', '&minus;'), function () { bump(-1); }));
     s.appendChild(v);
@@ -686,13 +857,47 @@
           try { S = JSON.parse(bridge().setPersonFlag(p.name, 'coached', on)); } catch (e) {}
           p.coached = on; drawPeople();
         })));
-      detail.appendChild(row('Age',
-        'Only used for heart-rate zones. With it the coach can tell "taking it ' +
-        'easy" from "working hard"; without it, it can still tell "harder than ' +
-        'earlier in this walk" and says so. Leaving it unset costs the first of ' +
-        'those and nothing else — the estimate behind it is rough anyway, so ' +
-        'the coach talks in words rather than numbers either way.',
-        ageStepper(p)));
+      /* Redrawn whenever either of the two below changes, because the
+         sentence under "Zones" is about both of them together. */
+      var zoneNote = el('div', 'sx-ro');
+      var drawZones = function () {
+        var floors = zoneFloors(p);
+        if (!floors.length) {
+          zoneNote.innerHTML = 'No birthday, so no zones. ' +
+            'The coach still measures effort against this walk\'s own average.';
+          return;
+        }
+        var bits = [], i;
+        for (i = 1; i < floors.length; i++) {
+          var top = i < floors.length - 1 ? (floors[i + 1] - 1) : maxPulse(p.age);
+          bits.push('<span style="color:' + ZONE_COLOURS[i] + '">&#9632;</span> ' +
+            ZONE_NAMES[i] + ' <b>' + floors[i] + '&ndash;' + top + '</b>');
+        }
+        zoneNote.innerHTML =
+          (p.resting_hr ? 'Karvonen, on a reserve of ' +
+             (maxPulse(p.age) - p.resting_hr) + ' bpm.'
+                        : 'Percent of maximum. Add a resting rate for Karvonen.') +
+          ' Maximum <b>' + maxPulse(p.age) + '</b>.<br>' + bits.join('<br>');
+      };
+
+      detail.appendChild(row('Date of birth',
+        'Only used for heart-rate zones, and it is a date rather than an age ' +
+        'because an age is right for a year and then wrong for ever. With it ' +
+        'the coach can tell "taking it easy" from "working hard", and a walk ' +
+        'can be steered to hold a zone. Without it the coach still tells ' +
+        '"harder than earlier in this walk" and says so.',
+        birthdayPicker(p, function () { drawZones(); drawPeople(); })));
+
+      detail.appendChild(row('Resting heart rate',
+        'Optional, and everything works without it. Measured lying still ' +
+        'before getting up in the morning — not sitting down after a walk. ' +
+        'With it the zones are built on your heart-rate reserve rather than ' +
+        'on a flat share of maximum, which moves them to where the effort ' +
+        'they name actually is, and the summary can estimate a VO2 max.',
+        rhrStepper(p, function () { drawZones(); })));
+
+      detail.appendChild(row('Zones', 'What the two above work out to.', zoneNote));
+      drawZones();
       detail.appendChild(row('Record to Home Assistant',
         'Their distance, time and calories, published under their own name.',
         toggle(null, p.publish, function (on) {

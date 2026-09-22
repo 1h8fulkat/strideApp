@@ -502,6 +502,27 @@ button.pulse{animation:pulse .9s ease-out 2}
    needs centring explicitly or it hugs the left of that box. */
 .step{display:none;text-align:center}
 .step.on{display:block}
+
+/* ---- the age prompt -----------------------------------------------------
+   A stepper, a row of decades, and SKIP. The decades are there because the
+   stepper alone is forty presses from its default to a twenty-year-old, and
+   nobody is doing that standing on a treadmill with the belt about to start.
+   SKIP is a chip rather than a link: it is a real answer with a real
+   consequence and it should look as pressable as the rest. */
+.agewhy{max-width:640px;margin:14px auto 0;font-size:20px;font-weight:300;
+        line-height:1.45;color:var(--dim)}
+.agepick{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:30px}
+.agebtn{width:88px;height:78px;border-radius:18px;border:none;
+        background:var(--bg-1);color:var(--fg);font-size:38px;font-weight:300}
+.agebtn:active{background:rgba(57,224,255,.2)}
+.ageval{min-width:260px;padding:10px 18px;border-radius:18px;border:1px solid var(--bg-1);
+        background:transparent;color:var(--fg);font-size:64px;font-weight:200;letter-spacing:-1px}
+.ageval:active{background:rgba(57,224,255,.2)}
+.ageval small{display:block;font-size:17px;letter-spacing:2px;
+              text-transform:uppercase;color:var(--dim)}
+#ageQuick{margin-top:26px}
+.chip.ghost{margin-top:30px;background:transparent;border:1px solid var(--bg-1);
+            color:var(--dim)}
 .chips{margin-top:26px;display:flex;justify-content:center}
 .chip{
   flex:none;width:112px;height:64px;margin:0 7px;max-width:none;
@@ -646,6 +667,23 @@ button.pulse{animation:pulse .9s ease-out 2}
       <div class="chips" id="durations"></div>
       <div class="ask" id="askShape" style="margin-top:34px">Pick a shape</div>
       <div class="plans" id="plans"></div>
+    </div>
+
+    <!-- step 5 — how old, asked only when there is nothing to build zones on.
+       Last thing before the belt, so it is asked once whichever way through
+       the picker got here, and SKIP is a real answer: the walk starts either
+       way. See needsAge() in stride-core.js. -->
+    <div class="step" id="step4">
+      <div class="ask" style="margin-top:0">How old are you?</div>
+      <div class="agewhy">Only for heart-rate zones. Skip it and the walk is
+        exactly the same — the zones are just drawn on a guess.</div>
+      <div class="agepick">
+        <button class="agebtn" id="ageDown">&minus;</button>
+        <button class="ageval" id="ageAccept"><span id="ageNum">40</span><small>years — tap to start</small></button>
+        <button class="agebtn" id="ageUp">+</button>
+      </div>
+      <div class="chips" id="ageQuick"></div>
+      <button class="chip ghost" id="ageSkip">SKIP</button>
     </div>
 
     <!-- No number here. It used to say "2 km/h", which was the old default
@@ -1014,14 +1052,15 @@ function myRoutes(){
    The profile step is one card today. It exists so that adding a second person
    later is a change to this list rather than a change to the flow — though the
    rest of the system is still single-user, so that is all it would be. */
-const STEPS = ['step1','step2','step3'];
+const STEPS = ['step1','step2','step3','step4'];
 let stepNow = 1;
 
 function showStep(n){
   stepNow = n;
   STEPS.forEach((id,i) => $(id).classList.toggle('on', i === n-1));
   $('btnBack').style.display = n > 1 ? 'block' : 'none';
-  // BEGIN belongs to the guided picker and nowhere else.
+  // BEGIN belongs to the guided picker and nowhere else. The age prompt has
+  // its own way out — every button on it starts the walk.
   $('btnBegin').style.display = n === 3 ? 'block' : 'none';
   $('wFoot').style.display = n === 1 ? 'block' : 'none';
   // The interface question belongs with "who is walking", not halfway into
@@ -1140,12 +1179,85 @@ function buildGuidedStep(){
   });
 }
 
+/* ---- the age prompt ------------------------------------------------------
+   Asked once, and only when there is nothing to build heart-rate zones on: no
+   birthday in Settings for whoever is walking, and nothing typed here already.
+   Somebody who filled in their profile never sees it.
+
+   It sits in front of the belt rather than in front of the picker so that it
+   is asked once whichever of the three ways through the welcome screen got
+   here, and so the answer is the last thing between a tap and a moving belt
+   rather than a gate on the first one.
+
+   Not gated on the walk being zone-targeted. The coloured BPM box, the live
+   graph and the time-in-zone summary all want zones and they are on every
+   walk; asking only for a zone workout would mean the casual walk that is
+   most of the use never gets any of it. */
+let ageValue = STRIDE.ASSUMED_AGE;
+let armPending = null;   // what to run once the prompt is answered
+let ageFrom = 2;         // the step to go back to, remembered rather than guessed
+
+/* Arm the belt, asking for an age first if there is nothing to build zones
+   on. Every path that starts a walk goes through here. */
+function armWalk(go){
+  let zones = {};
+  try { zones = JSON.parse(Stride.hrZones() || '{}'); } catch (e) {}
+  if (zones.floors && zones.floors.length) { go(); return; }
+  armPending = go;
+  ageFrom = stepNow;
+  drawAge();
+  showStep(4);
+}
+
+function drawAge(){
+  $('ageNum').textContent = ageValue;
+  const q = $('ageQuick');
+  q.innerHTML = '';
+  /* Decades, because the stepper alone is forty presses from its default to
+     a twenty-year-old and nobody is doing that with the belt about to start.
+     Mid-decade rather than on it — 25 is nearer to the average person in
+     their twenties than 20 is, and every one of these is going into a formula
+     with a ±10 bpm spread on it anyway. */
+  [25,35,45,55,65,75].forEach(a => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (a === ageValue ? ' on' : '');
+    b.textContent = a;
+    tap(b, () => { ageValue = a; drawAge(); });
+    q.appendChild(b);
+  });
+}
+
+/* Answering starts the walk. There is no separate confirm: the prompt was
+   pushed in front of a tap that had already chosen to begin, and making
+   somebody confirm twice is how a console earns a reputation for asking
+   questions. */
+function answerAge(years, assumed){
+  try { Stride.setGuestAge(years, assumed); } catch (e) {}
+  const go = armPending;
+  armPending = null;
+  if (go) go();
+}
+
+stepper($('ageDown'), () => { ageValue = Math.max(13, ageValue - 1); drawAge(); }, 220, 70);
+stepper($('ageUp'),   () => { ageValue = Math.min(100, ageValue + 1); drawAge(); }, 220, 70);
+/* The value box is the accept, rather than a fourth button under everything
+   else. The chips and the stepper set the number; tapping the number takes
+   it. The small print under it says so, because a number that is also a
+   button is not obvious on sight. */
+tap($('ageAccept'), () => answerAge(ageValue, false));
+tap($('ageSkip'), () => answerAge(STRIDE.ASSUMED_AGE, true));
+
 buildPeople();
-tap($('pickCasual'), () => Stride.choose());
+tap($('pickCasual'), () => armWalk(() => Stride.choose()));
 tap($('pickGuided'), () => { planMode = 'shapes'; chosenRoute = null; chosenLoop = false;
                              buildGuidedStep(); showStep(3); });
 tap($('pickRoutes'), () => { planMode = 'routes'; buildGuidedStep(); showStep(3); });
-tap($('btnBack'), () => showStep(Math.max(1, stepNow - 1)));
+tap($('btnBack'), () => {
+  // From the age prompt, back to whichever step pushed it — and drop the
+  // pending walk, or BACK would arm the belt on the way past.
+  if (stepNow === 4) { armPending = null; showStep(ageFrom); return; }
+  showStep(Math.max(1, stepNow - 1));
+});
 /* Tapping the suggestion takes it. Accepting the coach's number used to
    mean holding + until you reached it. */
 tap($('suggest'), () => { if (suggestKph > 0) Stride.setSpeed(suggestKph); });
@@ -1161,11 +1273,11 @@ tap($('rmapBtn'), () => {
   $('rmapBtn').textContent = on ? 'FOLLOWING' : 'WHOLE ROUTE';
 });
 
-tap($('btnBegin'), () => {
+tap($('btnBegin'), () => armWalk(() => {
   // A route carries its own length, so it never takes a duration.
   if (planMode === 'routes') { if (chosenRoute) Stride.chooseRoute(chosenRoute, chosenLoop); }
   else Stride.chooseGuided(chosenShape, chosenMinutes);
-});
+}));
 /* The settings screen is shared by all five interfaces — see
    stride-settings.js. This document keeps the button and nothing else;
    eight sections of real configuration maintained in five places is how
