@@ -827,21 +827,35 @@ function adapt(raw) {
 }
 
 /**
- * The five heart-rate zones, as shares of maximum.
+ * The five heart-rate zones, plus the resting band under them.
  *
- * The textbook split. `name` is what gets drawn; the percentages stay off the
- * screen because they are the crude part — 220-minus-age is ±10-12 bpm between
- * two people of the same age, so the boundary is softer than a printed "80%"
- * makes it look. The colours run cool to hot and are the same five in every
- * theme, so a glance at the summary means the same thing whichever UI is on.
+ * `from` is a share of the walker's *range* — of their heart-rate reserve
+ * under Karvonen, of their maximum without one — on the textbook 50/60/70/
+ * 80/90 split. It is not a share of maximum on its own any more; see
+ * zoneFloorsFor below, which is what turns these into bpm.
+ *
+ * The percentages stay off the screen because they are the crude part: the
+ * maximum behind them is a formula with ±10-12 bpm of spread between two
+ * people of the same age, so every boundary is softer than a printed "80%"
+ * makes it look.
+ *
+ * `name` is what gets drawn, and the words are the ones consumer wrist devices
+ * print rather than the plainer effort labels this file used to carry — the
+ * trade that buys, and what it costs, is written out in HrZones.ZONE_NAMES.
+ * Six colours running cool to hot, the same six in every theme, so a glance at
+ * the summary means the same thing whichever UI is on.
+ *
+ * Duplicated in HrZones.kt for anything Kotlin publishes. The two are held to
+ * each other by tools/uitest/zones.js, which reads the palette and the names
+ * straight out of the Kotlin source.
  */
 var ZONES = [
-  { key: 'z0', name: 'Resting',   from: 0.00, colour: '#3a4348' },
-  { key: 'z1', name: 'Very light',from: 0.50, colour: '#5aa9c8' },
-  { key: 'z2', name: 'Light',     from: 0.60, colour: '#5fc08a' },
-  { key: 'z3', name: 'Moderate',  from: 0.70, colour: '#e0c264' },
-  { key: 'z4', name: 'Hard',      from: 0.80, colour: '#e08a4a' },
-  { key: 'z5', name: 'Maximum',   from: 0.90, colour: '#d75d5d' }
+  { key: 'z0', name: 'Resting',        from: 0.00, colour: '#3a4348' },
+  { key: 'z1', name: 'Low intensity',  from: 0.50, colour: '#5aa9c8' },
+  { key: 'z2', name: 'Weight control', from: 0.60, colour: '#5fc08a' },
+  { key: 'z3', name: 'Aerobic',        from: 0.70, colour: '#e0c264' },
+  { key: 'z4', name: 'Anaerobic',      from: 0.80, colour: '#e08a4a' },
+  { key: 'z5', name: 'Maximum',        from: 0.90, colour: '#d75d5d' }
 ];
 
 /* ---- the zone arithmetic, page side -------------------------------------

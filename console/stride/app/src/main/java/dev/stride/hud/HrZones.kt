@@ -66,24 +66,37 @@ object HrZones {
     /**
      * Zone names, 0-5.
      *
-     * The same six words `ZONES` in stride-core.js has always drawn on the
-     * summary, kept rather than swapped for the "Weight control / Aerobic /
-     * Anaerobic" set the reference screenshot uses: those carry claims about
-     * what a zone *does* — burning fat, building a base — that a treadmill
-     * with a formula for your maximum is in no position to make. "Moderate" is
-     * a description of effort, which is the thing actually being measured.
+     * The set every consumer wrist device prints, which is the point: somebody
+     * who has been told by a watch that they were in "Aerobic" should not have
+     * to work out that this console calls the same band "Moderate". These
+     * replaced the "Very light / Light / Moderate / Hard" wording the summary
+     * used to draw, which described effort and nothing else.
      *
-     * Zone 0 is not a training zone: it is the warm-up, the cool-down, and
-     * standing on the side rail. Counted separately so it cannot inflate
-     * zone 1.
+     * **The trade, so it is on the record.** "Weight control" and "Aerobic"
+     * name what a zone is *for* rather than how hard it feels, and that is a
+     * bigger claim than a treadmill holding a formula for your maximum can
+     * really support — the fat-oxidation story behind "weight control" is a
+     * crossover point that moves with training and with what you had for
+     * breakfast, and it is routinely read as "the zone that burns fat", which
+     * is not what it means. They are kept anyway because they are the words
+     * people arrive already knowing, and an unfamiliar-but-defensible label
+     * teaches nobody anything.
      *
-     * These are labels, not claims either way. The boundary between "Hard" and
-     * "Maximum" is a smooth ±10-12 bpm smear on a formula, and the console
-     * never says a zone number as if it were measured — see [Coach.ZONE_WORDS]
-     * for the softer register the spoken coach uses instead.
+     * So the console draws these and says nothing further about them. Nothing
+     * here advises a zone, and [Coach] speaks in its own softer register — see
+     * [Coach.ZONE_WORDS] — precisely so the spoken line never turns a label
+     * into a recommendation.
+     *
+     * Zone 0 is not a training zone and has no industry name: it is the
+     * warm-up, the cool-down, and standing on the side rail. "Resting" is the
+     * reference screenshot's own word for below-zone-1. Counted separately so
+     * it cannot inflate zone 1.
+     *
+     * These are still labels, not measurements. The boundary between
+     * "Anaerobic" and "Maximum" is a smooth ±10-12 bpm smear on a formula.
      */
     val ZONE_NAMES = arrayOf(
-        "Resting", "Very light", "Light", "Moderate", "Hard", "Maximum",
+        "Resting", "Low intensity", "Weight control", "Aerobic", "Anaerobic", "Maximum",
     )
 
     /**
