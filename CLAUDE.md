@@ -3,10 +3,9 @@
 ## Active work
 
 **Branch `heart-rate-zones`** — dynamic heart-rate zone tracking, 6 phases.
-Phases 1 and 2 are complete, deployed and owner-walked. **Phase 3 — the
-zone-targeting control loop — is written and every gate passes, but it has
-not been deployed or walked.** That walk is the next thing that happens, and
-phase 4 does not start before it. **Read
+Phases 1, 2 and 3 are complete, deployed and owner-walked. **Phase 4 is next:
+zone-targeted presets, and zone targeting for custom and route runs — the
+first phase that reuses `ZoneControl` rather than building it.** **Read
 [claudeDesign/HEART_RATE_ZONES.md](claudeDesign/HEART_RATE_ZONES.md) before
 touching anything on this branch.** It holds the full plan, the decisions the
 owner has already made, the deployment state, and the faults found so far.

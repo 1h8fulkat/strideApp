@@ -2,9 +2,8 @@
 
 **Branch:** `heart-rate-zones` (off `main` at `38ae7f9`)
 **Started:** 21 September 2026
-**Phases 1 and 2 of 6 complete, deployed, and tested on the treadmill.
-Phase 3 is complete, deployed and owner-walked on 23 September 2026, and
-retuned afterwards on what the walk said.**
+**Phases 1, 2 and 3 of 6 complete, deployed, and tested on the treadmill.**
+Phase 3 was walked, retuned on what the walk said, and walked again.
 
 This file is the handoff. It exists because the work spans more sessions than
 one context window holds, and because the decisions behind it are worth more
@@ -18,8 +17,9 @@ than the diff. Read it before touching anything.
 |---|---|
 | Done | **Phase 1** — the model, birthdays, resting rates, the settings UI, the guest age prompt. Owner-walked. |
 | Done | **Phase 2** — live zone state on the frame, the in-memory HR trace, the shared zone-coloured graph, the zone-coloured BPM box, the grey zone 0, the max-HR override. Owner-walked 21 September 2026 and reported good. |
-| Done | **Phase 3** — the zone-targeting control loop. `ZoneControl.kt` + 25 unit tests, wired into the poll loop, the ZONE ribbon and the state badge in `original.html`, the coach silenced on pace nudges, `SAFETY.md` brought up to date. **Owner-walked 23 September 2026: all eleven gate items passed.** The ramp felt slow in both directions, so the step is now proportional to the distance from the zone — see "Retuned after the walk" below. |
-| Then | Phase 4 presets · Phase 5 summary analytics · Phase 6 the other four interfaces |
+| Done | **Phase 3** — the zone-targeting control loop. `ZoneControl.kt` + 25 unit tests, wired into the poll loop, the ZONE ribbon and the state badge in `original.html`, the coach silenced on pace nudges, `SAFETY.md` brought up to date. **Owner-walked 23 September 2026: all eleven gate items passed.** The ramp felt slow both ways, so the step was made proportional to zone distance, and the retune was **re-walked the same day and reported good**. |
+| **Next** | **Phase 4** — zone-targeted presets, and zone targeting for custom and route runs. The first phase to reuse `ZoneControl` rather than build it. |
+| Then | Phase 5 summary analytics · Phase 6 the other four interfaces |
 
 **The branch now commands belt speed.** Everything through phase 2 was
 read-only with respect to the motor. Phase 3 is not: with a target zone chosen,
@@ -30,23 +30,29 @@ control behaves exactly as it does on `main`.
 
 ### Next steps, in order
 
-1. **Re-walk the retune.** The proportional step landed after the walk, so the
-   numbers in `ZoneControl` have been changed since anybody stood on them.
-   The full gate does not need repeating — what does is the ramp itself: does
-   0.6 km/h at three zones out feel brisk rather than abrupt, and does the
-   taper to 0.2 on the last zone still stop it cleanly in the band without
-   sailing past? Everything else about the loop is unchanged.
-2. **Then phase 4** — zone-targeted presets and zone targeting for custom and
-   route runs.
+**Phase 4**, and nothing is blocking it. Its own section below has the detail;
+the shape of the work is:
+
+1. **`Plan.kt`** — templates that target a zone rather than a grade. A
+   `Segment` carries `incline` and a `paceDelta` today, so a zone-targeted
+   segment needs either a nullable `targetZone` on `Segment` or a parallel
+   shape. Decide that first, because everything else follows it.
+2. **The guided picker** — `SHAPES` in `stride-core.js` mirrors
+   `Plan.TEMPLATES` for the sparklines, and a zone preset has no grade profile
+   to draw, so it needs a different card treatment.
+3. **A zone-targeting toggle on Custom and My Route runs.** Same
+   `ZoneControl`, same override and resume — the loop is built and walked, so
+   this phase wires it up rather than writing it.
+4. **Walk it:** at least one preset and one zone-targeted route. The phase 3
+   gate list is kept below and still applies to the loop's behaviour.
 
 **The max-HR question is closed.** Jeff set their own maximum to **183** on
-the console on 23 September 2026, around the phase 3 walk, which puts the
-ladder at **122 / 134 / 146 / 158 / 171**. Nothing wrote that automatically —
+the console on 23 September 2026, which puts the ladder at
+**122 / 134 / 146 / 158 / 171**. Nothing wrote that automatically —
 `Bridge.setPersonMaxHr` is the only path that touches the field and it refuses
-outright while the belt is moving, precisely because under Karvonen it moves
-all five boundaries at once and would move the belt with them. The loop
-follows whatever is stored, which is the settled rule; the walker owns the
-number.
+while the belt is moving, precisely because under Karvonen it moves all five
+boundaries at once and would move the belt with them. The loop follows
+whatever is stored; the walker owns the number.
 
 ---
 ## The one thing to read first
@@ -110,19 +116,25 @@ What is **not** negotiable and is not part of that decision:
 |---|---|
 | Console | NordicTrack C 1750, FitPro board, Android 7.0, **Chromium 51 WebView** |
 | Reachable at | `192.168.10.10:5555` over adb-over-TCP |
-| Installed | `app-debug.apk`, 3.0M, built from `e1a6f07` |
-| Installed at | 2026-09-21 22:47 |
+| Installed | `app-debug.apk`, 3.0M, built from `5da658e` — the proportional ramp |
+| Installed at | 2026-09-23 20:39 |
 | Signer SHA-256 | `f274956772b6606c3fca0264dd84f870df2addecbe4e56d13925b5447997d677` |
 | Board limits | speed 0.8–19.31 km/h, incline −3.0 to +15.0 % |
-| Units | miles (`units: mi`) |
+| Units | miles (`units: mi`) — so a 0.2 km/h step reads as about 0.1 mph |
 | Monitor | "Galaxy Watch7 (64HA)", `hr_source: auto` |
+| Jeff's maximum | **183**, set by hand 23 September 2026. Ladder 122/134/146/158/171 |
+| Lauren's maximum | none set — Tanaka's 179. Ladder 120/131/143/155/167 |
 | Errors in log | none |
 
-**Data backup before the migration:**
-`/data/docker/testing/.stride-build/stride-data-20260921-204913.tar` (1.5 MB)
-— also copied to `stride-data-latest.tar`. It holds `shared_prefs` and `files`
-(history, routes, tiles) as they were under the pre-birthday schema. Keep it
-until the feature is merged.
+The signer has not changed since phase 1, so every deploy so far has been a
+plain `install -r` rather than `--replace`, and no walker data has been wiped.
+
+**Data backups.** Before the phase 1 migration:
+`/data/docker/testing/.stride-build/stride-data-20260921-204913.tar` (1.5 MB) —
+`shared_prefs` and `files` as they were under the pre-birthday schema. Before
+the first phase 3 deploy, taken because it was the first build that commands
+the belt: `stride-data-20260923-201747.tar` (1.5 MB). `stride-data-latest.tar`
+is a copy of the most recent. Keep them until the feature is merged.
 
 ### Build and deploy on this machine
 
@@ -712,7 +724,8 @@ wants to say what it is showing can.
 ## Phase 3 — the zone-targeting control loop
 
 **Complete. Written, deployed and owner-walked on 23 September 2026 — all
-eleven gate items passed — then retuned on what the walk said.**
+eleven gate items passed — then retuned on what the walk said and walked
+again the same day, reported good.**
 
 ### What was built
 
@@ -867,14 +880,26 @@ machine. The figure is pinned by `a five minute climb with no answer stays
 bounded` in `ZoneControlTest` and quoted in `SAFETY.md`; if it ever moves,
 move it in all three places.
 
-**Not re-walked yet.** The numbers have changed since anybody stood on them.
-The next walk does not need the full eleven — it needs the ramp: whether 0.6
-km/h three zones out is brisk rather than abrupt, and whether the taper to 0.2
-still stops it cleanly in the band.
+**Walked and confirmed, 23 September 2026, same day.** The owner re-walked the
+proportional ramp and reported it works well. So the shape is right: coarse
+far from the band, tapering to the original 0.2 on the last zone, reaching the
+zone in about two and a half minutes instead of four, and still stopping
+cleanly rather than sailing past. **Phase 3 is closed.**
 
-### The treadmill gate, for when this is re-walked
+Two things are therefore settled by a person rather than by a test, and both
+are worth knowing before anybody retunes this again. The dwell of 20 s is
+right — it survived both walks untouched and neither produced hunting or
+overshoot. And the *taper* is the load-bearing part, not the step size: the
+flat 0.2 and the proportional version have the same step on the final
+approach, and the only thing that changed is how fast the walker gets there.
+If a future walk complains about the ramp again, the first thing to reach for
+is the cap in [MAX_STEPS], not [STEP_KPH] and not [DWELL_MS].
 
-Kept because phase 4 reuses this loop and will want it again.
+### The treadmill gate, kept for phase 4
+
+Phase 4 puts this same loop behind zone presets and behind custom and route
+runs, so it will want walking again. This is the list, and it is the one both
+phase 3 walks were run against.
 
 1. **The ramp is gentle** far from the zone and **gentler still** approaching it.
 2. **The dwell is real** — roughly twenty seconds between adjustments.
