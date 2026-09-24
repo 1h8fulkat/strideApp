@@ -2,7 +2,8 @@
 
 **Branch:** `heart-rate-zones` (off `main` at `38ae7f9`)
 **Started:** 21 September 2026
-**Phases 1 and 2 of 6 complete, deployed, and tested on the treadmill.**
+**Phases 1 and 2 of 6 complete, deployed, and tested on the treadmill.
+Phase 3 is written and every gate passes — it has not been walked yet.**
 
 This file is the handoff. It exists because the work spans more sessions than
 one context window holds, and because the decisions behind it are worth more
@@ -16,32 +17,36 @@ than the diff. Read it before touching anything.
 |---|---|
 | Done | **Phase 1** — the model, birthdays, resting rates, the settings UI, the guest age prompt. Owner-walked. |
 | Done | **Phase 2** — live zone state on the frame, the in-memory HR trace, the shared zone-coloured graph, the zone-coloured BPM box, the grey zone 0, the max-HR override. Owner-walked 21 September 2026 and reported good. |
-| **Next** | **Phase 3 — the zone-targeting control loop.** The dangerous one: the first code on this branch that commands belt speed. The safety documents have already been rewritten to drop the "incline is driven, speed is suggested" guarantee, so read the warning below before starting it. |
+| **Built, not walked** | **Phase 3 — the zone-targeting control loop.** `ZoneControl.kt` + 23 unit tests, wired into the poll loop, the ZONE ribbon and the state badge in `original.html`, the coach silenced on pace nudges, `SAFETY.md` brought up to date. All four `ui-test.sh` gates pass and the APK builds. **Not deployed and not walked** — the treadmill gate below is the thing standing between this and phase 4. |
 | Then | Phase 4 presets · Phase 5 summary analytics · Phase 6 the other four interfaces |
 
-**Nothing on the branch commands belt speed yet.** Everything through phase 2
-is read-only with respect to the motor: the belt behaves exactly as it does on
-`main`. Phase 3 is where that stops being true.
+**The branch now commands belt speed.** Everything through phase 2 was
+read-only with respect to the motor. Phase 3 is not: with a target zone chosen,
+the console raises and lowers the belt on its own. It is **off unless switched
+on** — `zoneTarget` starts at 0 on every walk, is never persisted, and is
+cleared by `resetSession()` — so a walk on which nobody touches the ZONE
+control behaves exactly as it does on `main`.
 
 ### Next steps, in order
 
-1. **Re-read the warning under "The one thing to read first".** The safety
-   documents are already rewritten — the guarantee was withdrawn on 21
-   September 2026, ahead of the code, so nothing in the tree promises a thing
-   the console is about to stop doing. One paragraph in `SAFETY.md` says the
-   targeting loop is not built yet, and updating that sentence is part of this
-   phase.
-2. **Confirm the walkers' maxima are what they mean to be.** Jeff's override
-   currently reads **185**, set on the console on 21 September 2026 while the
-   new stepper was being tried out; their watch measures 175 and Tanaka gives
-   178. Under Karvonen that is the difference between zone 1 starting at 123
-   and at 118, and phase 3 will drive a belt at whichever it is. Worth one
-   question before the loop goes in, not after.
-3. **Write `ZoneControl.kt` as a pure class with `ZoneControlTest.kt` beside
-   it**, driven through scripted heart-rate traces. Keep Android out of it. The
-   `HrTrace` / `HrTraceTest` pair from phase 2 is the shape to copy.
-4. **Walk the whole thing before merging.** The gate for phase 3 is explicitly
-   not a spot check — see the phase's own section.
+1. **Deploy and walk it.** This is the gate, it is mandatory, and it is the
+   whole of what is left in phase 3. The list of what to confirm is in the
+   phase's own section below — the short version is that the ramp is gentle,
+   the dwell is real, override is instant, resume works, **and pulling the
+   strap mid-walk holds the belt rather than accelerating it.** Test the
+   safety key during an auto-adjusting walk.
+2. **Set the max-HR override to whatever Jeff means it to be, before the
+   walk.** *Closed as a design question, still open as a console setting.*
+   The loop reads the walker's ladder out of Settings and has no opinion about
+   where it came from — override or formula, it follows what is there. But the
+   console currently holds **185** for Jeff, set on 21 September 2026 while the
+   stepper was being tried out, and their watch measures 175. That is zone 1
+   starting at 123 rather than 118, and the belt will now chase whichever is
+   stored. Settings → Who walks → Maximum heart rate.
+3. **Then write down what the machine taught**, here, in the phase 3 section —
+   the way phases 1 and 2 did. The numbers in `ZoneControl` are defensible
+   guesses until somebody has stood on them.
+4. **Phase 4 after that**, not before.
 
 ---
 
@@ -201,6 +206,9 @@ Asked and answered by the owner. Treat as settled.
 | Karvonen/Tanaka vs the existing `220 − age`? | **Replace globally.** One code path. Coach and History use the new numbers. |
 | Karvonen or percent-of-max for the boundaries? | **Karvonen.** Asked and answered twice. On 21 September 2026 a request to move zone 1 down to 87 was misread as a request for percent-of-max and implemented; the owner corrected it and it was reverted. **They want Karvonen.** What they had actually asked for was the grey zone 0 below zone 1, plus a max-HR override for tuning the ladder to their own body. Do not re-derive the boundaries from a plain share of maximum. |
 | Should the walker be able to override their maximum? | **Yes, per person, with the formula as the default.** Their watch measures 175 from real workout data and Tanaka says 178; a measured ceiling beats a regression. |
+| Which maximum does the loop steer against? | **Whatever Settings holds for that walker** — their measured override when they gave one, Tanaka's estimate when they did not. Asked on 23 September 2026 with the 185/178/175 numbers on the table; the owner declined to pick a figure and chose the rule instead. `ZoneControl` is therefore handed a ladder and has no opinion about where it came from, which is also why `Bridge.setZoneTarget` refuses outright for a walker who has no ladder at all. |
+| What does the coach say while the loop drives? | **Nothing about pace.** `zone_low` and `zone_high` are suppressed while `zoneAuto` is true; everything else the coach says is untouched. Asked 23 September 2026, with "narrate each adjustment" offered and declined. The nudges come back by themselves the moment the walker takes the belt by hand, which is exactly when the advice is theirs to act on again. |
+| How hard should the loop chase a zone? | **0.2 km/h every 20 s**, chosen by the owner from three options on 23 September 2026 — the middle of the 15–30 s dwell they had already specified. At most 0.6 km/h of drift in a minute. The asymmetry on top of it (up to two steps *down* when more than one zone over, always one step up) was not asked about; it is a safety-side default and is called out in `ZoneControl.MAX_STEPS_DOWN` for reversal if the walk says otherwise. |
 | Zone names? | **The reference screenshot's set** — Low intensity, Weight control, Aerobic, Anaerobic, Maximum. The owner was offered the plainer effort labels and chose these. The trade-off is recorded in `HrZones.ZONE_NAMES`; don't undo it. |
 
 There is **no `Directory structure.txt`** in the repo or workspace, despite the
@@ -215,6 +223,7 @@ console/stride/app/src/main/
   java/dev/stride/hud/
     HrZones.kt        NEW — all zone arithmetic. Single source of truth.
     HrTrace.kt        NEW — the walk's HR+pace trace, downsampled as it fills.
+    ZoneControl.kt    NEW — phase 3. The loop that commands belt speed. Pure.
     Settings.kt       Person.birthday + restingHr; derived age/maxPulse/zoneFloors
     MainActivity.kt   4176 lines. Poll loop, Bridge (@JavascriptInterface),
                       zoneSecs, walkTrace
@@ -231,6 +240,7 @@ console/stride/app/src/main/
     cluster.html / ember.html / pacer.html / daylight.html   Port targets.
 console/stride/app/src/test/java/dev/stride/hud/HrZonesTest.kt   NEW — 22 tests
 console/stride/app/src/test/java/dev/stride/hud/HrTraceTest.kt   NEW — 13 tests
+console/stride/app/src/test/java/dev/stride/hud/ZoneControlTest.kt NEW — 23 tests
 tools/uitest/zones.js   NEW — holds the page's copy of the formulas to Kotlin's
 tools/uitest/es.js      Extended with the CSS audit
 ```
@@ -702,39 +712,120 @@ wants to say what it is showing can.
 
 ## Phase 3 — the zone-targeting control loop
 
-**The dangerous one.** Do not merge it without a full walk.
+**Written 23 September 2026. Every gate passes. Not deployed, not walked.**
+The treadmill gate at the foot of this section is what is left.
 
-* **New `ZoneControl.kt`.** Own file. Given a target zone, the current pulse,
-  the current setpoint and the board's limits, it returns the next commanded
-  speed — or "no change". Pure and unit-testable; keep the Android out of it so
-  `ZoneControlTest.kt` can drive it through scripted heart-rate traces.
-* **Behaviour the owner specified:**
-  * Adjust speed gradually. **Small bounded step**, then **wait 15–30 s** for HR
-    to respond before the next adjustment, so the reading being acted on is a
-    settled average rather than a transient.
-  * **A pulse of 0 is a disconnect.** Do not adjust. Hold the current speed
-    until a valid signal returns. `HrZones.zoneOf` returns −1 for this — use it,
-    do not test `bpm == 0` in a second place.
-  * **Override:** a manual speed press takes the belt back for the rest of the
-    walk. Model it on `inclineAuto` in `MainActivity`, which already does
-    exactly this for the deck.
-  * **Resume:** an explicit control to hand the belt back to the loop.
-* Wire into the poll loop. New bridge methods for on/off, override, resume.
-  Controls and a clear state indicator in `original.html` — the walker must be
-  able to tell at a glance whether the belt is steering itself.
-* **Update the one paragraph the doc rewrite left pending.** The documents were
-  rewritten ahead of the code — see "The one thing to read first" — so the
-  guarantee is already withdrawn everywhere. What is left is the "Where this
-  actually stands" paragraph in `SAFETY.md`, which currently says the targeting
-  loop is not in the code. That sentence becomes false the moment this phase
-  lands, and it is deliberately the only one that does.
-* Consider what the coach says. `Coach.kt` nudges pace verbally on zone drift;
-  with the loop running, that advice is redundant or contradictory.
+### What was built
 
-**Treadmill gate: mandatory, and walk the whole thing.** Confirm the ramp is
-gentle, the dwell is real, override takes effect immediately, resume works, and
-**removing the strap mid-walk holds the belt steady rather than accelerating.**
-Test the safety key during an auto-adjusting walk.
+* **`ZoneControl.kt`** — the loop, as a pure class with no Android in it, so
+  `ZoneControlTest.kt` can drive it through scripted heart-rate traces at the
+  poll loop's real 5 Hz. It is handed a time, a pulse, the walker's ladder, the
+  current setpoint and the board's limits, and answers with one speed or with
+  nothing. It has no clock, no board and no preferences of its own.
+* **`ZoneControlTest.kt`** — 23 tests in three groups: the holds, the ramp, the
+  override handshake. The ones that matter are the holds.
+* **Wired into the poll loop** as `driveZone()`, sitting next to `driveIncline()`
+  and written to the same shape. ACTIVE only, never in the warm-up or the
+  cool-down.
+* **`Bridge.setZoneTarget(zone)` and `Bridge.zoneResume()`**, plus the override
+  handshake folded into `Bridge.speed()` and `Bridge.setSpeed()`.
+* **Three new `Snapshot` fields** — `zoneTarget`, `zoneAuto`, `zoneAtLimit` —
+  and their JSON.
+* **The ZONE ribbon and the state badge in `original.html`**, plus
+  `STRIDE.zoneAutoNote()` in `stride-core.js` so the Phase 6 ports inherit the
+  wording rather than re-inventing it.
+* **The coach silenced on pace nudges** while the belt is steering.
+* **`SAFETY.md`'s pending paragraph rewritten.** It now describes a loop that
+  exists, with the actual numbers in it. That was the one sentence in the tree
+  the phase-2 document rewrite deliberately left false-on-arrival.
+
+### The behaviour, and why each piece is the way it is
+
+| | |
+|---|---|
+| Step | **0.2 km/h**, the owner's choice. |
+| Dwell | **20 s**, the middle of the 15–30 s they specified. |
+| Reading acted on | **A 10 s rolling mean**, not the latest frame. "A settled average rather than a transient" was the instruction, and a single arm-swing frame at 200 bpm must not move a treadmill. |
+| Disconnect | `HrZones.zoneOf` returning −1, **read from the instantaneous pulse** and not from the mean — a strap that came off two seconds ago has to stop the loop now, not when the window finally empties ten seconds later. |
+| Over the target | Up to **two** steps at once. Under it, always **one**. Being two zones over is somebody working harder than they asked to; being two zones under is somebody having an easy walk. Not asked about — a safety-side default, flagged here for reversal. |
+| Stopped belt | Setpoint below `minKph` means there is no walk to steer. The loop **never starts a belt and never stops one.** |
+| Pause, warm-up, cool-down, safety key | Not steerable, and each such frame **re-arms the dwell** — so RESUME on a paused walk gets a full twenty seconds before anything moves. Without it the dwell expires while the belt stands still and the first frame back acts on a mean gathered from somebody standing on the side rail: genuinely below the target zone, and genuinely nothing to do with the pace they were walking at. |
+| Board limits | Clamped in `ZoneControl` *and* again through `paceKph()`, which is the pre-existing machine-limits rule and is not the invariant this feature removed. |
+| Off by default | `zoneTarget = 0` on every walk, never persisted, cleared in `resetSession()`. |
+
+**It does not aim for the middle of the zone.** It stops the moment the zone is
+right, so it settles near whichever boundary it arrived from and will drift
+back and forth across it over a long walk, bounded by one step per dwell. The
+alternative — steering to a bpm inside the band — is false precision with a
+motor attached: the band is a band because the underlying formula is a ±10-12
+bpm smear. **This is the most likely thing the walk will argue with**, and the
+honest answer if it feels fidgety is a wider dwell rather than a target bpm.
+
+### What the walker sees
+
+* **A badge under the speed gauge** — `AUTO Z3`, `MANUAL`, `HOLDING`,
+  `AT LIMIT` — in the *target* zone's colour, which is the only element on the
+  HUD whose colour means "where this is taking you" rather than "where you
+  are". Absolutely positioned out of the gauge's flow so it cannot push the
+  tick column into the trace band at 582; the UI suite asserts the geometry
+  (it lands at 538–572) because Chromium 51 would not have complained.
+* **A ZONE ribbon** in the control row, the fan menu's twin: OFF, Z1–Z5 and
+  RESUME. Ten seconds rather than the fan's five, because it is a decision
+  somebody reads the options for. Chips lit in their own zone's colour. Each
+  states `height:52px` explicitly — `button{}` sets 76px on every button in the
+  document, which was the one visible bug of phase 1, and there is now a test
+  for it rather than a comment.
+* **A legend line** in the heart-rate band saying what the belt is doing. It
+  outranks "zones assumed", which is still shown on every walk with no target.
+* **Nothing at all** for a walker with no zone ladder — no badge, no ZONE
+  button. `Bridge.setZoneTarget` refuses the call too, so the page is not the only
+  lock on that door.
+
+### Verified in the container, belt cold
+
+* 23 `ZoneControlTest` cases, plus the existing `HrZonesTest` (22) and
+  `HrTraceTest` (13), green.
+* 18 new checks in `tools/uitest/ui.js` covering the badge, the ribbon
+  geometry, the chip heights, RESUME's muting and the wording, green.
+* `tools/ui-test.sh all` — `es`, `zones`, `engine`, `ui` — all four green.
+* `./stride-build.sh debug` builds, 3.0M.
+
+**Two tests were written wrong first and the fix was in the code, not the
+test.** They asserted one adjustment in the first 30 s and got two, because a
+freshly constructed `ZoneControl` acted as soon as it had ten samples: the
+"first move is a dwell away" promise held only if the caller remembered to call
+`reset()`. That is far too load-bearing to leave in the calling code, so the
+dwell is now armed by the *first reading* — see `ZoneControl.armed`. Worth
+recording because the failing test was right and the instinct to relax it would
+have shipped a belt that could move two seconds after the loop was switched on.
+
+### Treadmill gate — mandatory, and walk the whole thing
+
+Not a spot check. In one walk, with a target zone set:
+
+1. **The ramp is gentle** — 0.2 km/h steps are a change you notice, not one
+   you brace for.
+2. **The dwell is real** — roughly twenty seconds between adjustments, and the
+   belt is not hunting.
+3. **Override is immediate** — one press of SPEED and the badge reads `MANUAL`
+   from that moment; the loop does not come back on its own.
+4. **RESUME works**, and pressing it is *not felt through the belt* — the
+   walker gets a full dwell at the speed they chose first.
+5. **Pull the strap mid-walk.** The belt must hold. This is the one failure
+   with an obvious wrong answer and the reason the loop reads the
+   instantaneous pulse for the disconnect test.
+6. **Pull the safety key during an auto-adjusting walk.**
+7. Check `logcat -s Stride:I` afterwards for the `zone:` lines — every
+   adjustment logs its reason and the settled bpm it acted on.
+
+Then come back and write down what the machine taught, in this section.
+
+### Open after the walk
+
+* Whether 0.2/20 s feels right, or whether the belt hunts at a zone boundary.
+* Whether the two-steps-down asymmetry is wanted.
+* Whether a coach that says nothing about pace reads as a coach that has
+  stopped working.
 
 ---
 
@@ -839,7 +930,26 @@ Not blocking, but worth asking when they come up.
 
    The override is still worth setting before Phase 3 drives a belt, since it
    moves all five boundaries.
-2. **What does the coach say while the loop is driving?** Phase 3 question.
+
+   **Settled further on 23 September 2026.** Asked which of 185 (what the
+   console holds), 178 (Tanaka) or 175 (the watch) the loop should drive
+   against, the owner declined to name a figure and gave the rule instead:
+   *always use the max HR defined for the walker in Settings, whether that is
+   the calculated one or an override they set.* So there is no number in the
+   code and there is not going to be one — `ZoneControl` is handed a ladder
+   and follows it. What remains is a console setting, not a design question:
+   **185 is still what Jeff's profile holds**, and it is worth confirming that
+   is what they mean before a belt chases it.
+2. **What does the coach say while the loop is driving?** *Answered on 23
+   September 2026: nothing about pace.* `zone_low` and `zone_high` both end in
+   a suggested pace, and both are answers to a question the loop is already
+   answering with the motor — "a touch more pace if you have it", said while
+   the console is itself adding a touch more pace, is at best redundant and at
+   worst an instruction to fight it. They are suppressed while `zoneAuto` is
+   true and return the moment the walker takes the belt by hand. Narrating
+   each adjustment instead was offered and declined. Everything else the coach
+   says — milestones, check-ins, `hr_climb`, the closing line — is untouched,
+   because none of it asks anybody to change pace.
 3. **Should the HR trace ever be persisted?** They chose in-memory-only for
    now. Phase 5 may make a trend view tempting; it would need downsampling and
    a size budget against `History.KEEP = 750`.

@@ -197,6 +197,36 @@ data class Snapshot(
     val zoneFrom: Int = 0,
     val zoneTo: Int = 0,
     /**
+     * The zone the belt is being steered towards, 1-5, or 0 when nothing is
+     * steering it.
+     *
+     * Distinct from [zone], which is where the walker *is*. The HUD needs
+     * both: the gap between them is the whole state of the feature, and a
+     * screen that showed only one of them would leave the walker unable to
+     * tell "holding zone 3" from "climbing towards zone 3".
+     */
+    val zoneTarget: Int = 0,
+    /**
+     * True while the loop actually has the belt; false once a hand on SPEED
+     * has taken it back, and until RESUME gives it up again.
+     *
+     * The single most important boolean on this screen. Whether the treadmill
+     * will change speed underneath somebody in the next twenty seconds is not
+     * a thing to make them infer, so it is sent as its own fact rather than
+     * derived on the page from [zoneTarget] and a guess.
+     */
+    val zoneAuto: Boolean = false,
+    /**
+     * True when the loop wants to move the belt and the board's own range will
+     * not let it — at the top of the range still short of the zone, or at the
+     * bottom still over it.
+     *
+     * Sent so the HUD can say the machine has run out of room. Otherwise a
+     * walker who asked for zone 5 on a gentle setting watches a belt that
+     * never changes and concludes the feature does not work.
+     */
+    val zoneAtLimit: Boolean = false,
+    /**
      * What this walk did that previous walks did not — see History.
      *
      * Computed once, when the belt stops, against this walker's own recorded
@@ -350,6 +380,9 @@ data class Snapshot(
         append("\"zoneFloors\":${zoneFloors.joinToString(",", "[", "]")},")
         append("\"zoneFrom\":$zoneFrom,")
         append("\"zoneTo\":$zoneTo,")
+        append("\"zoneTarget\":$zoneTarget,")
+        append("\"zoneAuto\":$zoneAuto,")
+        append("\"zoneAtLimit\":$zoneAtLimit,")
         append("\"achievements\":${
             achievements.joinToString(",", "[", "]") { "\"${esc(it)}\"" }
         },")

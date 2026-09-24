@@ -54,13 +54,26 @@ What it means in practice:
   control to hand it back deliberately.
 
 **Where this actually stands, so this file does not promise something that is
-not built.** As of this commit the targeting loop is *not in the code*. Zone
-tracking is live — the console knows which zone you are in, draws it, and
-records time in each — and the belt is still driven only at the edges described
-above. The loop is the next piece of work. The guarantee is recorded as
-withdrawn here rather than at the moment the loop lands, because a safety
-document that grants a guarantee it is about to take away is worse than one
-that never gave it.
+not built.** The targeting loop **is in the code** as of this commit, in
+`ZoneControl.kt`, and the paragraphs above now describe a console that exists
+rather than one that is planned. It is **off unless you switch it on**: every
+walk starts with no target zone, nothing is remembered from the last walk, and
+until you pick a zone from the ZONE control the belt behaves exactly as it did
+before this feature — driven only at the edges described above.
+
+What it does when it is on, in the numbers it actually uses: it moves the belt
+by **0.2 km/h at a time and then waits 20 seconds**, it reads a **10-second
+average** rather than the latest beat so that a single bad frame cannot move
+the machine, and it comes *down* faster than it goes up — up to two steps at
+once when you are more than one zone over your target, always one step when you
+are under it. It will not start a stopped belt and it will not stop a moving
+one. Your zone ladder is built on whatever maximum heart rate your profile
+holds, whether that is the formula's estimate or a figure you measured and
+typed in yourself.
+
+The guarantee was recorded as withdrawn here one phase *before* this code
+landed, rather than alongside it, because a safety document that grants a
+guarantee it is about to take away is worse than one that never gave it.
 
 **What has not changed, and was never part of that decision:**
 

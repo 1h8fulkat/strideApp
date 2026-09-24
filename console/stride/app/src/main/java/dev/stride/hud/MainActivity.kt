@@ -687,6 +687,35 @@ class MainActivity : Activity() {
     @Volatile private var inclineAuto = false
     private var lastInclineMoveAt = 0L
 
+    /**
+     * The zone the belt is steering towards, 1-5, or 0 for "not steering".
+     *
+     * The switch for the whole feature. Off is the default and off is what
+     * every walk starts as — see [resetSession] — because a console that
+     * remembered it was driving the belt last Tuesday and resumed doing so
+     * under somebody who did not ask is the exact failure the safety
+     * documents were rewritten to be honest about.
+     */
+    @Volatile private var zoneTarget = 0
+
+    /**
+     * False once a hand on SPEED has taken the belt back for the rest of the
+     * walk. Restored only by an explicit RESUME.
+     *
+     * Deliberately the same shape as [inclineAuto], which has done this for
+     * the deck since the guided walks went in, and deliberately *not* the same
+     * lifetime: [inclineAuto] comes back by itself at the next segment,
+     * because a plan's hill is a per-segment opinion. This does not come back
+     * by itself at all. The deck cannot run away underneath anybody and the
+     * belt can, so "I have taken the speed back" has to mean it until the
+     * walker says otherwise, rather than expiring quietly on a timer they
+     * are not watching.
+     */
+    @Volatile private var zoneAuto = false
+
+    /** The loop itself. Pure, unit-tested, and it owns the dwell. */
+    private val zoneControl = ZoneControl()
+
     /** The coach's closing line, asked for near the end and shown on the summary. */
     @Volatile private var summaryLine = ""
 
@@ -1346,6 +1375,11 @@ class MainActivity : Activity() {
 
         @JavascriptInterface fun speed(delta: Double) {
             if (!Session.isMoving(session) || dmk) return
+            // A hand on the belt outranks the zone loop, permanently. Before
+            // the clamping below, so that a press refused by the board's own
+            // limits still counts as taking it back: the walker pressed, and
+            // what they meant was "stop steering", not "add a tenth".
+            zoneTakenByHand()
             var next = targetKph + delta
             // Below the machine's minimum there is no "slow", only stopped —
             // so stepping down out of the bottom of the range means stop, and
@@ -1368,6 +1402,10 @@ class MainActivity : Activity() {
          */
         @JavascriptInterface fun setSpeed(kph: Double) {
             if (!Session.isMoving(session) || dmk) return
+            // Taking the coach's suggested pace is a hand on the belt too, and
+            // it is the one that would otherwise be quietly undone twenty
+            // seconds later by a loop that disagreed with the suggestion.
+            zoneTakenByHand()
             targetKph = if (kph < minKph) 0.0 else kph.coerceIn(0.0, maxKph)
             pendingWrite = mapOf(FitPro.Field.KPH to targetKph)
             Log.i(TAG, "pace: took the suggestion, ${"%.1f".format(targetKph)} km/h")
@@ -1391,6 +1429,49 @@ class MainActivity : Activity() {
             }
             targetGrade = (targetGrade + delta).coerceIn(minGrade, maxGrade)
             pendingWrite = mapOf(FitPro.Field.GRADE to targetGrade)
+        }
+
+        /**
+         * Point the belt at a heart-rate zone, or switch the loop off.
+         *
+         * `0` is off and so is any zone outside 1..[HrZones.TOP]; the page is
+         * not trusted to have validated its own buttons. Switching on also
+         * hands the belt back, because choosing a zone *is* asking the console
+         * to steer — a walker who picks zone 3 after overriding should not
+         * have to press RESUME as well to make anything happen.
+         *
+         * Refused outright when the walker has no zone ladder. Without an age
+         * or a measured maximum there are no boundaries, and the console does
+         * not invent them — least of all with a motor attached. The page hides
+         * the control in that state; this is the second lock on the same door.
+         */
+        @JavascriptInterface fun setZoneTarget(zone: Int) {
+            if (walkerZoneFloors.isEmpty()) {
+                Log.i(TAG, "zone: refused — this walker has no zones to steer to")
+                return
+            }
+            val z = if (zone in 1..HrZones.TOP) zone else 0
+            zoneTarget = z
+            zoneAuto = z > 0
+            zoneControl.reset(SystemClock.elapsedRealtime())
+            Log.i(TAG, if (z > 0) "zone: targeting zone $z (${HrZones.ZONE_NAMES[z]})"
+                       else "zone: targeting off")
+        }
+
+        /**
+         * Hand the belt back to the loop after taking it by hand.
+         *
+         * Does nothing unless a zone is actually targeted, so the button is
+         * inert rather than surprising if it is ever left on screen in a state
+         * the page did not expect. [ZoneControl.reset] means the walker gets a
+         * full dwell at the speed they chose before anything moves: pressing
+         * RESUME is not felt through the belt.
+         */
+        @JavascriptInterface fun zoneResume() {
+            if (zoneTarget < 1) return
+            zoneAuto = true
+            zoneControl.reset(SystemClock.elapsedRealtime())
+            Log.i(TAG, "zone: belt handed back to the loop, target zone $zoneTarget")
         }
 
         /** Off → Low → Medium → High → Auto → Off */
@@ -2631,6 +2712,79 @@ class MainActivity : Activity() {
     }
 
     /**
+     * Move the belt towards the target heart-rate zone, slowly.
+     *
+     * The counterpart of [driveIncline] and the first thing in this console
+     * that commands belt speed unasked. [ZoneControl] holds all of the
+     * judgement — the step, the dwell, the settled average, the holds — and
+     * this method is only the plumbing that connects it to a board.
+     *
+     * **The pulse is sampled whether or not the loop is driving.** A walker
+     * who has had the belt by hand for five minutes and presses RESUME should
+     * get a controller with a warm window rather than one that has to watch
+     * them for another ten seconds before it knows anything. The gates that
+     * follow the sample therefore stop the *driving*, not the *watching*.
+     *
+     * ACTIVE only, not [Session.isMoving]. A warm-up has a speed of its own
+     * and a purpose the walker chose; a cool-down is a deliberate wind-down
+     * and a loop that spotted a heart rate falling out of zone 3 during one
+     * would fight it all the way to the summary screen. Same reasoning as the
+     * plan tick above it, and the same bug avoided.
+     */
+    private fun driveZone(pulse: Int) {
+        if (zoneTarget < 1 || zoneTarget > HrZones.TOP) return
+
+        val now = SystemClock.elapsedRealtime()
+        zoneControl.sample(now, pulse)
+
+        // Not a walk this loop may steer: the safety key is out, or the belt
+        // is in a warm-up, a cool-down or a pause. Re-arm the dwell on every
+        // such frame, so that whenever the walk becomes ACTIVE again the
+        // walker gets a full twenty seconds before anything moves.
+        //
+        // This is what stops a pause from being felt as an adjustment. The
+        // dwell would otherwise run out while the belt stood still, and the
+        // first ACTIVE frame after RESUME would act on a mean gathered from
+        // somebody standing on the side rail — a heart rate that is genuinely
+        // below the target zone and genuinely says nothing about the pace
+        // they were walking at.
+        if (dmk || session != Session.ACTIVE) {
+            zoneControl.reset(now)
+            return
+        }
+        if (!zoneAuto) return
+        // Don't stamp on a queued write — same rule as driveIncline. The board
+        // takes one field at a time and the loop is never the urgent writer.
+        if (pendingWrite != null) return
+
+        val d = zoneControl.decide(
+            now, pulse, walkerZoneFloors, zoneTarget, targetKph, minKph, maxKph,
+        ) ?: return
+
+        // Through paceKph like every other commanded speed, so the board's own
+        // reported range has the last word. ZoneControl already clamps to the
+        // same limits; this is the belt-and-braces the safety document keeps
+        // even though the suggest-only invariant went — it is a machine-limits
+        // rule, not that one.
+        targetKph = paceKph(d.kph)
+        pendingWrite = mapOf(FitPro.Field.KPH to targetKph)
+        Log.i(TAG, "zone: speed -> ${"%.1f".format(targetKph)} km/h — ${d.why}")
+    }
+
+    /**
+     * Take the belt back from the loop for the rest of the walk.
+     *
+     * Called from both speed controls. The person on the treadmill outranks
+     * the loop, which is the same rule [Bridge.incline] applies to the plan —
+     * except that this one does not expire. See [zoneAuto].
+     */
+    private fun zoneTakenByHand() {
+        if (!zoneAuto || zoneTarget < 1) return
+        zoneAuto = false
+        Log.i(TAG, "zone: belt taken over by hand, targeting is off until RESUME")
+    }
+
+    /**
      * Arm the warm-up: WARMUP for [Settings.warmupMs], belt at
      * [Settings.warmupKph], SKIP offered on the screen it puts up.
      *
@@ -2845,6 +2999,12 @@ class MainActivity : Activity() {
         zoneSecs.fill(0.0)
         lastZoneAt = 0L
         walkTrace.clear()
+        // Off, every walk, for everybody. Not remembered across walks — see
+        // zoneTarget — and the window is thrown away rather than reset
+        // because the last walker's pulse is not evidence about this one.
+        zoneTarget = 0
+        zoneAuto = false
+        zoneControl.clear()
         climbM = 0.0
         lastClimbMetres = 0.0
         earned = emptyList()
@@ -3561,6 +3721,13 @@ class MainActivity : Activity() {
             // A route is ground, not a timetable — see routeTick.
             if (route != null) routeTick(sessionDistance) else planTick(elapsedNow)
         }
+
+        // After the plan, so that on a guided walk the deck has already been
+        // asked for this frame and driveZone sees the pendingWrite it must not
+        // stamp on. Outside the ACTIVE branch because the loop samples the
+        // pulse in every phase and decides only in one — see driveZone.
+        driveZone(pulse)
+
         val step = currentStep()
 
         // One answer to "which zone is this", computed where the floors are
@@ -3606,6 +3773,9 @@ class MainActivity : Activity() {
             zoneSecs = if (walkerHrMax > 0) zoneSecs.map { Math.round(it).toInt() }
                        else emptyList(),
             zone = zoneNow,
+            zoneTarget = zoneTarget,
+            zoneAuto = zoneAuto,
+            zoneAtLimit = zoneControl.atLimit,
             zoneFloors = walkerZoneFloors.toList(),
             zoneFrom = bandNow?.first ?: 0,
             zoneTo = bandNow?.last ?: 0,

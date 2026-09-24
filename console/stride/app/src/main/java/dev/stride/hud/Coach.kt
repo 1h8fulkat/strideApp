@@ -567,7 +567,25 @@ class Coach {
         // floor is an invitation and comes with a pace to try. Over the ceiling
         // is about form first — stride, breathing — and pace second, because
         // "slow down" is the advice a walker has already thought of.
-        if (moving && s.pulse > 0 && s.hrMax > 0 && s.elapsed >= HR_SETTLED_AFTER_S) {
+        //
+        // **Silent while the belt is steering itself.** Both of these lines
+        // end in a pace to try, and both of them are answers to a question
+        // the zone loop is already answering with the motor: "a touch more
+        // pace if you have it" said while the console is itself adding a
+        // touch more pace is at best redundant and at worst an instruction to
+        // fight it. The owner chose to have the coach stay quiet on pace
+        // nudges rather than narrate the adjustments — see the phase 3
+        // section of claudeDesign/HEART_RATE_ZONES.md.
+        //
+        // Only these two. Everything else the coach says — milestones,
+        // check-ins, hr_climb, hr_settled, the closing line — carries on
+        // untouched, because none of it asks the walker to change pace. And
+        // the moment they take the belt back by hand, zoneAuto goes false and
+        // the nudges return on their own: the advice is useful again exactly
+        // when it is theirs to act on.
+        val beltSteering = s.zoneAuto && s.zoneTarget > 0
+        if (moving && !beltSteering && s.pulse > 0 && s.hrMax > 0 &&
+            s.elapsed >= HR_SETTLED_AFTER_S) {
             val share = s.pulse.toDouble() / s.hrMax
             val zone = zoneOf(share)
 

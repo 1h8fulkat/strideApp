@@ -3,12 +3,18 @@
 ## Active work
 
 **Branch `heart-rate-zones`** — dynamic heart-rate zone tracking, 6 phases.
-Phases 1 and 2 are complete, deployed and owner-walked. **Phase 3 is next: the
-zone-targeting control loop, which is the one that commands belt speed.**
-Nothing on the branch moves the motor yet. **Read
+Phases 1 and 2 are complete, deployed and owner-walked. **Phase 3 — the
+zone-targeting control loop — is written and every gate passes, but it has
+not been deployed or walked.** That walk is the next thing that happens, and
+phase 4 does not start before it. **Read
 [claudeDesign/HEART_RATE_ZONES.md](claudeDesign/HEART_RATE_ZONES.md) before
 touching anything on this branch.** It holds the full plan, the decisions the
 owner has already made, the deployment state, and the faults found so far.
+
+**The branch now commands belt speed** — `ZoneControl.kt`, driven from
+`driveZone()` in the poll loop. It is off unless switched on: no target zone
+is set on any walk and none is ever persisted, so a walk where nobody touches
+the ZONE control behaves exactly as it does on `main`.
 
 The short version of the one thing that matters: this feature **deliberately
 removes** the project's "incline is driven, speed is suggested" safety
@@ -69,7 +75,10 @@ working around it.
 
 ## Anything that moves the belt
 
-Read [SAFETY.md](SAFETY.md) first. The physical safety key is the stop of
+Read [SAFETY.md](SAFETY.md) first. All the judgement about *when* the belt
+moves on its own lives in `ZoneControl.kt`, which is pure and has 23 tests —
+put changes there rather than in the poll loop, and add the scripted trace
+that shows the new behaviour. The physical safety key is the stop of
 record and nothing in software gets to be the last line. Every commanded speed
 is clamped to the board's own reported range in Kotlin — that rule is about
 machine limits and is not the invariant the zone feature removes.

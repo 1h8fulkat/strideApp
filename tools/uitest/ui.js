@@ -733,6 +733,165 @@ JSDOM.fromFile(path, {
       : '!band shown=' + shown + ' border=' + border;
   });
 
+  /* ---- Phase 3: the belt steering itself --------------------------------
+     What the walker can see about a treadmill that changes speed on its own.
+     The control loop's own arithmetic is pinned in ZoneControlTest.kt; these
+     are about the screen, and specifically about the one question the plan
+     document calls out — "the walker must be able to tell at a glance whether
+     the belt is steering itself". A wrong answer here is somebody standing on
+     a belt they think they are driving. */
+  const zf = (over) => ({ ...hrFrame(148, 3, 700), ...over });
+  const badge = () => w.document.getElementById('zoneBadge');
+  const badgeOn = () => badge().classList.contains('on');
+
+  check('nothing is said about the belt when nothing is targeting it', () => {
+    w.render(zf({ zoneTarget: 0, zoneAuto: false }));
+    return !badgeOn() && badge().textContent === ''
+      ? 'no badge on an ordinary walk'
+      : '!badge "' + badge().textContent + '" on a walk with no target';
+  });
+
+  check('the badge names the zone the belt is steering to', () => {
+    w.render(zf({ zoneTarget: 4, zoneAuto: true, zone: 2, elapsed: 701 }));
+    const t = badge().textContent;
+    return badgeOn() && /Z4/.test(t) ? t : '!badge reads "' + t + '"';
+  });
+
+  /* The colour is the *target* zone's, not the one the walker is in. This is
+     the only element on the HUD where that is true, and it is the difference
+     between "where you are" and "where this is taking you" — the BPM box six
+     inches away is already showing the first. */
+  check('and takes the target zone colour, not the current one', () => {
+    w.render(zf({ zoneTarget: 4, zoneAuto: true, zone: 2, elapsed: 702 }));
+    const got = badge().style.color;
+    return got === rgb(w.STRIDE.ZONES[4].colour) ? got
+      : '!badge is ' + got + ', wanted zone 4 ' + rgb(w.STRIDE.ZONES[4].colour);
+  });
+
+  /* An override has to be unmistakable and must not look like a fault. The
+     walker chose it; the console confirms it and says nothing further. */
+  check('taking the belt by hand says so, plainly', () => {
+    w.render(zf({ zoneTarget: 4, zoneAuto: false, zone: 2, elapsed: 703 }));
+    const t = badge().textContent;
+    return badgeOn() && /MANUAL/.test(t) &&
+           badge().classList.contains('manual')
+      ? t : '!badge reads "' + t + '" manual=' +
+            badge().classList.contains('manual');
+  });
+
+  /* The treadmill gate's own case, at the screen. A strap coming off holds
+     the belt — that is ZoneControl's job — but the walker has to be told, or
+     a belt that has quietly stopped responding reads as one that is broken. */
+  check('a dropped strap says the belt is holding, not that it is steering', () => {
+    w.render(zf({ zoneTarget: 4, zoneAuto: true, zone: -1, pulse: 0, elapsed: 704 }));
+    const t = badge().textContent;
+    return /HOLDING/.test(t) ? t : '!badge reads "' + t + '"';
+  });
+
+  check('a belt out of range says so rather than going quiet', () => {
+    w.render(zf({ zoneTarget: 5, zoneAuto: true, zone: 2,
+                  zoneAtLimit: true, elapsed: 705 }));
+    const t = badge().textContent;
+    return /LIMIT/.test(t) ? t : '!badge reads "' + t + '"';
+  });
+
+  /* The badge is absolutely positioned out of the gauge's flow precisely so
+     it cannot push the tick column down into the heart-rate band at 582.
+     Chromium 51 would not complain if it did — it would just draw tick marks
+     through the graph — so the geometry is asserted rather than eyeballed. */
+  check('the badge clears the trace band below it', () => {
+    w.render(zf({ zoneTarget: 4, zoneAuto: true, zone: 2, elapsed: 706 }));
+    const side = w.getComputedStyle(w.document.getElementById('speedTicks').parentNode);
+    const cs = w.getComputedStyle(badge());
+    const top = parseFloat(side.top) + parseFloat(cs.top);
+    const bot = top + parseFloat(cs.height) + 2 * (parseFloat(cs.borderTopWidth) || 0);
+    return bot <= 582 ? top + '–' + bot + ', clear of the band at 582'
+      : '!badge runs to ' + bot + ', through the trace band at 582';
+  });
+
+  /* No ladder, no steering, and therefore no button offering it. Bridge
+     .setZoneTarget refuses the call as well; this is the half the walker sees. */
+  check('a walker with no zones is not offered the control at all', () => {
+    w.render({ ...hrFrame(148, -1, 707), zoneFloors: [], hrMax: 0, zone: -1 });
+    const shown = w.document.getElementById('btnZone').style.display !== 'none';
+    return !shown && !badgeOn() ? 'no ZONE button, no badge'
+      : '!button shown=' + shown + ' badge=' + badgeOn();
+  });
+  check('and is offered it again as soon as there are zones', () => {
+    w.render(zf({ zoneTarget: 0, elapsed: 708 }));
+    return w.document.getElementById('btnZone').style.display !== 'none'
+      ? 'ZONE button back' : '!no ZONE button for a walker who has zones';
+  });
+
+  /* The ribbon is seven buttons in a 72px-tall box, and button{} in
+     original.html sets height:76px on every button in the document. A chip
+     that forgot to state its own height renders its label outside its own
+     border — the one visible bug of Phase 1, which is why this is a test and
+     not a comment. */
+  check('every chip in the zone ribbon states its own height', () => {
+    const menu = w.document.getElementById('zonemenu');
+    const tall = [...menu.querySelectorAll('button')]
+      .filter(b => parseFloat(w.getComputedStyle(b).height) > 56);
+    const box = parseFloat(w.getComputedStyle(menu).height) ||
+                52 + 2 * parseFloat(w.getComputedStyle(menu).paddingTop);
+    return tall.length === 0
+      ? 'seven chips at 52px in a ' + box + 'px ribbon'
+      : '!' + tall.length + ' chip(s) taller than the ribbon that holds them';
+  });
+
+  /* The selected chip is lit in its own zone's colour — the same colour the
+     graph below is drawing that band in, which is the point of using the
+     palette here rather than the accent. */
+  check('the ribbon lights the chosen zone in its own colour', () => {
+    w.render(zf({ zoneTarget: 2, zoneAuto: true, zone: 2, elapsed: 709 }));
+    const chips = [...w.document.getElementById('zonemenu')
+      .querySelectorAll('button[data-zone]')];
+    const lit = chips.filter(b => b.classList.contains('on'));
+    if (lit.length !== 1) return '!' + lit.length + ' chips lit, expected 1';
+    if (lit[0].dataset.zone !== '2') return '!chip ' + lit[0].dataset.zone + ' lit';
+    return lit[0].style.color === rgb(w.STRIDE.ZONES[2].colour)
+      ? 'Z2 lit in ' + lit[0].style.color
+      : '!Z2 lit in ' + lit[0].style.color;
+  });
+
+  /* RESUME is inert unless there is something to resume. Muted rather than
+     removed: a button that comes and goes in a seven-item row moves the other
+     six under a finger already on its way to one of them. */
+  check('RESUME is live only after the belt has been taken by hand', () => {
+    w.render(zf({ zoneTarget: 3, zoneAuto: true, zone: 3, elapsed: 710 }));
+    const whileAuto = w.document.getElementById('btnZoneResume')
+      .classList.contains('muted');
+    w.render(zf({ zoneTarget: 3, zoneAuto: false, zone: 3, elapsed: 711 }));
+    const whileManual = w.document.getElementById('btnZoneResume')
+      .classList.contains('muted');
+    return whileAuto && !whileManual
+      ? 'muted while steering, live after an override'
+      : '!muted auto=' + whileAuto + ' manual=' + whileManual;
+  });
+
+  /* The legend line carries the readable half. It is 212px wide at 10px with
+     wide letter-spacing, so the strings zoneAutoNote produces have a length
+     budget — this pins it, because the failure mode is a caption that wraps
+     onto the canvas rather than one that throws. */
+  check('the legend says what the belt is doing, in words that fit', () => {
+    w.render(zf({ zoneTarget: 4, zoneAuto: true, zone: 2, elapsed: 712 }));
+    const t = w.document.getElementById('hrgNote').textContent;
+    return /zone 4/.test(t) && t.length <= 24 ? t
+      : '!note reads "' + t + '" (' + t.length + ' chars)';
+  });
+
+  /* stride-core owns the words so the four interfaces ported in Phase 6 say
+     the same ones. Held here rather than trusting original.html's copy. */
+  check('stride-core keeps the belt state out of the interfaces', () => {
+    const off = w.STRIDE.zoneAutoNote({ zoneTarget: 0 });
+    const auto = w.STRIDE.zoneAutoNote({ zoneTarget: 3, zoneAuto: true, zone: 1 });
+    const hand = w.STRIDE.zoneAutoNote({ zoneTarget: 3, zoneAuto: false, zone: 1 });
+    if (off.on) return '!an untargeted walk reported as steering';
+    if (!(auto.auto && /up/.test(auto.text))) return '!climbing reads "' + auto.text + '"';
+    if (hand.auto) return '!an overridden belt reported as steering';
+    return 'off, "' + auto.text + '", "' + hand.text + '"';
+  });
+
   /* ---- the renderer itself ----------------------------------------------
      A canvas that draws nothing can still be asked what it drew, which is
      what hrGraph's return value is for. */

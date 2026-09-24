@@ -133,6 +133,29 @@ body::before{
 .ticks i.on{background:var(--accent)}
 .side.right .ticks i.on{background:var(--accent-warm)}
 
+/* ---- the belt's own state, under the speed gauge ------------------------
+   Absolutely positioned rather than flowed after the ticks, because the
+   ticks column is the thing that sets this gauge's height and a badge that
+   pushed it down by 40px would put the tick marks through the heart-rate
+   band at 582. Out of flow, it occupies the gap that is already there.
+
+   The colour is the *target* zone's, not the current one, and it is set from
+   script — this is the one element on the HUD whose colour means "where the
+   belt is taking you" rather than "where you are". Hidden entirely unless a
+   zone is targeted, which is most walks. */
+.zbadge{
+  position:absolute;left:0;right:0;top:318px;height:30px;
+  display:none;
+  line-height:26px;
+  border:2px solid currentColor;border-radius:15px;
+  font-size:13px;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;
+}
+.zbadge.on{display:block}
+/* Taken by hand: still legible, deliberately not lit up. An override is a
+   normal thing to do and should not look like a warning. */
+.zbadge.manual{color:var(--ink-dim)!important;border-color:var(--track-line)}
+
 /* ---- centre: track ------------------------------------------------------
    The rail, the lanes and the head dot are all generated from STRIDE.track
    rather than written out by hand, so the dot sits on real arc-length along
@@ -394,6 +417,38 @@ button.pulse{animation:pulse .9s ease-out 2}
   border-radius:16px;font-size:15px;
 }
 .fanmenu button.on{border-color:var(--accent);color:var(--accent)}
+
+/* ---- zone menu ----------------------------------------------------------
+   The fan menu's twin, and copied from it on purpose: two ribbons that rise
+   out of the same control row should not be two different objects. Wider,
+   because seven choices rather than five, and centred under ZONE rather
+   than under FAN.
+
+   Each zone button is lit in its own colour when selected, not in the
+   accent — this is the one menu on the console where the choices are a
+   palette the walker already knows from the graph six inches below it.
+
+   `height` stated explicitly: button{} sets 76px on every button in the
+   document, and a 76px button in a 72px ribbon renders its label outside
+   its own border. That is the bug this comment exists to prevent, and it
+   has already been paid for once. */
+.zonemenu{
+  position:absolute;left:404px;bottom:134px;width:676px;
+  background:rgba(10,21,51,.97);border:2px solid var(--track-line);
+  border-radius:22px;padding:10px;display:none;z-index:45;
+  box-shadow:0 18px 50px rgba(0,0,0,.55);
+}
+.zonemenu.show{display:flex}
+.zonemenu button{
+  flex:none;width:78px;max-width:none;height:52px;margin:0 4px;
+  border-radius:16px;font-size:15px;
+}
+.zonemenu button.on{border-color:currentColor}
+/* Wider than a zone chip and set apart, because it is a different kind of
+   answer: the six on the left choose a target, this one hands the belt back.
+   Dimmed to nearly nothing when there is nothing to resume. */
+.zonemenu button.zresume{width:132px;margin-left:16px;font-size:13px}
+.zonemenu button.zresume.muted{opacity:.25}
 
 /* ---- overlays -----------------------------------------------------------
    The scrim is nearly opaque on purpose. At 0.92 the live layer showed through
@@ -857,6 +912,12 @@ button.pulse{animation:pulse .9s ease-out 2}
     <div class="unit" id="speedUnit">km/h</div>
     <div class="target">target <b id="speedTarget">0.0</b></div>
     <div class="ticks" id="speedTicks"></div>
+    <!-- Whether the belt is steering itself, under the gauge it steers. The
+         one thing on this screen that has to be readable at a glance from
+         three feet away mid-stride, so it is a pill in the target zone's own
+         colour rather than another line of grey text. Empty and invisible
+         whenever nothing is targeted, which is most walks. -->
+    <div class="zbadge" id="zoneBadge"></div>
   </div>
 
   <!-- track -->
@@ -956,10 +1017,28 @@ button.pulse{animation:pulse .9s ease-out 2}
       <button id="btnInclineUp">INCLINE +</button>
     </div>
     <button id="btnFan">FAN</button>
+    <!-- Next to the speed pair, because it is a speed control: the row's
+         rule is that a control sits under the gauge it moves. Hidden outright
+         for a walker with no zone ladder — see renderZones. -->
+    <button id="btnZone">ZONE</button>
     <div class="pair">
       <button id="btnSpeedDown">SPEED −</button>
       <button id="btnSpeedUp">SPEED +</button>
     </div>
+  </div>
+
+  <!-- Six choices laid out sideways, the same shape as the fan menu and for
+       the same reason: a column rising out of the control row lands on the
+       lap counter. RESUME is the seventh state and lives in the menu too,
+       rather than as a permanent button nobody needs on most walks. -->
+  <div class="zonemenu" id="zonemenu">
+    <button data-zone="0">OFF</button>
+    <button data-zone="1">Z1</button>
+    <button data-zone="2">Z2</button>
+    <button data-zone="3">Z3</button>
+    <button data-zone="4">Z4</button>
+    <button data-zone="5">Z5</button>
+    <button id="btnZoneResume" class="zresume">RESUME</button>
   </div>
 
   <div class="fanmenu" id="fanmenu">
@@ -1480,6 +1559,26 @@ tap($('btnFan'), () => {
 [...$('fanmenu').querySelectorAll('button')].forEach(b => {
   tap(b, () => { Stride.setFan(parseInt(b.dataset.fan, 10)); closeFan(); });
 });
+
+/* Zone targeting: the same ribbon as the fan, pointed at the belt.
+
+   Ten seconds rather than the fan's five. Choosing which zone to hand the
+   treadmill to is a decision somebody reads the options for, and a menu that
+   vanishes mid-thought turns it into a decision made twice. */
+let zoneTimer = null;
+function closeZone(){ $('zonemenu').classList.remove('show'); clearTimeout(zoneTimer); }
+tap($('btnZone'), () => {
+  const menu = $('zonemenu');
+  if (menu.classList.contains('show')) { closeZone(); return; }
+  closeFan();                       // one ribbon at a time; they overlap
+  menu.classList.add('show');
+  clearTimeout(zoneTimer);
+  zoneTimer = setTimeout(closeZone, 10000);
+});
+[...$('zonemenu').querySelectorAll('button[data-zone]')].forEach(b => {
+  tap(b, () => { Stride.setZoneTarget(parseInt(b.dataset.zone, 10)); closeZone(); });
+});
+tap($('btnZoneResume'), () => { Stride.zoneResume(); closeZone(); });
 
 /* --- helpers ------------------------------------------------------------- */
 function ticks(el, n, active){
@@ -2292,6 +2391,57 @@ function applyUnits(imperial){
    once-a-second tick as the trace. */
 let hrDrawnAt = -1, hrAssumed = false;
 
+/* The belt's own state: the badge under the speed gauge, the ZONE button,
+   and which chip in the ribbon is lit.
+
+   Every frame, and deliberately not behind renderZones' once-a-second tick
+   gate — that gate exists because redrawing a canvas five times a second is
+   wasted work, and this is three text nodes and a class. Whether the
+   treadmill is steering itself is not a thing to show a second late.
+
+   Nothing here decides anything. The words come from STRIDE.zoneAutoNote so
+   that the four interfaces ported in Phase 6 say the same ones, and the
+   state comes off the frame so the page and Kotlin cannot disagree about who
+   has the belt. */
+function renderZoneAuto(s, zoned){
+  const note = STRIDE.zoneAutoNote(s);
+  const badge = $('zoneBadge');
+
+  /* No ladder, no targeting. The button goes rather than being disabled:
+     a control that cannot do anything is better absent than present and
+     inert, and Bridge.setZoneTarget refuses the call as well — see there for
+     why the page is not the only lock on this door. */
+  $('btnZone').style.display = zoned ? '' : 'none';
+  if (!zoned) { closeZone(); }
+
+  badge.classList.toggle('on', note.on);
+  badge.classList.toggle('manual', note.on && !note.auto);
+  if (note.on){
+    badge.textContent = note.badge;
+    /* Set rather than cleared when off, because `.manual` overrides it with
+       !important and an inline colour left behind would fight the next
+       state this element takes. */
+    badge.style.color = note.colour;
+  } else {
+    badge.textContent = '';
+    badge.style.color = '';
+  }
+
+  /* The chips carry their own zone's colour when chosen, which is the same
+     colour the graph below is drawing that band in. */
+  const target = s.zoneTarget || 0;
+  [...$('zonemenu').querySelectorAll('button[data-zone]')].forEach(b => {
+    const z = parseInt(b.dataset.zone, 10);
+    const on = z === target;
+    b.classList.toggle('on', on);
+    b.style.color = on && z > 0 ? STRIDE.ZONES[z].colour : '';
+  });
+  /* Nothing to hand back unless a zone is targeted and the walker has taken
+     it by hand. Muted rather than hidden: a button that comes and goes in a
+     seven-item row moves the other six under a finger already on its way. */
+  $('btnZoneResume').classList.toggle('muted', !(note.on && !note.auto));
+}
+
 function renderZones(s){
   const floors = s.zoneFloors || [];
   const zoned = floors.length > 5;
@@ -2329,6 +2479,12 @@ function renderZones(s){
      every frame rather than hooked onto window.coach, so the dismiss tap, the
      timeout and showScreen clearing it all put the trace back for free. */
   $('hrg').classList.toggle('on', zoned && !$('coach').classList.contains('show'));
+
+  /* Before the bail-out below, not after it: a walker with no ladder is
+     exactly the one who must not be shown a ZONE button, and the early
+     return is what would have left it on screen. */
+  renderZoneAuto(s, zoned);
+
   if (!zoned){ hrDrawnAt = -1; return; }
 
   if (zone < 0){
@@ -2366,7 +2522,14 @@ function renderZones(s){
   let trace = [];
   try { trace = JSON.parse(Stride.hrTrace() || '{}').samples || []; } catch (e) {}
   try { hrAssumed = !!JSON.parse(Stride.hrZones() || '{}').assumed; } catch (e) {}
-  $('hrgNote').textContent = hrAssumed ? 'zones assumed' : '';
+  /* Two things want this one line and the belt wins. "Zones assumed" says
+     the ladder was built on a guessed age, which is worth knowing once; what
+     the treadmill is about to do under you is worth knowing continuously.
+     The assumption is still visible on every walk where nothing is targeted,
+     which is the walk it actually matters on. */
+  const beltNote = STRIDE.zoneAutoNote(s);
+  $('hrgNote').textContent = beltNote.on ? beltNote.text
+                           : hrAssumed ? 'zones assumed' : '';
   STRIDE.hrGraph($('hrgCanvas'), trace, { floors: floors });
 }
 

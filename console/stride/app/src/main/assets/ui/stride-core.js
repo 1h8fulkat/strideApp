@@ -981,6 +981,82 @@ function zoneColour(bpm, floors) {
   return z < 0 ? '' : ZONES[z].colour;
 }
 
+/* What the belt is doing about the target zone, in words the HUD can print.
+
+   Shared rather than written five times, because the four other interfaces
+   port this in Phase 6 and the one thing they must not disagree about is
+   whether the treadmill is steering itself. A walker who reads "holding zone
+   3" on Cluster and "you have the belt" on Ember at the same moment has been
+   told nothing.
+
+   Returns { on, auto, badge, text, colour }:
+
+     on      a zone is targeted at all
+     auto    the loop currently has the belt, as opposed to the walker
+     badge   one glanceable word or two, for a gauge
+     text    a short phrase for a legend line
+     colour  the target zone's colour, or '' when nothing is being steered
+
+   Two strings because the HUD has two places to say it and they are not the
+   same size. `badge` goes under the speed gauge, which is where somebody
+   looks when they want to know what the belt is about to do, and it is read
+   from three feet away mid-stride — so it is upper case, short enough never
+   to wrap, and carries the target zone number in itself. `text` goes in the
+   heart-rate legend, which is 212px wide at 10px: everything here is under
+   24 characters, and that is a constraint rather than a coincidence.
+
+   Both are written from the belt's point of view rather than the walker's:
+   "holding zone 3", never "you are in zone 3". The walker's own zone is
+   already on the screen twice and the question this answers is the other
+   one — what is about to happen to the treadmill under them.
+
+   The frame is the only input. Nothing here re-derives a zone from a pulse:
+   Kotlin decided it where the floors are cached, and a second opinion drawn
+   beside the first is how a HUD ends up contradicting itself. */
+function zoneAutoNote(s) {
+  var off = { on: false, auto: false, badge: '', text: '', colour: '' };
+  if (!s) return off;
+  var target = s.zoneTarget || 0;
+  if (target < 1 || target > 5) return off;
+
+  var colour = ZONES[target].colour;
+  var zone = s.zone == null ? -1 : s.zone;
+
+  /* Taken by hand. Said plainly and without apology — this is a state the
+     walker chose, and the console's job is to confirm it, not to nag them
+     back into the loop. RESUME is the way back and it is in the menu. */
+  if (!s.zoneAuto) {
+    return { on: true, auto: false, badge: 'MANUAL', colour: colour,
+             text: 'you have the belt' };
+  }
+
+  /* The board has run out of range. Ahead of the zone comparison because it
+     is the more useful thing to say: a belt that cannot reach the zone is not
+     "easing up to zone 4", it has stopped trying, and the walker deserves to
+     know why the number is not moving. */
+  if (s.zoneAtLimit) {
+    return { on: true, auto: true, badge: 'AT LIMIT', colour: colour,
+             text: 'belt at its limit' };
+  }
+
+  /* No reading. The belt is held, which is the safe answer and also the
+     surprising one — somebody whose strap has just slipped should be told the
+     treadmill has stopped adjusting rather than left to wonder. */
+  if (zone < 0) {
+    return { on: true, auto: true, badge: 'HOLDING', colour: colour,
+             text: 'holding \u00b7 no reading' };
+  }
+
+  if (zone === target) {
+    return { on: true, auto: true, badge: 'AUTO Z' + target, colour: colour,
+             text: 'holding zone ' + target };
+  }
+  return {
+    on: true, auto: true, badge: 'AUTO Z' + target, colour: colour,
+    text: 'easing ' + (zone < target ? 'up' : 'down') + ' to zone ' + target
+  };
+}
+
 /* Estimated VO2 max, ml/kg/min, or 0 when it cannot be estimated.
 
    Uth-Sorensen-Overgaard-Pedersen: 15.3 x max / resting. An estimate built on
@@ -1984,7 +2060,11 @@ function fanLabel(n) { return n ? n + ' OF 4' : 'OFF'; }
 var BRIDGE = ['choose', 'chooseGuided', 'chooseRoute', 'skipWarmup', 'skipCooldown', 'pause',
               'setSpeed',
               'resume', 'end', 'home', 'speed', 'incline', 'fan', 'setFan',
-              'setWalker', 'ackDmk', 'hushCoach', 'dim', 'setUi', 'wakeBoard'];
+              'setWalker', 'ackDmk', 'hushCoach', 'dim', 'setUi', 'wakeBoard',
+              /* Phase 3. Stubbed like the rest so the zone ribbon can be
+                 pressed in a desktop browser without the page throwing —
+                 nothing moves, because there is no belt on a desk. */
+              'setZoneTarget', 'zoneResume'];
 
 /** @return true if this page is running without the console behind it. */
 function stub() {
@@ -2505,6 +2585,7 @@ global.STRIDE = {
   zoneFloorsFor: zoneFloorsFor,
   zoneOf: zoneOf,
   zoneColour: zoneColour,
+  zoneAutoNote: zoneAutoNote,
   hrGraph: hrGraph,
   vo2max: vo2max,
   beatStyle: beatStyle,
