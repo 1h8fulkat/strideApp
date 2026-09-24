@@ -135,9 +135,13 @@ class ZoneControlTest {
 
     // --- the ramp -------------------------------------------------------------
 
-    @Test fun `one step is one step`() {
+    @Test fun `one adjustment per dwell, whatever its size`() {
         val c = ZoneControl()
-        val moves = walk(c, 30.0, targetZone = 3, startKph = 5.0) { 120 }
+        // 137 is zone 2 on this ladder, one under a target of 3, so this is
+        // the gentlest case: one step of 0.2. The part being pinned is the
+        // count — proportional stepping changes how big an adjustment is and
+        // must not change how often one happens.
+        val moves = walk(c, 30.0, targetZone = 3, startKph = 5.0) { 137 }
         assertEquals("expected exactly one adjustment in 30 s, got $moves", 1, moves.size)
         assertEquals(5.2, moves[0].kph, 0.001)
     }
@@ -149,35 +153,85 @@ class ZoneControlTest {
         assertTrue("adjusted more than once inside the dwell: $moves", moves.size <= 1)
     }
 
-    @Test fun `a five minute climb is gentle`() {
+    @Test fun `a five minute climb with no answer stays bounded`() {
         val c = ZoneControl()
-        // Target zone 3, a heart that never answers: the worst case for a
-        // runaway, because nothing the loop does makes it stop wanting more.
-        // Five minutes of that must still be a walk somebody can stay on.
+        // Target zone 3 with a heart that never answers — a strap on somebody
+        // else, or a reading stuck low. The worst case for a runaway, because
+        // nothing the loop does makes it stop wanting more, and it therefore
+        // never gets close enough to the zone for the step to shrink.
+        //
+        // 120 bpm is zone 1 on this ladder, two zones under the target, so it
+        // sits at 0.4 km/h a step for the whole five minutes. The number below
+        // is the one quoted in SAFETY.md: know it, and change it there too if
+        // this ever moves.
         val moves = walk(c, 300.0, targetZone = 3, startKph = 5.0) { 120 }
         val gained = moves.last().kph - 5.0
         assertTrue(
-            "gained ${"%.2f".format(gained)} km/h in five minutes — too fast",
-            gained <= 3.1,
+            "gained ${"%.2f".format(gained)} km/h in five unanswered minutes",
+            gained <= 6.1,
         )
-        // Every step the same size, and every one upward.
+        // Two zones out the whole way, so every step is the same 0.4 and every
+        // one is upward. An uneven step here would mean the distance was being
+        // recomputed off something other than the settled zone.
         var prev = 5.0
         for (m in moves) {
-            assertEquals("uneven step", 0.2, m.kph - prev, 0.001)
+            assertEquals("uneven step", 0.4, m.kph - prev, 0.001)
             prev = m.kph
         }
     }
 
-    @Test fun `over the zone it comes down faster than it goes up`() {
-        val up = ZoneControl()
-        val upMoves = walk(up, 60.0, targetZone = 5, startKph = 8.0) { 100 }   // zone 0, 5 under
-        val down = ZoneControl()
-        val downMoves = walk(down, 60.0, targetZone = 1, startKph = 8.0) { 175 } // zone 5, 4 over
+    @Test fun `the step shrinks as the walker approaches the zone`() {
+        val c = ZoneControl()
+        // A heart that does answer. It starts at 100 — zone 0, three under a
+        // target of 3 — and climbs through the zones a minute at a time. The
+        // adjustments have to get *smaller* as the gap closes: 0.6 while three
+        // zones out, 0.4 at two, 0.2 for the last one. That taper is the whole
+        // reason this is proportional rather than just bigger, because the
+        // final approach is where an over-large step sails past the band.
+        val sizes = mutableListOf<Double>()
+        var prev = 5.0
+        val moves = walk(c, 240.0, targetZone = 3, startKph = 5.0) { t ->
+            when {
+                t < 60.0 -> 100    // zone 0, three out
+                t < 120.0 -> 125   // zone 1, two out
+                t < 180.0 -> 137   // zone 2, one out
+                else -> 148        // zone 3, arrived
+            }
+        }
+        for (m in moves) { sizes.add(Math.round((m.kph - prev) * 100.0) / 100.0); prev = m.kph }
+        assertTrue("no adjustments at all", sizes.isNotEmpty())
+        assertEquals("first step should be the coarsest", 0.6, sizes.first(), 0.001)
+        assertEquals("last step should be the gentlest", 0.2, sizes.last(), 0.001)
+        // Never coarser than it was a step ago: the taper is monotone.
+        for (i in 1 until sizes.size) {
+            assertTrue(
+                "step ${i + 1} of ${sizes.size} grew: ${sizes.joinToString(", ")}",
+                sizes[i] <= sizes[i - 1] + 0.001,
+            )
+        }
+    }
 
-        // Up is one step whatever the distance; down is up to two.
-        assertEquals(0.2, Math.abs(upMoves[0].kph - 8.0), 0.001)
-        assertEquals(0.4, Math.abs(downMoves[0].kph - 8.0), 0.001)
-        assertTrue("came down slower than it went up", downMoves[0].kph < 8.0)
+    @Test fun `distance sets the step, and the cap holds it both ways`() {
+        // Five zones under a target of 5, and four zones over a target of 1.
+        // Both are past MAX_STEPS, so both come out at the cap — and they come
+        // out at the *same* cap. The flat one-step-up rule this replaced was
+        // reversed by the walk of 23 September 2026; see MAX_STEPS.
+        val up = ZoneControl()
+        val upMoves = walk(up, 60.0, targetZone = 5, startKph = 8.0) { 100 }   // zone 0
+        val down = ZoneControl()
+        val downMoves = walk(down, 60.0, targetZone = 1, startKph = 8.0) { 175 } // zone 5
+
+        assertEquals("up should be capped at 3 steps", 0.6, upMoves[0].kph - 8.0, 0.001)
+        assertEquals("down should be capped at 3 steps", 0.6, 8.0 - downMoves[0].kph, 0.001)
+        assertTrue("came down by going up", downMoves[0].kph < 8.0)
+    }
+
+    @Test fun `two zones out is two steps`() {
+        val c = ZoneControl()
+        // 120 is zone 1; target 3. Two zones, so 0.4 and not 0.2 or 0.6.
+        val moves = walk(c, 30.0, targetZone = 3, startKph = 6.0) { 120 }
+        assertEquals(1, moves.size)
+        assertEquals(6.4, moves[0].kph, 0.001)
     }
 
     @Test fun `one zone over is still a single step`() {

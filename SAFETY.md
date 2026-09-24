@@ -61,15 +61,25 @@ walk starts with no target zone, nothing is remembered from the last walk, and
 until you pick a zone from the ZONE control the belt behaves exactly as it did
 before this feature — driven only at the edges described above.
 
-What it does when it is on, in the numbers it actually uses: it moves the belt
-by **0.2 km/h at a time and then waits 20 seconds**, it reads a **10-second
-average** rather than the latest beat so that a single bad frame cannot move
-the machine, and it comes *down* faster than it goes up — up to two steps at
-once when you are more than one zone over your target, always one step when you
-are under it. It will not start a stopped belt and it will not stop a moving
-one. Your zone ladder is built on whatever maximum heart rate your profile
-holds, whether that is the formula's estimate or a figure you measured and
-typed in yourself.
+What it does when it is on, in the numbers it actually uses. It **waits 20
+seconds** between adjustments and reads a **10-second average** rather than the
+latest beat, so a single bad frame cannot move the machine. The size of each
+adjustment depends on how far off the zone you are: **0.2 km/h per zone of
+distance, up to 0.6**. Three or more zones away it moves 0.6 km/h at a time,
+two zones away 0.4, and for the last zone — the approach that actually puts you
+in the band — 0.2. The same both directions. It will not start a stopped belt
+and it will not stop a moving one. Your zone ladder is built on whatever
+maximum heart rate your profile holds, whether that is the formula's estimate
+or a figure you measured and typed in yourself.
+
+**The worst case, stated so nobody has to work it out.** If your monitor reads
+low and never answers — a strap on somebody else, a reading stuck where it
+started — the loop stays permanently far from the zone and therefore
+permanently at its coarsest: up to **1.8 km/h a minute, about 6 km/h over five
+unanswered minutes**. That is the ceiling on how fast this thing can run away
+from you, and it is why the state is on the gauge in front of you the whole
+time. One press of SPEED takes the belt back for the rest of the walk. The
+safety key still stops it outright and is still the stop of record.
 
 The guarantee was recorded as withdrawn here one phase *before* this code
 landed, rather than alongside it, because a safety document that grants a

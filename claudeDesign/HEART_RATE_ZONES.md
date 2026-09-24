@@ -3,7 +3,8 @@
 **Branch:** `heart-rate-zones` (off `main` at `38ae7f9`)
 **Started:** 21 September 2026
 **Phases 1 and 2 of 6 complete, deployed, and tested on the treadmill.
-Phase 3 is written and every gate passes — it has not been walked yet.**
+Phase 3 is complete, deployed and owner-walked on 23 September 2026, and
+retuned afterwards on what the walk said.**
 
 This file is the handoff. It exists because the work spans more sessions than
 one context window holds, and because the decisions behind it are worth more
@@ -17,7 +18,7 @@ than the diff. Read it before touching anything.
 |---|---|
 | Done | **Phase 1** — the model, birthdays, resting rates, the settings UI, the guest age prompt. Owner-walked. |
 | Done | **Phase 2** — live zone state on the frame, the in-memory HR trace, the shared zone-coloured graph, the zone-coloured BPM box, the grey zone 0, the max-HR override. Owner-walked 21 September 2026 and reported good. |
-| **Built, not walked** | **Phase 3 — the zone-targeting control loop.** `ZoneControl.kt` + 23 unit tests, wired into the poll loop, the ZONE ribbon and the state badge in `original.html`, the coach silenced on pace nudges, `SAFETY.md` brought up to date. All four `ui-test.sh` gates pass and the APK builds. **Not deployed and not walked** — the treadmill gate below is the thing standing between this and phase 4. |
+| Done | **Phase 3** — the zone-targeting control loop. `ZoneControl.kt` + 25 unit tests, wired into the poll loop, the ZONE ribbon and the state badge in `original.html`, the coach silenced on pace nudges, `SAFETY.md` brought up to date. **Owner-walked 23 September 2026: all eleven gate items passed.** The ramp felt slow in both directions, so the step is now proportional to the distance from the zone — see "Retuned after the walk" below. |
 | Then | Phase 4 presets · Phase 5 summary analytics · Phase 6 the other four interfaces |
 
 **The branch now commands belt speed.** Everything through phase 2 was
@@ -29,27 +30,22 @@ control behaves exactly as it does on `main`.
 
 ### Next steps, in order
 
-1. **Deploy and walk it.** This is the gate, it is mandatory, and it is the
-   whole of what is left in phase 3. The list of what to confirm is in the
-   phase's own section below — the short version is that the ramp is gentle,
-   the dwell is real, override is instant, resume works, **and pulling the
-   strap mid-walk holds the belt rather than accelerating it.** Test the
-   safety key during an auto-adjusting walk.
-2. **Set the max-HR override to whatever Jeff means it to be, before the
-   walk.** *Closed as a design question, still open as a console setting.*
-   The loop reads the walker's ladder out of Settings and has no opinion about
-   where it came from — override or formula, it follows what is there. But the
-   console currently holds **185** for Jeff, set on 21 September 2026 while the
-   stepper was being tried out, and their watch measures 175. That is zone 1
-   starting at 123 rather than 118, and the belt will now chase whichever is
-   stored. Settings → Who walks → Maximum heart rate.
-3. **Then write down what the machine taught**, here, in the phase 3 section —
-   the way phases 1 and 2 did. The numbers in `ZoneControl` are defensible
-   guesses until somebody has stood on them.
-4. **Phase 4 after that**, not before.
+1. **Re-walk the retune.** The proportional step landed after the walk, so the
+   numbers in `ZoneControl` have been changed since anybody stood on them.
+   The full gate does not need repeating — what does is the ramp itself: does
+   0.6 km/h at three zones out feel brisk rather than abrupt, and does the
+   taper to 0.2 on the last zone still stop it cleanly in the band without
+   sailing past? Everything else about the loop is unchanged.
+2. **Then phase 4** — zone-targeted presets and zone targeting for custom and
+   route runs.
+
+**Still open, and it is a console setting rather than a design question:**
+Jeff's profile holds a maximum of **185** (confirmed on the console on 23
+September 2026). Their watch measures 175. The loop follows whatever is stored
+— that rule is settled — but at 185 the ladder is 123/135/148/160/173 and at
+175 it is 118/129/141/152/164, and the belt chases whichever is there.
 
 ---
-
 ## The one thing to read first
 
 This feature **removes a documented safety invariant**, deliberately and on the
@@ -208,7 +204,7 @@ Asked and answered by the owner. Treat as settled.
 | Should the walker be able to override their maximum? | **Yes, per person, with the formula as the default.** Their watch measures 175 from real workout data and Tanaka says 178; a measured ceiling beats a regression. |
 | Which maximum does the loop steer against? | **Whatever Settings holds for that walker** — their measured override when they gave one, Tanaka's estimate when they did not. Asked on 23 September 2026 with the 185/178/175 numbers on the table; the owner declined to pick a figure and chose the rule instead. `ZoneControl` is therefore handed a ladder and has no opinion about where it came from, which is also why `Bridge.setZoneTarget` refuses outright for a walker who has no ladder at all. |
 | What does the coach say while the loop drives? | **Nothing about pace.** `zone_low` and `zone_high` are suppressed while `zoneAuto` is true; everything else the coach says is untouched. Asked 23 September 2026, with "narrate each adjustment" offered and declined. The nudges come back by themselves the moment the walker takes the belt by hand, which is exactly when the advice is theirs to act on again. |
-| How hard should the loop chase a zone? | **0.2 km/h every 20 s**, chosen by the owner from three options on 23 September 2026 — the middle of the 15–30 s dwell they had already specified. At most 0.6 km/h of drift in a minute. The asymmetry on top of it (up to two steps *down* when more than one zone over, always one step up) was not asked about; it is a safety-side default and is called out in `ZoneControl.MAX_STEPS_DOWN` for reversal if the walk says otherwise. |
+| How hard should the loop chase a zone? | **Dwell 20 s**, chosen from three options on 23 September 2026 — the middle of the 15–30 s they had already specified. **Step 0.2 km/h per zone of distance, capped at three**, chosen from four options later the same day *after the walk*, which reported the original flat 0.2 as slow in both directions. Coarse far from the band, unchanged on the final approach. The up/down asymmetry that came with the flat step was an unasked-for default, was flagged as reversible, and went with it. |
 | Zone names? | **The reference screenshot's set** — Low intensity, Weight control, Aerobic, Anaerobic, Maximum. The owner was offered the plainer effort labels and chose these. The trade-off is recorded in `HrZones.ZONE_NAMES`; don't undo it. |
 
 There is **no `Directory structure.txt`** in the repo or workspace, despite the
@@ -240,7 +236,7 @@ console/stride/app/src/main/
     cluster.html / ember.html / pacer.html / daylight.html   Port targets.
 console/stride/app/src/test/java/dev/stride/hud/HrZonesTest.kt   NEW — 22 tests
 console/stride/app/src/test/java/dev/stride/hud/HrTraceTest.kt   NEW — 13 tests
-console/stride/app/src/test/java/dev/stride/hud/ZoneControlTest.kt NEW — 23 tests
+console/stride/app/src/test/java/dev/stride/hud/ZoneControlTest.kt NEW — 25 tests
 tools/uitest/zones.js   NEW — holds the page's copy of the formulas to Kotlin's
 tools/uitest/es.js      Extended with the CSS audit
 ```
@@ -712,8 +708,8 @@ wants to say what it is showing can.
 
 ## Phase 3 — the zone-targeting control loop
 
-**Written 23 September 2026. Every gate passes. Not deployed, not walked.**
-The treadmill gate at the foot of this section is what is left.
+**Complete. Written, deployed and owner-walked on 23 September 2026 — all
+eleven gate items passed — then retuned on what the walk said.**
 
 ### What was built
 
@@ -722,7 +718,7 @@ The treadmill gate at the foot of this section is what is left.
   poll loop's real 5 Hz. It is handed a time, a pulse, the walker's ladder, the
   current setpoint and the board's limits, and answers with one speed or with
   nothing. It has no clock, no board and no preferences of its own.
-* **`ZoneControlTest.kt`** — 23 tests in three groups: the holds, the ramp, the
+* **`ZoneControlTest.kt`** — 25 tests in three groups: the holds, the ramp, the
   override handshake. The ones that matter are the holds.
 * **Wired into the poll loop** as `driveZone()`, sitting next to `driveIncline()`
   and written to the same shape. ACTIVE only, never in the warm-up or the
@@ -743,14 +739,15 @@ The treadmill gate at the foot of this section is what is left.
 
 | | |
 |---|---|
-| Step | **0.2 km/h**, the owner's choice. |
+| Step | **0.2 km/h per zone of distance, capped at three** — 0.6 three or more zones out, 0.4 at two, 0.2 for the last one. Was a flat 0.2; see "Retuned after the walk". |
 | Dwell | **20 s**, the middle of the 15–30 s they specified. |
 | Reading acted on | **A 10 s rolling mean**, not the latest frame. "A settled average rather than a transient" was the instruction, and a single arm-swing frame at 200 bpm must not move a treadmill. |
 | Disconnect | `HrZones.zoneOf` returning −1, **read from the instantaneous pulse** and not from the mean — a strap that came off two seconds ago has to stop the loop now, not when the window finally empties ten seconds later. |
-| Over the target | Up to **two** steps at once. Under it, always **one**. Being two zones over is somebody working harder than they asked to; being two zones under is somebody having an easy walk. Not asked about — a safety-side default, flagged here for reversal. |
+| Direction | **Symmetric.** Distance sets the size the same way up and down. The original asymmetry — one step up however far below, up to two down — was an unasked-for safety-side default, was flagged here for reversal, and the walk reversed it. |
 | Stopped belt | Setpoint below `minKph` means there is no walk to steer. The loop **never starts a belt and never stops one.** |
 | Pause, warm-up, cool-down, safety key | Not steerable, and each such frame **re-arms the dwell** — so RESUME on a paused walk gets a full twenty seconds before anything moves. Without it the dwell expires while the belt stands still and the first frame back acts on a mean gathered from somebody standing on the side rail: genuinely below the target zone, and genuinely nothing to do with the pace they were walking at. |
 | Board limits | Clamped in `ZoneControl` *and* again through `paceKph()`, which is the pre-existing machine-limits rule and is not the invariant this feature removed. |
+| Worst case | A pulse that never answers leaves the loop permanently far from the zone and therefore permanently at its coarsest: **up to 1.8 km/h a minute, ~6 km/h over five unanswered minutes.** Bounded, visible on the gauge, ended by one press of SPEED. Quoted in `SAFETY.md` and pinned by a test — change it in all three places. |
 | Off by default | `zoneTarget = 0` on every walk, never persisted, cleared in `resetSession()`. |
 
 **It does not aim for the middle of the zone.** It stops the moment the zone is
@@ -758,8 +755,9 @@ right, so it settles near whichever boundary it arrived from and will drift
 back and forth across it over a long walk, bounded by one step per dwell. The
 alternative — steering to a bpm inside the band — is false precision with a
 motor attached: the band is a band because the underlying formula is a ±10-12
-bpm smear. **This is the most likely thing the walk will argue with**, and the
-honest answer if it feels fidgety is a wider dwell rather than a target bpm.
+bpm smear. **This was expected to be the thing the walk argued with. It was
+not** — the walk reported no hunting and no overshoot. What it argued with was
+the opposite, and the fix is below.
 
 ### What the walker sees
 
@@ -783,7 +781,7 @@ honest answer if it feels fidgety is a wider dwell rather than a target bpm.
 
 ### Verified in the container, belt cold
 
-* 23 `ZoneControlTest` cases, plus the existing `HrZonesTest` (22) and
+* 25 `ZoneControlTest` cases, plus the existing `HrZonesTest` (22) and
   `HrTraceTest` (13), green.
 * 18 new checks in `tools/uitest/ui.js` covering the badge, the ribbon
   geometry, the chip heights, RESUME's muting and the wording, green.
@@ -799,33 +797,90 @@ dwell is now armed by the *first reading* — see `ZoneControl.armed`. Worth
 recording because the failing test was right and the instinct to relax it would
 have shipped a belt that could move two seconds after the loop was switched on.
 
-### Treadmill gate — mandatory, and walk the whole thing
+### Verified on the treadmill, 23 September 2026
 
-Not a spot check. In one walk, with a target zone set:
+Walked by the owner against the eleven-item plan, on the `ed79169` build,
+Jeff's profile, maximum 185 (ladder 123/135/148/160/173), target zone 2.
+**All eleven passed.** Recorded individually because the value of this list is
+that somebody can see which of them has actually been stood on:
 
-1. **The ramp is gentle** — 0.2 km/h steps are a change you notice, not one
-   you brace for.
-2. **The dwell is real** — roughly twenty seconds between adjustments, and the
-   belt is not hunting.
-3. **Override is immediate** — one press of SPEED and the badge reads `MANUAL`
-   from that moment; the loop does not come back on its own.
-4. **RESUME works**, and pressing it is *not felt through the belt* — the
-   walker gets a full dwell at the speed they chose first.
-5. **Pull the strap mid-walk.** The belt must hold. This is the one failure
-   with an obvious wrong answer and the reason the loop reads the
-   instantaneous pulse for the disconnect test.
+1. Off is off — an untargeted walk behaved exactly as it does on `main`. ✓
+2. Switching on: chip lit, badge `AUTO Z2`, nothing moved for the first 20 s. ✓
+3. The ramp stepped about 0.1 mph at a time, roughly every 20 s. ✓
+4. It settled and stopped when the zone was reached. **No overshoot reported**,
+   which is the notable one — see below. ✓
+5. Override was immediate on the press; the loop did not come back by itself. ✓
+6. RESUME was not felt through the belt. ✓
+7. **Strap removed mid-walk: the belt held, badge `HOLDING`.** ✓
+8. Pause and resume: nothing moved for 20 s afterwards. ✓
+9. Safety key during an auto-adjusting walk. ✓
+10. The coach said nothing about pace while steering, and the nudges came back
+    after the override. ✓
+11. COOL DOWN: the loop let go. ✓
+
+### Retuned after the walk, same day
+
+**The owner's report: everything passed, but the ramp felt slow in both
+directions.** That is the reverse of what this section had predicted. The
+overshoot warning written above turned out to be wrong in an instructive way —
+the dwell is 20 s and a heart lags 30-60 s, so the loop *should* have been able
+to stack steps and sail past the band, and it did not. The reason is that it
+could only ever stack 0.2 km/h at a time: the flat step was slow enough that
+the heart kept up with it, and the price of that was four minutes of creeping
+to climb from zone 0 to zone 2. A console that takes four minutes to visibly
+do anything does not read as gentle, it reads as broken.
+
+**The fix is proportional, not simply larger, and the shape is the point.**
+The step is now one 0.2 km/h increment *per zone of distance*, capped at three:
+
+| Distance from the target zone | Step |
+|---|---|
+| 3 zones or more | 0.6 km/h |
+| 2 zones | 0.4 km/h |
+| 1 zone — the approach that lands you in the band | **0.2 km/h, unchanged** |
+| in the zone | nothing |
+
+Making every step bigger was the obvious alternative and it was rejected: it
+buys the same speed by spending it on the final approach, which is exactly
+where a large step is what throws you past the band before your pulse has
+answered. Coarse far away and fine close in gets the walker there quickly and
+then stops hard, which is what the dwell was protecting in the first place.
+Offered as one of four options and chosen by the owner over a shorter dwell
+(15 s) and a flat larger step (0.3).
+
+This also **removed the up/down asymmetry**. One step up however far below, up
+to two down, was a safety-side default nobody had asked for; it was recorded
+here as reversible for exactly this reason, and the walk reversed it. Distance
+now sets the size identically in both directions.
+
+**What this costs, and it is written into `SAFETY.md` rather than left
+implicit.** A pulse that never answers — a strap on somebody else, a reading
+stuck low — keeps the loop permanently far from the zone and therefore
+permanently at its coarsest: up to 1.8 km/h a minute, about 6 km/h over five
+unanswered minutes, against 3 km/h under the flat step. That is the ceiling on
+how fast this can run away from a walker. It is bounded, it is on the gauge in
+front of them, one press of SPEED ends it, and the safety key still stops the
+machine. The figure is pinned by `a five minute climb with no answer stays
+bounded` in `ZoneControlTest` and quoted in `SAFETY.md`; if it ever moves,
+move it in all three places.
+
+**Not re-walked yet.** The numbers have changed since anybody stood on them.
+The next walk does not need the full eleven — it needs the ramp: whether 0.6
+km/h three zones out is brisk rather than abrupt, and whether the taper to 0.2
+still stops it cleanly in the band.
+
+### The treadmill gate, for when this is re-walked
+
+Kept because phase 4 reuses this loop and will want it again.
+
+1. **The ramp is gentle** far from the zone and **gentler still** approaching it.
+2. **The dwell is real** — roughly twenty seconds between adjustments.
+3. **Override is immediate**; the loop does not come back on its own.
+4. **RESUME works**, and pressing it is not felt through the belt.
+5. **Pull the strap mid-walk.** The belt must hold.
 6. **Pull the safety key during an auto-adjusting walk.**
-7. Check `logcat -s Stride:I` afterwards for the `zone:` lines — every
-   adjustment logs its reason and the settled bpm it acted on.
-
-Then come back and write down what the machine taught, in this section.
-
-### Open after the walk
-
-* Whether 0.2/20 s feels right, or whether the belt hunts at a zone boundary.
-* Whether the two-steps-down asymmetry is wanted.
-* Whether a coach that says nothing about pace reads as a coach that has
-  stopped working.
+7. Check `logcat -s Stride:I | grep zone:` — every adjustment logs its reason
+   and the settled bpm it acted on.
 
 ---
 

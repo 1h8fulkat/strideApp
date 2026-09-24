@@ -22,9 +22,11 @@ package dev.stride.hud
  *
  * ## What it does
  *
- * One zone, one direction, one small step, then wait. Below the target zone it
- * steps the belt up; above it, down; inside it, nothing. The step is
- * [STEP_KPH] and the wait between steps is [DWELL_MS], which the owner chose
+ * Below the target zone it steps the belt up; above it, down; inside it,
+ * nothing. The step is [STEP_KPH] **per zone of distance**, capped at
+ * [MAX_STEPS] — coarse while the walker is far from the band, and down to a
+ * single step for the last zone, which is the approach that actually lands
+ * them in it. The wait between steps is [DWELL_MS], which the owner chose
  * from a 15–30 s range: the point of the wait is that a heart takes most of a
  * minute to answer a change in pace, so a loop that adjusts every second is
  * not controlling anything, it is chasing its own last adjustment.
@@ -125,20 +127,41 @@ class ZoneControl(
         const val MIN_SAMPLES = 10
 
         /**
-         * The most steps one adjustment may take, when the walker is *over*
-         * the target zone.
+         * The most steps one adjustment may take, however far off the zone is.
          *
-         * Asymmetric on purpose, and the asymmetry is the safety-relevant
-         * part. Being two zones below the target is somebody having an easy
-         * walk; being two zones above it is somebody working harder than they
-         * asked to, and the console should not take a minute and a half of
-         * 0.2 km/h steps to do something about it. Going *up* is always one
-         * step, however far below the zone the pulse is — there is never a
-         * reason to hurry a heart rate upwards.
+         * The adjustment is **proportional to the distance**: one step per
+         * zone between the walker and their target, capped here. Three zones
+         * out or more is 0.6 km/h at a time, two zones is 0.4, and the last
+         * zone — the approach that actually lands you in the band — is one
+         * step, exactly as gentle as it has always been.
          *
-         * Two steps is 0.4 km/h, which is still a bounded, small change.
+         * **This replaced a flat one-step-up rule after the walk of 23
+         * September 2026.** The original asymmetry was one step up however
+         * far below, up to two down, on the reasoning that there is never a
+         * cause to hurry a heart rate upwards. That was recorded at the time
+         * as an unasked-for default and flagged for reversal, and the
+         * treadmill reversed it: every gate passed but the owner reported the
+         * ramp felt slow in *both* directions. A climb from zone 0 to zone 2
+         * was twelve 0.2 km/h steps and about four minutes of creeping, which
+         * is not gentleness, it is a console that appears not to be working.
+         *
+         * Proportional rather than simply larger, and that is the point of
+         * the shape. Making every step bigger would have bought the same
+         * speed by spending it where it costs most — on the final approach,
+         * where a big step is what sails you past the band before your pulse
+         * has answered. Coarse far away and fine close in gets the walker to
+         * the zone quickly and then stops hard, which is the behaviour the
+         * dwell was protecting in the first place.
+         *
+         * **The worst case is worth knowing and is stated plainly in
+         * `SAFETY.md`.** A pulse that never answers — a strap on somebody
+         * else, a reading stuck low — leaves the loop permanently two or
+         * three zones short and therefore permanently at its coarsest: up to
+         * 1.8 km/h a minute, about 6 km/h over five unanswered minutes. It is
+         * bounded, it is visible on the gauge, one press of SPEED ends it,
+         * and the safety key is still the stop of record.
          */
-        const val MAX_STEPS_DOWN = 2
+        const val MAX_STEPS = 3
 
         /** Ring capacity. Comfortably over [WINDOW_MS] at the poll loop's
          *  5 Hz, with room for a faster loop without the window silently
@@ -318,12 +341,12 @@ class ZoneControl(
         // the HUD does not have to wait out a dwell to learn the truth.
         if (armed && nowMs - lastMoveAt < dwellMs) return null
 
+        // One step per zone of distance, capped, and the same both ways —
+        // see MAX_STEPS for why this is proportional rather than flat, and
+        // for what the treadmill said about the flat version.
         val below = zone < targetZone
-        // One step up, however far below; up to MAX_STEPS_DOWN down, because
-        // over-target is the direction that costs the walker something. See
-        // MAX_STEPS_DOWN.
-        val steps = if (below) 1 else Math.min(zone - targetZone, MAX_STEPS_DOWN)
-        val delta = if (below) stepKph else -stepKph * steps
+        val steps = Math.min(Math.abs(zone - targetZone), MAX_STEPS)
+        val delta = if (below) stepKph * steps else -stepKph * steps
 
         val next = (setpointKph + delta).coerceAtMost(maxKph).coerceAtLeast(minKph)
         if (Math.abs(next - setpointKph) < 0.001) {

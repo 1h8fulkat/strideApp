@@ -76,7 +76,7 @@ working around it.
 ## Anything that moves the belt
 
 Read [SAFETY.md](SAFETY.md) first. All the judgement about *when* the belt
-moves on its own lives in `ZoneControl.kt`, which is pure and has 23 tests —
+moves on its own lives in `ZoneControl.kt`, which is pure and has 25 tests —
 put changes there rather than in the poll loop, and add the scripted trace
 that shows the new behaviour. The physical safety key is the stop of
 record and nothing in software gets to be the last line. Every commanded speed
