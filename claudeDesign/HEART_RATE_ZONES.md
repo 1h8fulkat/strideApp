@@ -39,11 +39,14 @@ control behaves exactly as it does on `main`.
 2. **Then phase 4** — zone-targeted presets and zone targeting for custom and
    route runs.
 
-**Still open, and it is a console setting rather than a design question:**
-Jeff's profile holds a maximum of **185** (confirmed on the console on 23
-September 2026). Their watch measures 175. The loop follows whatever is stored
-— that rule is settled — but at 185 the ladder is 123/135/148/160/173 and at
-175 it is 118/129/141/152/164, and the belt chases whichever is there.
+**The max-HR question is closed.** Jeff set their own maximum to **183** on
+the console on 23 September 2026, around the phase 3 walk, which puts the
+ladder at **122 / 134 / 146 / 158 / 171**. Nothing wrote that automatically —
+`Bridge.setPersonMaxHr` is the only path that touches the field and it refuses
+outright while the belt is moving, precisely because under Karvonen it moves
+all five boundaries at once and would move the belt with them. The loop
+follows whatever is stored, which is the settled rule; the walker owns the
+number.
 
 ---
 ## The one thing to read first
@@ -986,15 +989,14 @@ Not blocking, but worth asking when they come up.
    The override is still worth setting before Phase 3 drives a belt, since it
    moves all five boundaries.
 
-   **Settled further on 23 September 2026.** Asked which of 185 (what the
-   console holds), 178 (Tanaka) or 175 (the watch) the loop should drive
+   **Settled on 23 September 2026, and then set.** Asked which of 185 (what
+   the console held), 178 (Tanaka) or 175 (the watch) the loop should drive
    against, the owner declined to name a figure and gave the rule instead:
    *always use the max HR defined for the walker in Settings, whether that is
    the calculated one or an override they set.* So there is no number in the
    code and there is not going to be one — `ZoneControl` is handed a ladder
-   and follows it. What remains is a console setting, not a design question:
-   **185 is still what Jeff's profile holds**, and it is worth confirming that
-   is what they mean before a belt chases it.
+   and follows it. **Jeff then set their own maximum to 183** around the phase
+   3 walk, giving a ladder of 122/134/146/158/171. Nothing is open here.
 2. **What does the coach say while the loop is driving?** *Answered on 23
    September 2026: nothing about pace.* `zone_low` and `zone_high` both end in
    a suggested pace, and both are answers to a question the loop is already
