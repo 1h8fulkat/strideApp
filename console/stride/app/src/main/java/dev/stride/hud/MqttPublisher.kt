@@ -1,12 +1,16 @@
 package dev.stride.hud
 
 import android.util.Log
+import org.eclipse.paho.client.mqttv3.IMqttActionListener
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
+import org.eclipse.paho.client.mqttv3.IMqttToken
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended
-import org.eclipse.paho.client.mqttv3.MqttClient
+import org.eclipse.paho.client.mqttv3.MqttAsyncClient
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions
 import org.eclipse.paho.client.mqttv3.MqttMessage
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Carries treadmill telemetry to Home Assistant over MQTT, and coaching back.
@@ -112,6 +116,7 @@ class MqttPublisher(
 
         const val CLIENT_ID = "stride-treadmill"
         const val DEVICE_ID = "stride_treadmill"
+        private const val MAX_PENDING_PUBLISHES = 32
 
         /** field key -> (display name, unit, device_class or null, icon or null) */
         private val SENSORS = listOf(
@@ -155,7 +160,9 @@ class MqttPublisher(
         val icon: String?,
     )
 
-    private var client: MqttClient? = null
+    private var client: MqttAsyncClient? = null
+    private val pendingPublishes = AtomicInteger()
+    private val publishBacklogLogged = AtomicBoolean(false)
     @Volatile var connected = false
         private set
 
@@ -180,7 +187,7 @@ class MqttPublisher(
         try { client?.close() } catch (_: Exception) { }
         client = null
         return try {
-            val c = MqttClient(broker, CLIENT_ID, MemoryPersistence())
+            val c = MqttAsyncClient(broker, CLIENT_ID, MemoryPersistence())
             c.setCallback(object : MqttCallbackExtended {
                 // Fires on the first connect and on every automatic reconnect,
                 // which is the only place a clean session's subscriptions can
@@ -226,7 +233,7 @@ class MqttPublisher(
             // Assigned before connecting: connectComplete fires from inside
             // connect() and needs the client to subscribe with.
             client = c
-            c.connect(opts)
+            c.connect(opts).waitForCompletion()
             connected = true
             // **No subscribeAll() here.** connectComplete above has already run
             // — that is what the comment two lines up is saying — so doing it
@@ -475,26 +482,52 @@ class MqttPublisher(
     }
 
     private fun publishRaw(topic: String, payload: String, retained: Boolean = false) {
+        if (!connected) return
+        val target = client ?: return
+        if (pendingPublishes.incrementAndGet() > MAX_PENDING_PUBLISHES) {
+            pendingPublishes.decrementAndGet()
+            if (publishBacklogLogged.compareAndSet(false, true)) {
+                Log.w(TAG, "mqtt publish backlog full; dropping messages")
+            }
+            return
+        }
+
+        fun finished() {
+            pendingPublishes.decrementAndGet()
+            publishBacklogLogged.set(false)
+        }
+
         try {
             val msg = MqttMessage(payload.toByteArray()).apply {
                 qos = 0
                 isRetained = retained
             }
-            client?.publish(topic, msg)
+            target.publish(topic, msg, null, object : IMqttActionListener {
+                override fun onSuccess(asyncActionToken: IMqttToken?) {
+                    finished()
+                }
+
+                override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
+                    finished()
+                    Log.w(TAG, "mqtt publish failed on $topic: ${exception?.message}")
+                }
+            })
         } catch (e: Exception) {
+            finished()
             Log.w(TAG, "mqtt publish failed on $topic: ${e.message}")
             connected = false
         }
     }
 
     fun close() {
+        val old = client
         try {
             publishRaw(availTopic, "offline", retained = true)
-            client?.disconnect()
-            client?.close()
+            old?.disconnect(1000)?.waitForCompletion(1500)
         } catch (_: Exception) {
         }
         connected = false
         client = null
+        try { old?.close() } catch (_: Exception) { }
     }
 }
